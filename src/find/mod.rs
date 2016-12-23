@@ -69,15 +69,14 @@ fn do_find(args: &[String]) -> Result<i32, Box<Error>> {
 fn print_help() {
     println!("Usage: find [path...] [expression]
 
-If no path is supplied then the current \
-              working directory is used by default.
+If no path is supplied then the current working directory is used by default.
 
-Early alpha implementation. Currently the \
-              only expressions supported are
+Early alpha implementation. Currently the only expressions supported are
  -print
  -name case-sensitive_filename_pattern
- \
-              -iname case-insensitive_filename_pattern
+ -iname case-insensitive_filename_pattern
+ -type type_char
+    currently type_char can only be f (for file) or d (for directory) 
 ");
 }
 
