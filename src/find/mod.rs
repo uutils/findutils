@@ -3,14 +3,17 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 use std::io::stderr;
+
+use std::cell::RefCell;
 use std::io::Write;
+use std::rc::Rc;
 
 struct PathsAndMatcher {
     matcher: Box<self::matchers::Matcher>,
     paths: Vec<String>,
 }
 
-fn parse_args(args: &[String]) -> Result<PathsAndMatcher, Box<Error>> {
+fn parse_args(args: &[String], output : Rc<RefCell<Write>>) -> Result<PathsAndMatcher, Box<Error>> {
     let mut paths = vec![];
     let mut i = 0;
 
@@ -21,7 +24,7 @@ fn parse_args(args: &[String]) -> Result<PathsAndMatcher, Box<Error>> {
     if i == 0 {
         paths.push(".".to_string());
     }
-    let matcher = try!(matchers::build_top_level_matcher(&args[i..]));
+    let matcher = try!(matchers::build_top_level_matcher(&args[i..], output));
     Ok(PathsAndMatcher {
         matcher: matcher,
         paths: paths,
@@ -55,9 +58,9 @@ fn process_dir(dir: &Path, matcher: &Box<matchers::Matcher>) -> Result<i32, Box<
 }
 
 
-fn do_find(args: &[String]) -> Result<i32, Box<Error>> {
+fn do_find(args: &[String], output : Rc<RefCell<Write>>) -> Result<i32, Box<Error>> {
 
-    let paths_and_matcher = try!(parse_args(args));
+    let paths_and_matcher = try!(parse_args(args, output));
     let mut found_count = 0;
     for path in paths_and_matcher.paths {
         let dir = Path::new(&path);
@@ -85,7 +88,7 @@ Early alpha implementation. Currently the only expressions supported are
 /// All main has to do is pass in the command-line args and exit the process
 /// with the exit code. Note that the first string in args is expected to be
 /// the name of the executable.
-pub fn find_main(args: &Vec<String>) -> i32 {
+pub fn find_main(args: &Vec<String>, output : Rc<RefCell<Write>>) -> i32 {
 
     for arg in args {
         match arg.as_ref() {
@@ -96,7 +99,7 @@ pub fn find_main(args: &Vec<String>) -> i32 {
             _ => (),
         }
     }
-    match do_find(&args[1..]) {
+    match do_find(&args[1..], output) {
         Ok(_) => 0,
         Err(e) => {
             writeln!(&mut stderr(), "Error: {}", e).unwrap();

@@ -1,10 +1,13 @@
 mod printer;
 mod name_matcher;
 mod caseless_name_matcher;
-mod and_matcher;
+mod logical_matchers;
 mod type_matcher;
 use std::error::Error;
 use std::fs::DirEntry;
+use std::cell::RefCell;
+use std::io::Write;
+use std::rc::Rc;
 
 /// A basic interface that can be used to determine whether a directory entry
 /// is what's being searched for. To a first order approximation, find consists
@@ -24,8 +27,10 @@ pub trait Matcher {
 
 /// Builds a single AndMatcher containing the Matcher objects corresponding
 /// to the passed in predicate arguments.
-pub fn build_top_level_matcher(args: &[String]) -> Result<Box<Matcher>, Box<Error>> {
-    let mut top_level_matcher = and_matcher::AndMatcher::new();
+pub fn build_top_level_matcher(args: &[String],
+                               output: Rc<RefCell<Write>>)
+                               -> Result<Box<Matcher>, Box<Error>> {
+    let mut top_level_matcher = logical_matchers::AndMatcher::new();
 
     // can't use getopts for a variety or reasons:
     // order ot arguments is important
@@ -34,7 +39,9 @@ pub fn build_top_level_matcher(args: &[String]) -> Result<Box<Matcher>, Box<Erro
     let mut i = 0;
     while i < args.len() {
         let submatcher = match args[i].as_ref() {
-            "-print" => Box::new(printer::Printer {}) as Box<Matcher>,
+            "-print" => Box::new(printer::Printer::new(output.clone())) as Box<Matcher>,
+            "-true" => Box::new(logical_matchers::TrueMatcher {}),
+            "-false" => Box::new(logical_matchers::FalseMatcher {}),
             "-name" => {
                 i += 1;
                 if i >= args.len() {
@@ -63,7 +70,7 @@ pub fn build_top_level_matcher(args: &[String]) -> Result<Box<Matcher>, Box<Erro
     }
 
     if !top_level_matcher.has_side_effects() {
-        top_level_matcher.push(Box::new(printer::Printer {}));
+        top_level_matcher.push(Box::new(printer::Printer::new(output)));
     }
     Ok(Box::new(top_level_matcher))
 }
@@ -87,29 +94,17 @@ mod tests {
         panic!("Couldn't find {} in {}", directory, filename);
     }
 
-    /// Simple Matcher impl that matches everything.
-    pub struct MatchEverything {}
+    /// Simple Matcher impl that has side effects
+    pub struct HasSideEfects {}
 
-    impl Matcher for MatchEverything {
+    impl Matcher for HasSideEfects {
         fn matches(&self, _: &DirEntry) -> bool {
+            false
+        }
+
+        fn has_side_effects(&self) -> bool {
             true
         }
-
-        fn has_side_effects(&self) -> bool {
-            false
-        }
     }
 
-    /// Simple Matcher impl that matches nothing.
-    pub struct MatchNothing {}
-
-    impl Matcher for MatchNothing {
-        fn matches(&self, _: &DirEntry) -> bool {
-            false
-        }
-
-        fn has_side_effects(&self) -> bool {
-            false
-        }
-    }
 }
