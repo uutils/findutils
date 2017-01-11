@@ -10,8 +10,8 @@ pub struct TypeMatcher {
 }
 
 impl TypeMatcher {
-    pub fn new(type_string: &String) -> Result<TypeMatcher, Box<Error>> {
-        let function = match type_string.as_ref() {
+    pub fn new(type_string: &str) -> Result<TypeMatcher, Box<Error>> {
+        let function = match type_string {
             "f" => FileType::is_file,
             "d" => FileType::is_dir,
             "b" | "c" | "p" | "l" | "s" | "D" => {

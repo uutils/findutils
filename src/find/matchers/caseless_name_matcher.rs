@@ -13,7 +13,7 @@ pub struct CaselessNameMatcher {
 }
 
 impl CaselessNameMatcher {
-    pub fn new(pattern_string: &String) -> Result<CaselessNameMatcher, PatternError> {
+    pub fn new(pattern_string: &str) -> Result<CaselessNameMatcher, PatternError> {
         let p = try!(Pattern::new(&pattern_string.to_lowercase()));
         Ok(CaselessNameMatcher { pattern: p })
     }

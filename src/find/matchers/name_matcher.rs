@@ -11,7 +11,7 @@ pub struct NameMatcher {
 }
 
 impl NameMatcher {
-    pub fn new(pattern_string: &String) -> Result<NameMatcher, PatternError> {
+    pub fn new(pattern_string: &str) -> Result<NameMatcher, PatternError> {
         let p = try!(Pattern::new(pattern_string));
         Ok(NameMatcher { pattern: p })
     }

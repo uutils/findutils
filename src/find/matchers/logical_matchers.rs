@@ -1,5 +1,15 @@
 use std::fs::DirEntry;
 
+#[derive(Clone, Copy)]
+pub enum MultiType {
+    AND,
+    OR,
+}
+
+pub trait MultiMatcher {
+    fn push(&mut self, matcher: Box<super::Matcher>);
+    fn get_multi_type() -> MultiType;
+}
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
@@ -10,10 +20,6 @@ pub struct AndMatcher {
 }
 
 impl AndMatcher {
-    pub fn push(&mut self, matcher: Box<super::Matcher>) {
-        self.submatchers.push(matcher);
-    }
-
     pub fn new() -> AndMatcher {
         AndMatcher { submatchers: Vec::new() }
     }
@@ -30,11 +36,21 @@ impl super::Matcher for AndMatcher {
     }
 }
 
+impl MultiMatcher for AndMatcher {
+    fn push(&mut self, matcher: Box<super::Matcher>) {
+        self.submatchers.push(matcher);
+    }
+
+    fn get_multi_type() -> MultiType {
+        MultiType::AND
+    }
+}
+
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches Any the contained sub-matchers. For sub-matchers that have
 /// side effects, the side effects occur in the same order as the sub-matchers
 /// were pushed into the collection.
-struct OrMatcher {
+pub struct OrMatcher {
     submatchers: Vec<Box<super::Matcher>>,
 }
 
@@ -87,15 +103,49 @@ impl super::Matcher for FalseMatcher {
     }
 }
 
+/// Matcher that wraps another matcher and inverts matching criteria.
+pub struct NotMatcher {
+    submatcher: Box<super::Matcher>,
+}
+
+impl NotMatcher {
+    pub fn new(submatcher: Box<super::Matcher>) -> NotMatcher {
+        NotMatcher { submatcher: submatcher }
+    }
+}
+
+impl super::Matcher for NotMatcher {
+    fn matches(&self, dir_entry: &DirEntry) -> bool {
+        !self.submatcher.matches(dir_entry)
+    }
+
+    fn has_side_effects(&self) -> bool {
+        self.submatcher.has_side_effects()
+    }
+}
+
 #[cfg(test)]
 
 mod tests {
     use super::super::tests::*;
-    use super::AndMatcher;
-    use super::OrMatcher;
-    use super::TrueMatcher;
-    use super::FalseMatcher;
+    use super::*;
     use super::super::Matcher;
+    use std::fs::DirEntry;
+
+    /// Simple Matcher impl that has side effects
+    pub struct HasSideEffects {}
+
+    impl Matcher for HasSideEffects {
+        fn matches(&self, _: &DirEntry) -> bool {
+            false
+        }
+
+        fn has_side_effects(&self) -> bool {
+            true
+        }
+    }
+
+
 
     #[test]
     fn and_matches_works() {
@@ -145,7 +195,7 @@ mod tests {
     fn and_has_side_effects_works() {
         let mut matcher = AndMatcher::new();
         let no_side_effects = Box::new(TrueMatcher {});
-        let side_effects = Box::new(HasSideEfects {});
+        let side_effects = Box::new(HasSideEffects {});
 
         // start with one matcher returning false
         matcher.push(no_side_effects);
@@ -158,7 +208,7 @@ mod tests {
     fn or_has_side_effects_works() {
         let mut matcher = OrMatcher::new();
         let no_side_effects = Box::new(TrueMatcher {});
-        let side_effects = Box::new(HasSideEfects {});
+        let side_effects = Box::new(HasSideEffects {});
 
         // start with one matcher returning false
         matcher.push(no_side_effects);
@@ -178,4 +228,22 @@ mod tests {
         let matcher = FalseMatcher {};
         assert!(!matcher.has_side_effects());
     }
+
+    #[test]
+    fn not_matches_works() {
+        let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+        let not_true = NotMatcher::new(Box::new(TrueMatcher {}));
+        let not_false = NotMatcher::new(Box::new(FalseMatcher {}));
+        assert!(!not_true.matches(&abbbc));
+        assert!(not_false.matches(&abbbc));
+    }
+
+    #[test]
+    fn not_has_side_effects_works() {
+        let has_fx = NotMatcher::new(Box::new(HasSideEffects {}));
+        let hasnt_fx = NotMatcher::new(Box::new(FalseMatcher {}));
+        assert!(has_fx.has_side_effects());
+        assert!(!hasnt_fx.has_side_effects());
+    }
+
 }

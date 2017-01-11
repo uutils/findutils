@@ -8,6 +8,7 @@ use std::fs::DirEntry;
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
+use self::logical_matchers::MultiMatcher;
 
 /// A basic interface that can be used to determine whether a directory entry
 /// is what's being searched for. To a first order approximation, find consists
@@ -27,7 +28,7 @@ pub trait Matcher {
 
 /// Builds a single AndMatcher containing the Matcher objects corresponding
 /// to the passed in predicate arguments.
-pub fn build_top_level_matcher(args: &[String],
+pub fn build_top_level_matcher(args: &[&str],
                                output: Rc<RefCell<Write>>)
                                -> Result<Box<Matcher>, Box<Error>> {
     let mut top_level_matcher = logical_matchers::AndMatcher::new();
@@ -37,35 +38,51 @@ pub fn build_top_level_matcher(args: &[String],
     // arguments can start with + as well as -
     // multiple-character flags don't start with a double dash
     let mut i = 0;
+    let mut invert_next_matcher = false;
     while i < args.len() {
-        let submatcher = match args[i].as_ref() {
-            "-print" => Box::new(printer::Printer::new(output.clone())) as Box<Matcher>,
-            "-true" => Box::new(logical_matchers::TrueMatcher {}),
-            "-false" => Box::new(logical_matchers::FalseMatcher {}),
+        let possible_submatcher = match args[i] {
+            "-print" => Some(Box::new(printer::Printer::new(output.clone())) as Box<Matcher>),
+            "-true" => Some(Box::new(logical_matchers::TrueMatcher {}) as Box<Matcher>),
+            "-false" => Some(Box::new(logical_matchers::FalseMatcher {}) as Box<Matcher>),
             "-name" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(From::from("Must supply a pattern with -name"));
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                Box::new(try!(name_matcher::NameMatcher::new(&args[i])))
+                i += 1;
+                Some(Box::new(try!(name_matcher::NameMatcher::new(args[i]
+                    .as_ref()))) as Box<Matcher>)
             }
             "-iname" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(From::from("Must supply a pattern with -iname"));
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                Box::new(try!(caseless_name_matcher::CaselessNameMatcher::new(&args[i])))
+                i += 1;
+                Some(Box::new(try!(caseless_name_matcher::CaselessNameMatcher::new(args[i]))) as Box<Matcher>)
             }
             "-type" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(From::from("Must supply a type argument with -type"));
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                Box::new(try!(type_matcher::TypeMatcher::new(&args[i])))
+                i += 1;
+                Some(Box::new(try!(type_matcher::TypeMatcher::new(args[i]))) as Box<Matcher>)
+            }
+            "-not" | "!" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                }
+                invert_next_matcher = true;
+                None
             }
             _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
         };
-        top_level_matcher.push(submatcher);
+        if let Some(submatcher) = possible_submatcher {
+            if invert_next_matcher {
+                top_level_matcher.push(Box::new(logical_matchers::NotMatcher::new(submatcher)));
+                invert_next_matcher = false;
+            } else {
+                top_level_matcher.push(submatcher);
+            }
+        }
         i += 1;
     }
 
@@ -78,7 +95,11 @@ pub fn build_top_level_matcher(args: &[String],
 #[cfg(test)]
 mod tests {
     use std::fs::DirEntry;
-    use super::Matcher;
+    use std::cell::RefCell;
+    use std::vec::Vec;
+    use std::io::Cursor;
+    use std::rc::Rc;
+    use std::io::Read;
 
     /// Helper function for tests to get a DirEntry object. directory should
     /// probably be a string starting with "test_data/" (cargo's tests run with
@@ -94,16 +115,86 @@ mod tests {
         panic!("Couldn't find {} in {}", directory, filename);
     }
 
-    /// Simple Matcher impl that has side effects
-    pub struct HasSideEfects {}
 
-    impl Matcher for HasSideEfects {
-        fn matches(&self, _: &DirEntry) -> bool {
-            false
+
+    fn new_output() -> Rc<RefCell<Cursor<Vec<u8>>>> {
+        Rc::new(RefCell::new(Cursor::new(Vec::<u8>::new())))
+    }
+
+    fn assert_output_equals(output: &RefCell<Cursor<Vec<u8>>>, expected: &str) {
+        let mut cursor = output.borrow_mut();
+        cursor.set_position(0);
+        let mut contents = String::new();
+        cursor.read_to_string(&mut contents).unwrap();
+        assert_eq!(expected, contents);
+    }
+
+    #[test]
+    fn build_top_level_matcher_name() {
+        let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
+        let abbbc_upper = get_dir_entry_for("./test_data/simple", "ABBBC");
+        let output = new_output();
+
+        let matcher = super::build_top_level_matcher(&["-name", "a*c"], output.clone()).unwrap();
+
+        assert!(matcher.matches(&abbbc_lower));
+        assert!(!matcher.matches(&abbbc_upper));
+        assert_output_equals(&output, "./test_data/simple/abbbc\n");
+    }
+
+    #[test]
+    fn build_top_level_matcher_iname() {
+        let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
+        let abbbc_upper = get_dir_entry_for("./test_data/simple", "ABBBC");
+        let output = new_output();
+
+        let matcher = super::build_top_level_matcher(&["-iname", "a*c"], output.clone()).unwrap();
+
+        assert!(matcher.matches(&abbbc_lower));
+        assert!(matcher.matches(&abbbc_upper));
+        assert_output_equals(&output,
+                             "./test_data/simple/abbbc\n./test_data/simple/ABBBC\n");
+    }
+
+    #[test]
+    fn build_top_level_matcher_not() {
+        for arg in &["-not", "!"] {
+            let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
+            let output = new_output();
+
+            let matcher = super::build_top_level_matcher(&[arg, "-name", "doesntexist"],
+                                                         output.clone())
+                .unwrap();
+
+            assert!(matcher.matches(&abbbc_lower));
+            assert_output_equals(&output, "./test_data/simple/abbbc\n");
         }
+    }
 
-        fn has_side_effects(&self) -> bool {
-            true
+    #[test]
+    fn build_top_level_matcher_not_needs_expression() {
+        for arg in &["-not", "!"] {
+            let output = new_output();
+
+            if let Err(e) = super::build_top_level_matcher(&[arg], output.clone()) {
+                assert!(e.description().contains("expected an expression"));
+            } else {
+                panic!("parsing arugment lists that end in -not should fail");
+            }
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_missing_args() {
+        for arg in &["-iname", "-name", "-type"] {
+            let output = new_output();
+
+            if let Err(e) = super::build_top_level_matcher(&[arg], output.clone()) {
+                assert!(e.description().contains("missing argument to"));
+                assert!(e.description().contains(arg));
+            } else {
+                panic!("parsing arugment lists that end in -not should fail");
+            }
         }
     }
 

@@ -13,12 +13,12 @@ struct PathsAndMatcher {
     paths: Vec<String>,
 }
 
-fn parse_args(args: &[String], output : Rc<RefCell<Write>>) -> Result<PathsAndMatcher, Box<Error>> {
+fn parse_args(args: &[&str], output: Rc<RefCell<Write>>) -> Result<PathsAndMatcher, Box<Error>> {
     let mut paths = vec![];
     let mut i = 0;
 
     while i < args.len() && !args[i].starts_with('-') {
-        paths.push(args[i].clone());
+        paths.push(args[i].to_string());
         i += 1;
     }
     if i == 0 {
@@ -58,7 +58,7 @@ fn process_dir(dir: &Path, matcher: &Box<matchers::Matcher>) -> Result<i32, Box<
 }
 
 
-fn do_find(args: &[String], output : Rc<RefCell<Write>>) -> Result<i32, Box<Error>> {
+fn do_find(args: &[&str], output: Rc<RefCell<Write>>) -> Result<i32, Box<Error>> {
 
     let paths_and_matcher = try!(parse_args(args, output));
     let mut found_count = 0;
@@ -88,7 +88,7 @@ Early alpha implementation. Currently the only expressions supported are
 /// All main has to do is pass in the command-line args and exit the process
 /// with the exit code. Note that the first string in args is expected to be
 /// the name of the executable.
-pub fn find_main(args: &Vec<String>, output : Rc<RefCell<Write>>) -> i32 {
+pub fn find_main(args: &[&str], output: Rc<RefCell<Write>>) -> i32 {
 
     for arg in args {
         match arg.as_ref() {
