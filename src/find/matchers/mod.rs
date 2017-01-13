@@ -94,7 +94,10 @@ pub fn build_top_level_matcher(args: &[&str],
     }
 
     if !top_level_matcher.has_side_effects() {
-        top_level_matcher.push(Box::new(printer::Printer::new(output)));
+        let mut new_and_matcher = logical_matchers::AndMatcher::new();
+        new_and_matcher.push(Box::new(top_level_matcher));
+        new_and_matcher.push(Box::new(printer::Printer::new(output)));
+        return Ok(Box::new(new_and_matcher));
     }
     Ok(Box::new(top_level_matcher))
 }
@@ -128,12 +131,12 @@ mod tests {
         Rc::new(RefCell::new(Cursor::new(Vec::<u8>::new())))
     }
 
-    fn assert_output_equals(output: &RefCell<Cursor<Vec<u8>>>, expected: &str) {
+    fn get_output_as_string(output: &RefCell<Cursor<Vec<u8>>>) -> String {
         let mut cursor = output.borrow_mut();
         cursor.set_position(0);
         let mut contents = String::new();
         cursor.read_to_string(&mut contents).unwrap();
-        assert_eq!(expected, contents);
+        contents
     }
 
     #[test]
@@ -146,7 +149,7 @@ mod tests {
 
         assert!(matcher.matches(&abbbc_lower));
         assert!(!matcher.matches(&abbbc_upper));
-        assert_output_equals(&output, "./test_data/simple/abbbc\n");
+        assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
     }
 
     #[test]
@@ -159,8 +162,8 @@ mod tests {
 
         assert!(matcher.matches(&abbbc_lower));
         assert!(matcher.matches(&abbbc_upper));
-        assert_output_equals(&output,
-                             "./test_data/simple/abbbc\n./test_data/simple/ABBBC\n");
+        assert_eq!(get_output_as_string(&output),
+                   "./test_data/simple/abbbc\n./test_data/simple/ABBBC\n");
     }
 
     #[test]
@@ -174,7 +177,7 @@ mod tests {
                 .unwrap();
 
             assert!(matcher.matches(&abbbc_lower));
-            assert_output_equals(&output, "./test_data/simple/abbbc\n");
+            assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
         }
     }
 
@@ -231,4 +234,46 @@ mod tests {
         }
     }
 
+    #[test]
+    fn build_top_level_matcher_or_works() {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        for args in &[["-true", "-o", "-false"],
+                      ["-false", "-o", "-true"],
+                      ["-true", "-o", "-true"]] {
+            let output = new_output();
+
+            let matcher = super::build_top_level_matcher(args, output.clone()).unwrap();
+
+            assert!(matcher.matches(&abbbc));
+            assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+        }
+
+        let output = new_output();
+
+        let matcher = super::build_top_level_matcher(&["-false", "-o", "-false"], output.clone())
+            .unwrap();
+
+        assert!(!matcher.matches(&abbbc));
+        assert_eq!(get_output_as_string(&output), "");
+    }
+
+    #[test]
+    fn build_top_level_matcher_and_works() {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        for args in &[["-true", "-false"], ["-false", "-true"], ["-false", "-false"]] {
+            let output = new_output();
+
+            let matcher = super::build_top_level_matcher(args, output.clone()).unwrap();
+
+            assert!(!matcher.matches(&abbbc));
+            assert_eq!(get_output_as_string(&output), "");
+        }
+
+        let output = new_output();
+
+        let matcher = super::build_top_level_matcher(&["-true", "-true"], output.clone()).unwrap();
+
+        assert!(matcher.matches(&abbbc));
+        assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+    }
 }
