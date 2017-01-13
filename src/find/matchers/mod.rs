@@ -8,7 +8,7 @@ use std::fs::DirEntry;
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
-use self::logical_matchers::MultiMatcher;
+
 
 /// A basic interface that can be used to determine whether a directory entry
 /// is what's being searched for. To a first order approximation, find consists
@@ -31,7 +31,7 @@ pub trait Matcher {
 pub fn build_top_level_matcher(args: &[&str],
                                output: Rc<RefCell<Write>>)
                                -> Result<Box<Matcher>, Box<Error>> {
-    let mut top_level_matcher = logical_matchers::AndMatcher::new();
+    let mut top_level_matcher = logical_matchers::OrMatcher::new();
 
     // can't use getopts for a variety or reasons:
     // order ot arguments is important
@@ -71,6 +71,13 @@ pub fn build_top_level_matcher(args: &[&str],
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
                 invert_next_matcher = true;
+                None
+            }
+            "-or" | "-o" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                }
+                try!(top_level_matcher.new_ored_criterion(args[i]));
                 None
             }
             _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
@@ -194,6 +201,32 @@ mod tests {
                 assert!(e.description().contains(arg));
             } else {
                 panic!("parsing arugment lists that end in -not should fail");
+            }
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_or_without_expr1() {
+        for arg in &["-or", "-o"] {
+            let output = new_output();
+
+            if let Err(e) = super::build_top_level_matcher(&[arg, "-true"], output.clone()) {
+                assert!(e.description().contains("you have used a binary operator"));
+            } else {
+                panic!("parsing arugment list that begins with -or should fail");
+            }
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_or_without_expr2() {
+        for arg in &["-or", "-o"] {
+            let output = new_output();
+
+            if let Err(e) = super::build_top_level_matcher(&["-true", arg], output.clone()) {
+                assert!(e.description().contains("expected an expression"));
+            } else {
+                panic!("parsing arugment list that ends with -or should fail");
             }
         }
     }

@@ -1,15 +1,8 @@
 use std::fs::DirEntry;
+use std::error::Error;
 
-#[derive(Clone, Copy)]
-pub enum MultiType {
-    AND,
-    OR,
-}
 
-pub trait MultiMatcher {
-    fn push(&mut self, matcher: Box<super::Matcher>);
-    fn get_multi_type() -> MultiType;
-}
+
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
@@ -22,6 +15,10 @@ pub struct AndMatcher {
 impl AndMatcher {
     pub fn new() -> AndMatcher {
         AndMatcher { submatchers: Vec::new() }
+    }
+
+    pub fn push(&mut self, matcher: Box<super::Matcher>) {
+        self.submatchers.push(matcher);
     }
 }
 
@@ -36,31 +33,34 @@ impl super::Matcher for AndMatcher {
     }
 }
 
-impl MultiMatcher for AndMatcher {
-    fn push(&mut self, matcher: Box<super::Matcher>) {
-        self.submatchers.push(matcher);
-    }
-
-    fn get_multi_type() -> MultiType {
-        MultiType::AND
-    }
-}
-
-/// This matcher contains a collection of other matchers. A file only matches
-/// if it matches Any the contained sub-matchers. For sub-matchers that have
+/// This matcher contains a collection of other matchers. A file matches
+/// if it matches any of the contained sub-matchers. For sub-matchers that have
 /// side effects, the side effects occur in the same order as the sub-matchers
 /// were pushed into the collection.
 pub struct OrMatcher {
-    submatchers: Vec<Box<super::Matcher>>,
+    submatchers: Vec<AndMatcher>,
 }
 
 impl OrMatcher {
     pub fn push(&mut self, matcher: Box<super::Matcher>) {
-        self.submatchers.push(matcher);
+        // safe to unwrap. submatchers always has at least one member
+        self.submatchers.last_mut().unwrap().push(matcher);
+    }
+
+    pub fn new_ored_criterion(&mut self, arg: &str) -> Result<(), Box<Error>> {
+        if self.submatchers.last().unwrap().submatchers.is_empty() {
+            return Err(From::from(format!("invalid expression; you have used a binary operator \
+                                           '{}' with nothing before it.",
+                                          arg)));
+        }
+        self.submatchers.push(AndMatcher::new());
+        Ok(())
     }
 
     pub fn new() -> OrMatcher {
-        OrMatcher { submatchers: Vec::new() }
+        let mut o = OrMatcher { submatchers: Vec::new() };
+        o.submatchers.push(AndMatcher::new());
+        o
     }
 }
 
@@ -171,6 +171,7 @@ mod tests {
         // start with one matcher returning false
         matcher.push(matches_nothing);
         assert!(!matcher.matches(&abbbc));
+        matcher.new_ored_criterion("-o").unwrap();
         matcher.push(matches_everything);
         assert!(matcher.matches(&abbbc));
     }
@@ -213,6 +214,7 @@ mod tests {
         // start with one matcher returning false
         matcher.push(no_side_effects);
         assert!(!matcher.has_side_effects());
+        matcher.new_ored_criterion("-o").unwrap();
         matcher.push(side_effects);
         assert!(matcher.has_side_effects());
     }
