@@ -31,10 +31,10 @@ pub trait Matcher {
 pub fn build_top_level_matcher(args: &[&str],
                                output: Rc<RefCell<Write>>)
                                -> Result<Box<Matcher>, Box<Error>> {
-    let mut top_level_matcher = logical_matchers::OrMatcher::new();
+    let mut top_level_matcher = logical_matchers::ListMatcher::new();
 
     // can't use getopts for a variety or reasons:
-    // order ot arguments is important
+    // order of arguments is important
     // arguments can start with + as well as -
     // multiple-character flags don't start with a double dash
     let mut i = 0;
@@ -78,6 +78,13 @@ pub fn build_top_level_matcher(args: &[&str],
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
                 try!(top_level_matcher.new_ored_criterion(args[i]));
+                None
+            }
+            "," => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                }
+                try!(top_level_matcher.new_list_entry());
                 None
             }
             _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
@@ -275,5 +282,50 @@ mod tests {
 
         assert!(matcher.matches(&abbbc));
         assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+    }
+
+    #[test]
+    fn build_top_level_matcher_list_works() {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        let args = ["-true", "-print", "-false", ",", "-print", "-false"];
+        let output = new_output();
+
+        let matcher = super::build_top_level_matcher(&args, output.clone()).unwrap();
+
+        // final matcher returns false, so list matcher should too
+        assert!(!matcher.matches(&abbbc));
+        // two print matchers means doubled output
+        assert_eq!(get_output_as_string(&output),
+                   "./test_data/simple/abbbc\n./test_data/simple/abbbc\n");
+    }
+
+    #[test]
+    fn build_top_level_matcher_list_without_expr1() {
+        let output = new_output();
+
+        if let Err(e) = super::build_top_level_matcher(&[",", "-true"], output.clone()) {
+            assert!(e.description().contains("you have used a binary operator"));
+        } else {
+            panic!("parsing arugment list that begins with , should fail");
+        }
+
+        if let Err(e) = super::build_top_level_matcher(&["-true", "-o", ",", "-true"],
+                                                       output.clone()) {
+            assert!(e.description().contains("you have used a binary operator"));
+        } else {
+            panic!("parsing arugment list that contains '-o  ,' should fail");
+        }
+
+    }
+
+    #[test]
+    fn build_top_level_matcher_list_without_expr2() {
+        let output = new_output();
+
+        if let Err(e) = super::build_top_level_matcher(&["-true", ","], output.clone()) {
+            assert!(e.description().contains("expected an expression"));
+        } else {
+            panic!("parsing arugment list that ends with , should fail");
+        }
     }
 }

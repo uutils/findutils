@@ -24,6 +24,9 @@ impl AndMatcher {
 
 
 impl super::Matcher for AndMatcher {
+    /// Returns true if all sub-matchers return true. Short-circuiting does take
+    /// place. If the nth sub-matcher returns false, then we immediately return
+    /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry) -> bool {
         self.submatchers.iter().all(|ref x| x.matches(dir_entry))
     }
@@ -66,8 +69,68 @@ impl OrMatcher {
 
 
 impl super::Matcher for OrMatcher {
+    /// Returns true if any sub-matcher returns true. Short-circuiting does take
+    /// place. If the nth sub-matcher returns true, then we immediately return
+    /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry) -> bool {
         self.submatchers.iter().any(|ref x| x.matches(dir_entry))
+    }
+
+    fn has_side_effects(&self) -> bool {
+        self.submatchers.iter().any(|ref x| x.has_side_effects())
+    }
+}
+
+/// This matcher contains a collection of other matchers. In contrast to
+/// OrMatcher and AndMatcher, all the submatcher objects are called regardless
+/// of the results of previous submatchers. This is primarily used for
+/// submatchers with side-effects. For such sub-matchers the side effects occur
+/// in the same order as the sub-matchers were pushed into the collection.
+pub struct ListMatcher {
+    submatchers: Vec<OrMatcher>,
+}
+
+impl ListMatcher {
+    pub fn push(&mut self, matcher: Box<super::Matcher>) {
+        // safe to unwrap. submatchers always has at least one member
+        self.submatchers.last_mut().unwrap().push(matcher);
+    }
+
+    pub fn new_ored_criterion(&mut self, arg: &str) -> Result<(), Box<Error>> {
+        self.submatchers.last_mut().unwrap().new_ored_criterion(arg)
+    }
+
+    pub fn new_list_entry(&mut self) -> Result<(), Box<Error>> {
+        {
+            let child_or_matcher = &self.submatchers.last().unwrap();
+            let grandchild_and_matcher = &child_or_matcher.submatchers.last().unwrap();
+
+            if grandchild_and_matcher.submatchers.is_empty() {
+                return Err(From::from("invalid expression; you have used a binary operator ',' \
+                                       with nothing before it."));
+            }
+        }
+        self.submatchers.push(OrMatcher::new());
+        Ok(())
+    }
+
+    pub fn new() -> ListMatcher {
+        let mut o = ListMatcher { submatchers: Vec::new() };
+        o.submatchers.push(OrMatcher::new());
+        o
+    }
+}
+
+
+impl super::Matcher for ListMatcher {
+    /// Calls matches on all submatcher objects, with no short-circuiting.
+    /// Returns the result of the call to the final submatcher
+    fn matches(&self, dir_entry: &DirEntry) -> bool {
+        let mut rc = false;
+        for ref matcher in &self.submatchers {
+            rc = matcher.matches(dir_entry);
+        }
+        rc
     }
 
     fn has_side_effects(&self) -> bool {
@@ -177,6 +240,25 @@ mod tests {
     }
 
     #[test]
+    fn list_matches_works() {
+        let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+        let mut matcher = ListMatcher::new();
+        let matches_everything = Box::new(TrueMatcher {});
+        let matches_nothing = Box::new(FalseMatcher {});
+        let matches_nothing2 = Box::new(FalseMatcher {});
+
+        // result should always match that of the last pushed submatcher
+        matcher.push(matches_nothing);
+        assert!(!matcher.matches(&abbbc));
+        matcher.new_list_entry().unwrap();
+        matcher.push(matches_everything);
+        assert!(matcher.matches(&abbbc));
+        matcher.new_list_entry().unwrap();
+        matcher.push(matches_nothing2);
+        assert!(!matcher.matches(&abbbc));
+    }
+
+    #[test]
     fn true_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = TrueMatcher {};
@@ -215,6 +297,20 @@ mod tests {
         matcher.push(no_side_effects);
         assert!(!matcher.has_side_effects());
         matcher.new_ored_criterion("-o").unwrap();
+        matcher.push(side_effects);
+        assert!(matcher.has_side_effects());
+    }
+
+    #[test]
+    fn list_has_side_effects_works() {
+        let mut matcher = ListMatcher::new();
+        let no_side_effects = Box::new(TrueMatcher {});
+        let side_effects = Box::new(HasSideEffects {});
+
+        // start with one matcher returning false
+        matcher.push(no_side_effects);
+        assert!(!matcher.has_side_effects());
+        matcher.new_list_entry().unwrap();
         matcher.push(side_effects);
         assert!(matcher.has_side_effects());
     }
