@@ -31,13 +31,40 @@ pub trait Matcher {
 pub fn build_top_level_matcher(args: &[&str],
                                output: Rc<RefCell<Write>>)
                                -> Result<Box<Matcher>, Box<Error>> {
+    let (_, top_level_matcher) = try!(build_matcher_tree(args, output.clone(), 0, false));
+
+    // if the matcher doesn't have any side-effects, then we default to printing
+    if !top_level_matcher.has_side_effects() {
+        let mut new_and_matcher = logical_matchers::AndMatcher::new();
+        new_and_matcher.push(top_level_matcher);
+        new_and_matcher.push(Box::new(printer::Printer::new(output)));
+        return Ok(Box::new(new_and_matcher));
+    }
+    Ok(top_level_matcher)
+}
+
+/// Helper function for build_matcher_tree
+fn are_more_expressions(args: &[&str], index: usize) -> bool {
+    (index < args.len() - 1) && args[index + 1] != ")"
+}
+
+
+/// The main "translate command-line args into a matcher" function. Will call
+/// itself recursively if it encounters an opening bracket. A successful return
+/// consits of a tuple containing the new index into the args array to use (if
+/// called recursively) and the resulting matcher.
+fn build_matcher_tree(args: &[&str],
+                      output: Rc<RefCell<Write>>,
+                      arg_index: usize,
+                      expecting_bracket: bool)
+                      -> Result<(usize, Box<Matcher>), Box<Error>> {
     let mut top_level_matcher = logical_matchers::ListMatcher::new();
 
     // can't use getopts for a variety or reasons:
     // order of arguments is important
     // arguments can start with + as well as -
     // multiple-character flags don't start with a double dash
-    let mut i = 0;
+    let mut i = arg_index;
     let mut invert_next_matcher = false;
     while i < args.len() {
         let possible_submatcher = match args[i] {
@@ -67,26 +94,39 @@ pub fn build_top_level_matcher(args: &[&str],
                 Some(Box::new(try!(type_matcher::TypeMatcher::new(args[i]))) as Box<Matcher>)
             }
             "-not" | "!" => {
-                if i >= args.len() - 1 {
+                if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
                 invert_next_matcher = true;
                 None
             }
             "-or" | "-o" => {
-                if i >= args.len() - 1 {
+                if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
                 try!(top_level_matcher.new_ored_criterion(args[i]));
                 None
             }
             "," => {
-                if i >= args.len() - 1 {
+                if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
                 try!(top_level_matcher.new_list_entry());
                 None
             }
+            "(" => {
+                let (new_arg_index, sub_matcher) =
+                    try!(build_matcher_tree(args, output.clone(), i + 1, true));
+                i = new_arg_index;
+                Some(sub_matcher)
+            }
+            ")" => {
+                if !expecting_bracket {
+                    return Err(From::from("you have too many ')'"));
+                }
+                return Ok((i, Box::new(top_level_matcher)));
+            }
+
             _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
         };
         if let Some(submatcher) = possible_submatcher {
@@ -99,14 +139,11 @@ pub fn build_top_level_matcher(args: &[&str],
         }
         i += 1;
     }
-
-    if !top_level_matcher.has_side_effects() {
-        let mut new_and_matcher = logical_matchers::AndMatcher::new();
-        new_and_matcher.push(Box::new(top_level_matcher));
-        new_and_matcher.push(Box::new(printer::Printer::new(output)));
-        return Ok(Box::new(new_and_matcher));
+    if expecting_bracket {
+        return Err(From::from("invalid expression; I was expecting to find a ')' somewhere but \
+                               did not see one."));
     }
-    Ok(Box::new(top_level_matcher))
+    Ok((i, Box::new(top_level_matcher)))
 }
 
 #[cfg(test)]
@@ -328,4 +365,74 @@ mod tests {
             panic!("parsing arugment list that ends with , should fail");
         }
     }
+
+    #[test]
+    fn build_top_level_matcher_not_enough_brackets() {
+        let output = new_output();
+
+        if let Err(e) = super::build_top_level_matcher(&["-true", "("], output.clone()) {
+            assert!(e.description().contains("I was expecting to find a ')'"));
+        } else {
+            panic!("parsing arugment list with not enough closing brackets should fail");
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_too_many_brackets() {
+        let output = new_output();
+
+        if let Err(e) = super::build_top_level_matcher(&["-true", "(", ")", ")"], output.clone()) {
+            assert!(e.description().contains("too many ')'"));
+        } else {
+            panic!("parsing arugment list with too many closing brackets should fail");
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_can_use_bracket_as_arg() {
+        let output = new_output();
+        // make sure that if we use a bracket as an argument (e.g. to -name)
+        // then it isn't viewed as a bracket
+        super::build_top_level_matcher(&["-name", "("], output.clone()).unwrap();
+        super::build_top_level_matcher(&["-name", ")"], output.clone()).unwrap();
+    }
+
+    #[test]
+    fn build_top_level_matcher_brackets_work() {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        // same as true | ( false & false) = true
+        let args_without = ["-true", "-o", "-false", "-false"];
+        // same as (true | false) & false = false
+        let args_with = ["(", "-true", "-o", "-false", ")", "-false"];
+        let output = new_output();
+
+        {
+            let matcher = super::build_top_level_matcher(&args_without, output.clone()).unwrap();
+            assert!(matcher.matches(&abbbc));
+        }
+        {
+            let matcher = super::build_top_level_matcher(&args_with, output.clone()).unwrap();
+            assert!(!matcher.matches(&abbbc));
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_not_and_brackets_work() {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        // same as (true & !(false)) | true = true
+        let args_without = ["-true", "-not", "-false", "-o", "-true"];
+        // same as true & !(false | true) = false
+        let args_with = ["-true", "-not", "(", "-false", "-o", "-true", ")"];
+        let output = new_output();
+
+        {
+            let matcher = super::build_top_level_matcher(&args_without, output.clone()).unwrap();
+            assert!(matcher.matches(&abbbc));
+        }
+        {
+            let matcher = super::build_top_level_matcher(&args_with, output.clone()).unwrap();
+            assert!(!matcher.matches(&abbbc));
+        }
+    }
+
 }
