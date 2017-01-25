@@ -36,8 +36,8 @@ pub fn build_top_level_matcher(args: &[&str],
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
         let mut new_and_matcher = logical_matchers::AndMatcher::new();
-        new_and_matcher.push(top_level_matcher);
-        new_and_matcher.push(Box::new(printer::Printer::new(output)));
+        new_and_matcher.new_and_condition(top_level_matcher);
+        new_and_matcher.new_and_condition(Box::new(printer::Printer::new(output)));
         return Ok(Box::new(new_and_matcher));
     }
     Ok(top_level_matcher)
@@ -104,14 +104,14 @@ fn build_matcher_tree(args: &[&str],
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
-                try!(top_level_matcher.new_ored_criterion(args[i]));
+                try!(top_level_matcher.new_or_condition(args[i]));
                 None
             }
             "," => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
-                try!(top_level_matcher.new_list_entry());
+                try!(top_level_matcher.new_list_condition());
                 None
             }
             "(" => {
@@ -131,10 +131,10 @@ fn build_matcher_tree(args: &[&str],
         };
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
-                top_level_matcher.push(Box::new(logical_matchers::NotMatcher::new(submatcher)));
+                top_level_matcher.new_and_condition(Box::new(logical_matchers::NotMatcher::new(submatcher)));
                 invert_next_matcher = false;
             } else {
-                top_level_matcher.push(submatcher);
+                top_level_matcher.new_and_condition(submatcher);
             }
         }
         i += 1;

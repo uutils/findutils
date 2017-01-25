@@ -1,8 +1,11 @@
+//! This modules contains the matchers used for combining other matchers and
+//! performing boolean logic on them (and a couple of trivial always-true and
+//! always-false matchers). The design is strongly tied to the precedence rules
+//! when parsing command-line options (e.g. "-foo -o -bar -baz" is equivalent
+//! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
+
 use std::fs::DirEntry;
 use std::error::Error;
-
-
-
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
@@ -17,7 +20,7 @@ impl AndMatcher {
         AndMatcher { submatchers: Vec::new() }
     }
 
-    pub fn push(&mut self, matcher: Box<super::Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: Box<super::Matcher>) {
         self.submatchers.push(matcher);
     }
 }
@@ -45,12 +48,12 @@ pub struct OrMatcher {
 }
 
 impl OrMatcher {
-    pub fn push(&mut self, matcher: Box<super::Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: Box<super::Matcher>) {
         // safe to unwrap. submatchers always has at least one member
-        self.submatchers.last_mut().unwrap().push(matcher);
+        self.submatchers.last_mut().unwrap().new_and_condition(matcher);
     }
 
-    pub fn new_ored_criterion(&mut self, arg: &str) -> Result<(), Box<Error>> {
+    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
         if self.submatchers.last().unwrap().submatchers.is_empty() {
             return Err(From::from(format!("invalid expression; you have used a binary operator \
                                            '{}' with nothing before it.",
@@ -91,16 +94,16 @@ pub struct ListMatcher {
 }
 
 impl ListMatcher {
-    pub fn push(&mut self, matcher: Box<super::Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: Box<super::Matcher>) {
         // safe to unwrap. submatchers always has at least one member
-        self.submatchers.last_mut().unwrap().push(matcher);
+        self.submatchers.last_mut().unwrap().new_and_condition(matcher);
     }
 
-    pub fn new_ored_criterion(&mut self, arg: &str) -> Result<(), Box<Error>> {
-        self.submatchers.last_mut().unwrap().new_ored_criterion(arg)
+    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
+        self.submatchers.last_mut().unwrap().new_or_condition(arg)
     }
 
-    pub fn new_list_entry(&mut self) -> Result<(), Box<Error>> {
+    pub fn new_list_condition(&mut self) -> Result<(), Box<Error>> {
         {
             let child_or_matcher = &self.submatchers.last().unwrap();
             let grandchild_and_matcher = &child_or_matcher.submatchers.last().unwrap();
@@ -218,9 +221,9 @@ mod tests {
         let nothing = Box::new(FalseMatcher {});
 
         // start with one matcher returning true
-        matcher.push(everything);
+        matcher.new_and_condition(everything);
         assert!(matcher.matches(&abbbc));
-        matcher.push(nothing);
+        matcher.new_and_condition(nothing);
         assert!(!matcher.matches(&abbbc));
     }
 
@@ -232,10 +235,10 @@ mod tests {
         let matches_nothing = Box::new(FalseMatcher {});
 
         // start with one matcher returning false
-        matcher.push(matches_nothing);
+        matcher.new_and_condition(matches_nothing);
         assert!(!matcher.matches(&abbbc));
-        matcher.new_ored_criterion("-o").unwrap();
-        matcher.push(matches_everything);
+        matcher.new_or_condition("-o").unwrap();
+        matcher.new_and_condition(matches_everything);
         assert!(matcher.matches(&abbbc));
     }
 
@@ -248,13 +251,13 @@ mod tests {
         let matches_nothing2 = Box::new(FalseMatcher {});
 
         // result should always match that of the last pushed submatcher
-        matcher.push(matches_nothing);
+        matcher.new_and_condition(matches_nothing);
         assert!(!matcher.matches(&abbbc));
-        matcher.new_list_entry().unwrap();
-        matcher.push(matches_everything);
+        matcher.new_list_condition().unwrap();
+        matcher.new_and_condition(matches_everything);
         assert!(matcher.matches(&abbbc));
-        matcher.new_list_entry().unwrap();
-        matcher.push(matches_nothing2);
+        matcher.new_list_condition().unwrap();
+        matcher.new_and_condition(matches_nothing2);
         assert!(!matcher.matches(&abbbc));
     }
 
@@ -281,9 +284,9 @@ mod tests {
         let side_effects = Box::new(HasSideEffects {});
 
         // start with one matcher returning false
-        matcher.push(no_side_effects);
+        matcher.new_and_condition(no_side_effects);
         assert!(!matcher.has_side_effects());
-        matcher.push(side_effects);
+        matcher.new_and_condition(side_effects);
         assert!(matcher.has_side_effects());
     }
 
@@ -294,10 +297,10 @@ mod tests {
         let side_effects = Box::new(HasSideEffects {});
 
         // start with one matcher returning false
-        matcher.push(no_side_effects);
+        matcher.new_and_condition(no_side_effects);
         assert!(!matcher.has_side_effects());
-        matcher.new_ored_criterion("-o").unwrap();
-        matcher.push(side_effects);
+        matcher.new_or_condition("-o").unwrap();
+        matcher.new_and_condition(side_effects);
         assert!(matcher.has_side_effects());
     }
 
@@ -308,10 +311,10 @@ mod tests {
         let side_effects = Box::new(HasSideEffects {});
 
         // start with one matcher returning false
-        matcher.push(no_side_effects);
+        matcher.new_and_condition(no_side_effects);
         assert!(!matcher.has_side_effects());
-        matcher.new_list_entry().unwrap();
-        matcher.push(side_effects);
+        matcher.new_list_condition().unwrap();
+        matcher.new_and_condition(side_effects);
         assert!(matcher.has_side_effects());
     }
 
