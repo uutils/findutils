@@ -8,6 +8,7 @@ use std::fs::DirEntry;
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
+use super::Config;
 
 
 /// A basic interface that can be used to determine whether a directory entry
@@ -29,9 +30,10 @@ pub trait Matcher {
 /// Builds a single AndMatcher containing the Matcher objects corresponding
 /// to the passed in predicate arguments.
 pub fn build_top_level_matcher(args: &[&str],
+                               config: &mut Config,
                                output: Rc<RefCell<Write>>)
                                -> Result<Box<Matcher>, Box<Error>> {
-    let (_, top_level_matcher) = try!(build_matcher_tree(args, output.clone(), 0, false));
+    let (_, top_level_matcher) = try!(build_matcher_tree(args, config, output.clone(), 0, false));
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
@@ -54,6 +56,7 @@ fn are_more_expressions(args: &[&str], index: usize) -> bool {
 /// consits of a tuple containing the new index into the args array to use (if
 /// called recursively) and the resulting matcher.
 fn build_matcher_tree(args: &[&str],
+                      config: &mut Config,
                       output: Rc<RefCell<Write>>,
                       arg_index: usize,
                       expecting_bracket: bool)
@@ -116,7 +119,7 @@ fn build_matcher_tree(args: &[&str],
             }
             "(" => {
                 let (new_arg_index, sub_matcher) =
-                    try!(build_matcher_tree(args, output.clone(), i + 1, true));
+                    try!(build_matcher_tree(args, config, output.clone(), i + 1, true));
                 i = new_arg_index;
                 Some(sub_matcher)
             }
@@ -125,6 +128,11 @@ fn build_matcher_tree(args: &[&str],
                     return Err(From::from("you have too many ')'"));
                 }
                 return Ok((i, Box::new(top_level_matcher)));
+            }
+            "-d" | "-depth" => {
+                // TODO add warning if it appears after actual testing criterion
+                config.depth_first = true;
+                None
             }
 
             _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
@@ -149,11 +157,11 @@ fn build_matcher_tree(args: &[&str],
 #[cfg(test)]
 mod tests {
     use std::fs::DirEntry;
-    use std::cell::RefCell;
-    use std::vec::Vec;
-    use std::io::Cursor;
-    use std::rc::Rc;
-    use std::io::Read;
+    use super::super::Config;
+    use super::super::test::new_output;
+    use super::super::test::get_output_as_string;
+
+
 
     /// Helper function for tests to get a DirEntry object. directory should
     /// probably be a string starting with "test_data/" (cargo's tests run with
@@ -169,27 +177,15 @@ mod tests {
         panic!("Couldn't find {} in {}", directory, filename);
     }
 
-
-
-    fn new_output() -> Rc<RefCell<Cursor<Vec<u8>>>> {
-        Rc::new(RefCell::new(Cursor::new(Vec::<u8>::new())))
-    }
-
-    fn get_output_as_string(output: &RefCell<Cursor<Vec<u8>>>) -> String {
-        let mut cursor = output.borrow_mut();
-        cursor.set_position(0);
-        let mut contents = String::new();
-        cursor.read_to_string(&mut contents).unwrap();
-        contents
-    }
-
     #[test]
     fn build_top_level_matcher_name() {
         let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
-        let abbbc_upper = get_dir_entry_for("./test_data/simple", "ABBBC");
+        let abbbc_upper = get_dir_entry_for("./test_data/simple/subdir", "ABBBC");
         let output = new_output();
+        let mut config = Config::new();
 
-        let matcher = super::build_top_level_matcher(&["-name", "a*c"], output.clone()).unwrap();
+        let matcher =
+            super::build_top_level_matcher(&["-name", "a*c"], &mut config, output.clone()).unwrap();
 
         assert!(matcher.matches(&abbbc_lower));
         assert!(!matcher.matches(&abbbc_upper));
@@ -199,15 +195,18 @@ mod tests {
     #[test]
     fn build_top_level_matcher_iname() {
         let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
-        let abbbc_upper = get_dir_entry_for("./test_data/simple", "ABBBC");
+        let abbbc_upper = get_dir_entry_for("./test_data/simple/subdir", "ABBBC");
         let output = new_output();
+        let mut config = Config::new();
 
-        let matcher = super::build_top_level_matcher(&["-iname", "a*c"], output.clone()).unwrap();
+        let matcher =
+            super::build_top_level_matcher(&["-iname", "a*c"], &mut config, output.clone())
+                .unwrap();
 
         assert!(matcher.matches(&abbbc_lower));
         assert!(matcher.matches(&abbbc_upper));
         assert_eq!(get_output_as_string(&output),
-                   "./test_data/simple/abbbc\n./test_data/simple/ABBBC\n");
+                   "./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n");
     }
 
     #[test]
@@ -215,8 +214,10 @@ mod tests {
         for arg in &["-not", "!"] {
             let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
             let output = new_output();
+            let mut config = Config::new();
 
             let matcher = super::build_top_level_matcher(&[arg, "-name", "doesntexist"],
+                                                         &mut config,
                                                          output.clone())
                 .unwrap();
 
@@ -229,8 +230,9 @@ mod tests {
     fn build_top_level_matcher_not_needs_expression() {
         for arg in &["-not", "!"] {
             let output = new_output();
+            let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&[arg], output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&[arg], &mut config, output.clone()) {
                 assert!(e.description().contains("expected an expression"));
             } else {
                 panic!("parsing arugment lists that end in -not should fail");
@@ -242,8 +244,9 @@ mod tests {
     fn build_top_level_matcher_missing_args() {
         for arg in &["-iname", "-name", "-type"] {
             let output = new_output();
+            let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&[arg], output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&[arg], &mut config, output.clone()) {
                 assert!(e.description().contains("missing argument to"));
                 assert!(e.description().contains(arg));
             } else {
@@ -256,8 +259,11 @@ mod tests {
     fn build_top_level_matcher_or_without_expr1() {
         for arg in &["-or", "-o"] {
             let output = new_output();
+            let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&[arg, "-true"], output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&[arg, "-true"],
+                                                           &mut config,
+                                                           output.clone()) {
                 assert!(e.description().contains("you have used a binary operator"));
             } else {
                 panic!("parsing arugment list that begins with -or should fail");
@@ -269,8 +275,11 @@ mod tests {
     fn build_top_level_matcher_or_without_expr2() {
         for arg in &["-or", "-o"] {
             let output = new_output();
+            let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&["-true", arg], output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&["-true", arg],
+                                                           &mut config,
+                                                           output.clone()) {
                 assert!(e.description().contains("expected an expression"));
             } else {
                 panic!("parsing arugment list that ends with -or should fail");
@@ -285,16 +294,21 @@ mod tests {
                       ["-false", "-o", "-true"],
                       ["-true", "-o", "-true"]] {
             let output = new_output();
+            let mut config = Config::new();
 
-            let matcher = super::build_top_level_matcher(args, output.clone()).unwrap();
+            let matcher = super::build_top_level_matcher(args, &mut config, output.clone())
+                .unwrap();
 
             assert!(matcher.matches(&abbbc));
             assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
         }
 
         let output = new_output();
+        let mut config = Config::new();
 
-        let matcher = super::build_top_level_matcher(&["-false", "-o", "-false"], output.clone())
+        let matcher = super::build_top_level_matcher(&["-false", "-o", "-false"],
+                                                     &mut config,
+                                                     output.clone())
             .unwrap();
 
         assert!(!matcher.matches(&abbbc));
@@ -306,16 +320,21 @@ mod tests {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
         for args in &[["-true", "-false"], ["-false", "-true"], ["-false", "-false"]] {
             let output = new_output();
+            let mut config = Config::new();
 
-            let matcher = super::build_top_level_matcher(args, output.clone()).unwrap();
+            let matcher = super::build_top_level_matcher(args, &mut config, output.clone())
+                .unwrap();
 
             assert!(!matcher.matches(&abbbc));
             assert_eq!(get_output_as_string(&output), "");
         }
 
         let output = new_output();
+        let mut config = Config::new();
 
-        let matcher = super::build_top_level_matcher(&["-true", "-true"], output.clone()).unwrap();
+        let matcher =
+            super::build_top_level_matcher(&["-true", "-true"], &mut config, output.clone())
+                .unwrap();
 
         assert!(matcher.matches(&abbbc));
         assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
@@ -326,8 +345,9 @@ mod tests {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
         let args = ["-true", "-print", "-false", ",", "-print", "-false"];
         let output = new_output();
+        let mut config = Config::new();
 
-        let matcher = super::build_top_level_matcher(&args, output.clone()).unwrap();
+        let matcher = super::build_top_level_matcher(&args, &mut config, output.clone()).unwrap();
 
         // final matcher returns false, so list matcher should too
         assert!(!matcher.matches(&abbbc));
@@ -339,14 +359,18 @@ mod tests {
     #[test]
     fn build_top_level_matcher_list_without_expr1() {
         let output = new_output();
+        let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&[",", "-true"], output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&[",", "-true"],
+                                                       &mut config,
+                                                       output.clone()) {
             assert!(e.description().contains("you have used a binary operator"));
         } else {
             panic!("parsing arugment list that begins with , should fail");
         }
 
         if let Err(e) = super::build_top_level_matcher(&["-true", "-o", ",", "-true"],
+                                                       &mut config,
                                                        output.clone()) {
             assert!(e.description().contains("you have used a binary operator"));
         } else {
@@ -358,8 +382,11 @@ mod tests {
     #[test]
     fn build_top_level_matcher_list_without_expr2() {
         let output = new_output();
+        let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-true", ","], output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-true", ","],
+                                                       &mut config,
+                                                       output.clone()) {
             assert!(e.description().contains("expected an expression"));
         } else {
             panic!("parsing arugment list that ends with , should fail");
@@ -369,8 +396,11 @@ mod tests {
     #[test]
     fn build_top_level_matcher_not_enough_brackets() {
         let output = new_output();
+        let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-true", "("], output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-true", "("],
+                                                       &mut config,
+                                                       output.clone()) {
             assert!(e.description().contains("I was expecting to find a ')'"));
         } else {
             panic!("parsing arugment list with not enough closing brackets should fail");
@@ -380,8 +410,11 @@ mod tests {
     #[test]
     fn build_top_level_matcher_too_many_brackets() {
         let output = new_output();
+        let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-true", "(", ")", ")"], output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-true", "(", ")", ")"],
+                                                       &mut config,
+                                                       output.clone()) {
             assert!(e.description().contains("too many ')'"));
         } else {
             panic!("parsing arugment list with too many closing brackets should fail");
@@ -391,10 +424,11 @@ mod tests {
     #[test]
     fn build_top_level_matcher_can_use_bracket_as_arg() {
         let output = new_output();
+        let mut config = Config::new();
         // make sure that if we use a bracket as an argument (e.g. to -name)
         // then it isn't viewed as a bracket
-        super::build_top_level_matcher(&["-name", "("], output.clone()).unwrap();
-        super::build_top_level_matcher(&["-name", ")"], output.clone()).unwrap();
+        super::build_top_level_matcher(&["-name", "("], &mut config, output.clone()).unwrap();
+        super::build_top_level_matcher(&["-name", ")"], &mut config, output.clone()).unwrap();
     }
 
     #[test]
@@ -405,13 +439,16 @@ mod tests {
         // same as (true | false) & false = false
         let args_with = ["(", "-true", "-o", "-false", ")", "-false"];
         let output = new_output();
+        let mut config = Config::new();
 
         {
-            let matcher = super::build_top_level_matcher(&args_without, output.clone()).unwrap();
+            let matcher =
+                super::build_top_level_matcher(&args_without, &mut config, output.clone()).unwrap();
             assert!(matcher.matches(&abbbc));
         }
         {
-            let matcher = super::build_top_level_matcher(&args_with, output.clone()).unwrap();
+            let matcher = super::build_top_level_matcher(&args_with, &mut config, output.clone())
+                .unwrap();
             assert!(!matcher.matches(&abbbc));
         }
     }
@@ -424,13 +461,16 @@ mod tests {
         // same as true & !(false | true) = false
         let args_with = ["-true", "-not", "(", "-false", "-o", "-true", ")"];
         let output = new_output();
+        let mut config = Config::new();
 
         {
-            let matcher = super::build_top_level_matcher(&args_without, output.clone()).unwrap();
+            let matcher =
+                super::build_top_level_matcher(&args_without, &mut config, output.clone()).unwrap();
             assert!(matcher.matches(&abbbc));
         }
         {
-            let matcher = super::build_top_level_matcher(&args_with, output.clone()).unwrap();
+            let matcher = super::build_top_level_matcher(&args_with, &mut config, output.clone())
+                .unwrap();
             assert!(!matcher.matches(&abbbc));
         }
     }
