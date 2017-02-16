@@ -5,28 +5,26 @@
 //! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
 
 use super::PathInfo;
+use super::Matcher;
 use std::error::Error;
+use std::iter::Iterator;
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
 /// side effects, the side effects occur in the same order as the sub-matchers
 /// were pushed into the collection.
 pub struct AndMatcher {
-    submatchers: Vec<Box<super::Matcher>>,
+    submatchers: Vec<Box<Matcher>>,
 }
 
 impl AndMatcher {
-    pub fn new() -> AndMatcher {
-        AndMatcher { submatchers: Vec::new() }
-    }
-
-    pub fn new_and_condition(&mut self, matcher: Box<super::Matcher>) {
-        self.submatchers.push(matcher);
+    pub fn new(submatchers: Vec<Box<Matcher>>) -> AndMatcher {
+        AndMatcher { submatchers: submatchers }
     }
 }
 
 
-impl super::Matcher for AndMatcher {
+impl Matcher for AndMatcher {
     /// Returns true if all sub-matchers return true. Short-circuiting does take
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
@@ -39,39 +37,50 @@ impl super::Matcher for AndMatcher {
     }
 }
 
+pub struct AndMatcherBuilder {
+    submatchers: Vec<Box<Matcher>>,
+}
+
+impl AndMatcherBuilder {
+    pub fn new() -> AndMatcherBuilder {
+        AndMatcherBuilder { submatchers: Vec::new() }
+    }
+
+    pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
+        self.submatchers.push(matcher);
+    }
+
+    /// Builds a Matcher: consuming the builder in the process.
+    pub fn build(mut self) -> Box<Matcher> {
+        // special case. If there's only one submatcher, just return that directly
+        if self.submatchers.len() == 1 {
+            // safe to unwrap: we've just checked the size
+            return self.submatchers.pop().unwrap();
+        }
+        let matcher = Box::new(AndMatcher::new(self.submatchers));
+        self.submatchers = Vec::new();
+        matcher
+    }
+}
+
+
+
 /// This matcher contains a collection of other matchers. A file matches
 /// if it matches any of the contained sub-matchers. For sub-matchers that have
 /// side effects, the side effects occur in the same order as the sub-matchers
 /// were pushed into the collection.
 pub struct OrMatcher {
-    submatchers: Vec<AndMatcher>,
+    submatchers: Vec<Box<Matcher>>,
 }
 
 impl OrMatcher {
-    pub fn new_and_condition(&mut self, matcher: Box<super::Matcher>) {
-        // safe to unwrap. submatchers always has at least one member
-        self.submatchers.last_mut().unwrap().new_and_condition(matcher);
-    }
-
-    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
-        if self.submatchers.last().unwrap().submatchers.is_empty() {
-            return Err(From::from(format!("invalid expression; you have used a binary operator \
-                                           '{}' with nothing before it.",
-                                          arg)));
-        }
-        self.submatchers.push(AndMatcher::new());
-        Ok(())
-    }
-
-    pub fn new() -> OrMatcher {
-        let mut o = OrMatcher { submatchers: Vec::new() };
-        o.submatchers.push(AndMatcher::new());
-        o
+    pub fn new(submatchers: Vec<Box<Matcher>>) -> OrMatcher {
+        OrMatcher { submatchers: submatchers }
     }
 }
 
 
-impl super::Matcher for OrMatcher {
+impl Matcher for OrMatcher {
     /// Returns true if any sub-matcher returns true. Short-circuiting does take
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
@@ -84,17 +93,86 @@ impl super::Matcher for OrMatcher {
     }
 }
 
+pub struct OrMatcherBuilder {
+    submatchers: Vec<AndMatcherBuilder>,
+}
+
+impl OrMatcherBuilder {
+    pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
+        // safe to unwrap. submatchers always has at least one member
+        self.submatchers.last_mut().unwrap().new_and_condition(matcher);
+    }
+
+    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
+        if self.submatchers.last().unwrap().submatchers.is_empty() {
+            return Err(From::from(format!("invalid expression; you have used a binary operator \
+                                           '{}' with nothing before it.",
+                                          arg)));
+        }
+        self.submatchers.push(AndMatcherBuilder::new());
+        Ok(())
+    }
+
+    pub fn new() -> OrMatcherBuilder {
+        let mut o = OrMatcherBuilder { submatchers: Vec::new() };
+        o.submatchers.push(AndMatcherBuilder::new());
+        o
+    }
+
+    /// Builds a Matcher: consuming the builder in the process.
+    pub fn build(mut self) -> Box<Matcher> {
+        // Special case: if there's only one submatcher, just return that directly
+        if self.submatchers.len() == 1 {
+            // safe to unwrap: we've just checked the size
+            return self.submatchers.pop().unwrap().build();
+        }
+        let mut submatchers = vec![];
+        for x in self.submatchers {
+            submatchers.push(x.build());
+        }
+        Box::new(OrMatcher::new(submatchers))
+    }
+}
+
+
 /// This matcher contains a collection of other matchers. In contrast to
 /// OrMatcher and AndMatcher, all the submatcher objects are called regardless
 /// of the results of previous submatchers. This is primarily used for
 /// submatchers with side-effects. For such sub-matchers the side effects occur
 /// in the same order as the sub-matchers were pushed into the collection.
 pub struct ListMatcher {
-    submatchers: Vec<OrMatcher>,
+    submatchers: Vec<Box<Matcher>>,
 }
 
 impl ListMatcher {
-    pub fn new_and_condition(&mut self, matcher: Box<super::Matcher>) {
+    pub fn new(submatchers: Vec<Box<Matcher>>) -> ListMatcher {
+        ListMatcher { submatchers: submatchers }
+    }
+}
+
+
+impl Matcher for ListMatcher {
+    /// Calls matches on all submatcher objects, with no short-circuiting.
+    /// Returns the result of the call to the final submatcher
+    fn matches(&self, dir_entry: &PathInfo) -> bool {
+        let mut rc = false;
+        for ref matcher in &self.submatchers {
+            rc = matcher.matches(dir_entry);
+        }
+        rc
+    }
+
+    fn has_side_effects(&self) -> bool {
+        self.submatchers.iter().any(|ref x| x.has_side_effects())
+    }
+}
+
+pub struct ListMatcherBuilder {
+    submatchers: Vec<OrMatcherBuilder>,
+}
+
+impl ListMatcherBuilder {
+    pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
         // safe to unwrap. submatchers always has at least one member
         self.submatchers.last_mut().unwrap().new_and_condition(matcher);
     }
@@ -113,39 +191,43 @@ impl ListMatcher {
                                        with nothing before it."));
             }
         }
-        self.submatchers.push(OrMatcher::new());
+        self.submatchers.push(OrMatcherBuilder::new());
         Ok(())
     }
 
-    pub fn new() -> ListMatcher {
-        let mut o = ListMatcher { submatchers: Vec::new() };
-        o.submatchers.push(OrMatcher::new());
+    pub fn new() -> ListMatcherBuilder {
+        let mut o = ListMatcherBuilder { submatchers: Vec::new() };
+        o.submatchers.push(OrMatcherBuilder::new());
         o
     }
-}
 
-
-impl super::Matcher for ListMatcher {
-    /// Calls matches on all submatcher objects, with no short-circuiting.
-    /// Returns the result of the call to the final submatcher
-    fn matches(&self, dir_entry: &PathInfo) -> bool {
-        let mut rc = false;
-        for ref matcher in &self.submatchers {
-            rc = matcher.matches(dir_entry);
+    /// Builds a Matcher: consuming the builder in the process.
+    pub fn build(mut self) -> Box<Matcher> {
+        // Special case: if there's only one submatcher, just return that directly
+        if self.submatchers.len() == 1 {
+            // safe to unwrap: we've just checked the size
+            return self.submatchers.pop().unwrap().build();
         }
-        rc
-    }
-
-    fn has_side_effects(&self) -> bool {
-        self.submatchers.iter().any(|ref x| x.has_side_effects())
+        let mut submatchers = vec![];
+        for x in self.submatchers {
+            submatchers.push(x.build());
+        }
+        Box::new(ListMatcher::new(submatchers))
     }
 }
+
 
 /// A simple matcher that always matches.
 pub struct TrueMatcher {
 }
 
-impl super::Matcher for TrueMatcher {
+impl TrueMatcher {
+    pub fn new_box() -> Box<Matcher> {
+        Box::new(TrueMatcher {})
+    }
+}
+
+impl Matcher for TrueMatcher {
     fn matches(&self, _dir_entry: &PathInfo) -> bool {
         true
     }
@@ -159,7 +241,7 @@ impl super::Matcher for TrueMatcher {
 pub struct FalseMatcher {
 }
 
-impl super::Matcher for FalseMatcher {
+impl Matcher for FalseMatcher {
     fn matches(&self, _dir_entry: &PathInfo) -> bool {
         false
     }
@@ -169,18 +251,29 @@ impl super::Matcher for FalseMatcher {
     }
 }
 
-/// Matcher that wraps another matcher and inverts matching criteria.
-pub struct NotMatcher {
-    submatcher: Box<super::Matcher>,
-}
-
-impl NotMatcher {
-    pub fn new(submatcher: Box<super::Matcher>) -> NotMatcher {
-        NotMatcher { submatcher: submatcher }
+impl FalseMatcher {
+    pub fn new_box() -> Box<Matcher> {
+        Box::new(FalseMatcher {})
     }
 }
 
-impl super::Matcher for NotMatcher {
+
+/// Matcher that wraps another matcher and inverts matching criteria.
+pub struct NotMatcher {
+    submatcher: Box<Matcher>,
+}
+
+impl NotMatcher {
+    pub fn new(submatcher: Box<Matcher>) -> NotMatcher {
+        NotMatcher { submatcher: submatcher }
+    }
+
+    pub fn new_box(submatcher: Box<Matcher>) -> Box<NotMatcher> {
+        Box::new(NotMatcher::new(submatcher))
+    }
+}
+
+impl Matcher for NotMatcher {
     fn matches(&self, dir_entry: &PathInfo) -> bool {
         !self.submatcher.matches(dir_entry)
     }
@@ -211,54 +304,67 @@ mod tests {
         }
     }
 
+    impl HasSideEffects {
+        pub fn new_box() -> Box<Matcher> {
+            Box::new(HasSideEffects {})
+        }
+    }
+
 
 
     #[test]
     fn and_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let mut matcher = AndMatcher::new();
-        let everything = Box::new(TrueMatcher {});
-        let nothing = Box::new(FalseMatcher {});
+        let mut builder = AndMatcherBuilder::new();
 
         // start with one matcher returning true
-        matcher.new_and_condition(everything);
-        assert!(matcher.matches(&abbbc));
-        matcher.new_and_condition(nothing);
-        assert!(!matcher.matches(&abbbc));
+        builder.new_and_condition(TrueMatcher::new_box());
+        assert!(builder.build().matches(&abbbc));
+
+        builder = AndMatcherBuilder::new();
+        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(FalseMatcher::new_box());
+        assert!(!builder.build().matches(&abbbc));
     }
 
     #[test]
     fn or_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let mut matcher = OrMatcher::new();
-        let matches_everything = Box::new(TrueMatcher {});
-        let matches_nothing = Box::new(FalseMatcher {});
+        let mut builder = OrMatcherBuilder::new();
 
         // start with one matcher returning false
-        matcher.new_and_condition(matches_nothing);
-        assert!(!matcher.matches(&abbbc));
-        matcher.new_or_condition("-o").unwrap();
-        matcher.new_and_condition(matches_everything);
-        assert!(matcher.matches(&abbbc));
+        builder.new_and_condition(FalseMatcher::new_box());
+        assert!(!builder.build().matches(&abbbc));
+
+        let mut builder = OrMatcherBuilder::new();
+        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_or_condition("-o").unwrap();
+        builder.new_and_condition(TrueMatcher::new_box());
+        assert!(builder.build().matches(&abbbc));
     }
 
     #[test]
     fn list_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let mut matcher = ListMatcher::new();
-        let matches_everything = Box::new(TrueMatcher {});
-        let matches_nothing = Box::new(FalseMatcher {});
-        let matches_nothing2 = Box::new(FalseMatcher {});
+        let mut builder = ListMatcherBuilder::new();
 
         // result should always match that of the last pushed submatcher
-        matcher.new_and_condition(matches_nothing);
-        assert!(!matcher.matches(&abbbc));
-        matcher.new_list_condition().unwrap();
-        matcher.new_and_condition(matches_everything);
-        assert!(matcher.matches(&abbbc));
-        matcher.new_list_condition().unwrap();
-        matcher.new_and_condition(matches_nothing2);
-        assert!(!matcher.matches(&abbbc));
+        builder.new_and_condition(FalseMatcher::new_box());
+        assert!(!builder.build().matches(&abbbc));
+
+        builder = ListMatcherBuilder::new();
+        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_list_condition().unwrap();
+        builder.new_and_condition(TrueMatcher::new_box());
+        assert!(builder.build().matches(&abbbc));
+
+        builder = ListMatcherBuilder::new();
+        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_list_condition().unwrap();
+        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_list_condition().unwrap();
+        builder.new_and_condition(FalseMatcher::new_box());
+        assert!(!builder.build().matches(&abbbc));
     }
 
     #[test]
@@ -279,43 +385,44 @@ mod tests {
 
     #[test]
     fn and_has_side_effects_works() {
-        let mut matcher = AndMatcher::new();
-        let no_side_effects = Box::new(TrueMatcher {});
-        let side_effects = Box::new(HasSideEffects {});
+        let mut builder = AndMatcherBuilder::new();
 
-        // start with one matcher returning false
-        matcher.new_and_condition(no_side_effects);
-        assert!(!matcher.has_side_effects());
-        matcher.new_and_condition(side_effects);
-        assert!(matcher.has_side_effects());
+        // start with one matcher with no side effects false
+        builder.new_and_condition(TrueMatcher::new_box());
+        assert!(!builder.build().has_side_effects());
+
+        builder = AndMatcherBuilder::new();
+        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(HasSideEffects::new_box());
+        assert!(builder.build().has_side_effects());
     }
 
     #[test]
     fn or_has_side_effects_works() {
-        let mut matcher = OrMatcher::new();
-        let no_side_effects = Box::new(TrueMatcher {});
-        let side_effects = Box::new(HasSideEffects {});
+        let mut builder = OrMatcherBuilder::new();
 
-        // start with one matcher returning false
-        matcher.new_and_condition(no_side_effects);
-        assert!(!matcher.has_side_effects());
-        matcher.new_or_condition("-o").unwrap();
-        matcher.new_and_condition(side_effects);
-        assert!(matcher.has_side_effects());
+        // start with one matcher with no side effects false
+        builder.new_and_condition(TrueMatcher::new_box());
+        assert!(!builder.build().has_side_effects());
+
+        builder = OrMatcherBuilder::new();
+        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(HasSideEffects::new_box());
+        assert!(builder.build().has_side_effects());
     }
 
     #[test]
     fn list_has_side_effects_works() {
-        let mut matcher = ListMatcher::new();
-        let no_side_effects = Box::new(TrueMatcher {});
-        let side_effects = Box::new(HasSideEffects {});
+        let mut builder = ListMatcherBuilder::new();
 
-        // start with one matcher returning false
-        matcher.new_and_condition(no_side_effects);
-        assert!(!matcher.has_side_effects());
-        matcher.new_list_condition().unwrap();
-        matcher.new_and_condition(side_effects);
-        assert!(matcher.has_side_effects());
+        // start with one matcher with no side effects false
+        builder.new_and_condition(TrueMatcher::new_box());
+        assert!(!builder.build().has_side_effects());
+
+        builder = ListMatcherBuilder::new();
+        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(HasSideEffects::new_box());
+        assert!(builder.build().has_side_effects());
     }
 
     #[test]
@@ -333,16 +440,16 @@ mod tests {
     #[test]
     fn not_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let not_true = NotMatcher::new(Box::new(TrueMatcher {}));
-        let not_false = NotMatcher::new(Box::new(FalseMatcher {}));
+        let not_true = NotMatcher::new(TrueMatcher::new_box());
+        let not_false = NotMatcher::new(FalseMatcher::new_box());
         assert!(!not_true.matches(&abbbc));
         assert!(not_false.matches(&abbbc));
     }
 
     #[test]
     fn not_has_side_effects_works() {
-        let has_fx = NotMatcher::new(Box::new(HasSideEffects {}));
-        let hasnt_fx = NotMatcher::new(Box::new(FalseMatcher {}));
+        let has_fx = NotMatcher::new(HasSideEffects::new_box());
+        let hasnt_fx = NotMatcher::new(FalseMatcher::new_box());
         assert!(has_fx.has_side_effects());
         assert!(!hasnt_fx.has_side_effects());
     }

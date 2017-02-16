@@ -12,6 +12,10 @@ impl Printer {
     pub fn new(output: Rc<RefCell<Write>>) -> Printer {
         Printer { output: output.clone() }
     }
+
+    pub fn new_box(output: Rc<RefCell<Write>>) -> Box<super::Matcher> {
+        Box::new(Printer { output: output.clone() })
+    }
 }
 
 impl super::Matcher for Printer {

@@ -100,10 +100,10 @@ pub fn build_top_level_matcher(args: &[&str],
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
-        let mut new_and_matcher = logical_matchers::AndMatcher::new();
+        let mut new_and_matcher = logical_matchers::AndMatcherBuilder::new();
         new_and_matcher.new_and_condition(top_level_matcher);
         new_and_matcher.new_and_condition(Box::new(printer::Printer::new(output)));
-        return Ok(Box::new(new_and_matcher));
+        return Ok(new_and_matcher.build());
     }
     Ok(top_level_matcher)
 }
@@ -135,7 +135,7 @@ fn build_matcher_tree(args: &[&str],
                       arg_index: usize,
                       expecting_bracket: bool)
                       -> Result<(usize, Box<Matcher>), Box<Error>> {
-    let mut top_level_matcher = logical_matchers::ListMatcher::new();
+    let mut top_level_matcher = logical_matchers::ListMatcherBuilder::new();
 
     // can't use getopts for a variety or reasons:
     // order of arguments is important
@@ -145,30 +145,29 @@ fn build_matcher_tree(args: &[&str],
     let mut invert_next_matcher = false;
     while i < args.len() {
         let possible_submatcher = match args[i] {
-            "-print" => Some(Box::new(printer::Printer::new(output.clone())) as Box<Matcher>),
-            "-true" => Some(Box::new(logical_matchers::TrueMatcher {}) as Box<Matcher>),
-            "-false" => Some(Box::new(logical_matchers::FalseMatcher {}) as Box<Matcher>),
+            "-print" => Some(printer::Printer::new_box(output.clone())),
+            "-true" => Some(logical_matchers::TrueMatcher::new_box()),
+            "-false" => Some(logical_matchers::FalseMatcher::new_box()),
             "-name" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(Box::new(try!(name_matcher::NameMatcher::new(args[i]
-                    .as_ref()))) as Box<Matcher>)
+                Some(try!(name_matcher::NameMatcher::new_box(args[i].as_ref())))
             }
             "-iname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(Box::new(try!(caseless_name_matcher::CaselessNameMatcher::new(args[i]))) as Box<Matcher>)
+                Some(try!(caseless_name_matcher::CaselessNameMatcher::new_box(args[i])))
             }
             "-type" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(Box::new(try!(type_matcher::TypeMatcher::new(args[i]))) as Box<Matcher>)
+                Some(try!(type_matcher::TypeMatcher::new_box(args[i])))
             }
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
@@ -201,7 +200,7 @@ fn build_matcher_tree(args: &[&str],
                 if !expecting_bracket {
                     return Err(From::from("you have too many ')'"));
                 }
-                return Ok((i, Box::new(top_level_matcher)));
+                return Ok((i, top_level_matcher.build()));
             }
             "-d" | "-depth" => {
                 // TODO add warning if it appears after actual testing criterion
@@ -229,7 +228,7 @@ fn build_matcher_tree(args: &[&str],
         };
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
-                top_level_matcher.new_and_condition(Box::new(logical_matchers::NotMatcher::new(submatcher)));
+                top_level_matcher.new_and_condition(logical_matchers::NotMatcher::new_box(submatcher));
                 invert_next_matcher = false;
             } else {
                 top_level_matcher.new_and_condition(submatcher);
@@ -241,7 +240,7 @@ fn build_matcher_tree(args: &[&str],
         return Err(From::from("invalid expression; I was expecting to find a ')' somewhere but \
                                did not see one."));
     }
-    Ok((i, Box::new(top_level_matcher)))
+    Ok((i, top_level_matcher.build()))
 }
 
 #[cfg(test)]

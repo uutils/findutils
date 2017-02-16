@@ -21,6 +21,10 @@ impl TypeMatcher {
         };
         Ok(TypeMatcher { file_type_fn: function })
     }
+
+    pub fn new_box(type_string: &str) -> Result<Box<super::Matcher>, Box<Error>> {
+        Ok(Box::new(try!(TypeMatcher::new(type_string))))
+    }
 }
 
 impl super::Matcher for TypeMatcher {

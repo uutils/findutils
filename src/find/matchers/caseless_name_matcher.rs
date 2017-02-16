@@ -17,6 +17,10 @@ impl CaselessNameMatcher {
         let p = try!(Pattern::new(&pattern_string.to_lowercase()));
         Ok(CaselessNameMatcher { pattern: p })
     }
+
+    pub fn new_box(pattern_string: &str) -> Result<Box<super::Matcher>, PatternError> {
+        Ok(Box::new(try!(CaselessNameMatcher::new(pattern_string))))
+    }
 }
 
 impl super::Matcher for CaselessNameMatcher {

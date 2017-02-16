@@ -15,6 +15,10 @@ impl NameMatcher {
         let p = try!(Pattern::new(pattern_string));
         Ok(NameMatcher { pattern: p })
     }
+
+    pub fn new_box(pattern_string: &str) -> Result<Box<super::Matcher>, PatternError> {
+        Ok(Box::new(try!(NameMatcher::new(pattern_string))))
+    }
 }
 
 impl super::Matcher for NameMatcher {
