@@ -1,4 +1,4 @@
-use std::fs::DirEntry;
+use super::PathInfo;
 use std::fs::FileType;
 use std::error::Error;
 use std::io::stderr;
@@ -24,7 +24,7 @@ impl TypeMatcher {
 }
 
 impl super::Matcher for TypeMatcher {
-    fn matches(&self, file_info: &DirEntry) -> bool {
+    fn matches(&self, file_info: &PathInfo) -> bool {
         match file_info.file_type() {
             Ok(file_type) => (self.file_type_fn)(&file_type),
             Err(e) => {

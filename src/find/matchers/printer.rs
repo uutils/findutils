@@ -1,4 +1,4 @@
-use std::fs::DirEntry;
+use super::PathInfo;
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
@@ -15,7 +15,7 @@ impl Printer {
 }
 
 impl super::Matcher for Printer {
-    fn matches(&self, file_info: &DirEntry) -> bool {
+    fn matches(&self, file_info: &PathInfo) -> bool {
         writeln!(self.output.borrow_mut(),
                  "{}",
                  file_info.path().to_string_lossy())

@@ -3,13 +3,76 @@ mod name_matcher;
 mod caseless_name_matcher;
 mod logical_matchers;
 mod type_matcher;
+use std;
+use std::cell::RefCell;
 use std::error::Error;
 use std::fs::DirEntry;
-use std::cell::RefCell;
+use std::fs::Metadata;
 use std::io::Write;
+use std::path::Path;
 use std::rc::Rc;
 use super::Config;
 
+
+/// Expose the methods we want from DirEntry in a trait. 99% of the time we'll
+/// want to look at a DirEntry object. But the root directories we look at are
+/// going to be inefficient to get a DirEntry object for (as that would involve
+/// calling read_dir on the parent and then iterating through to find the right
+/// entry.
+pub trait PathInfo {
+    fn metadata(&self) -> std::io::Result<Metadata>;
+    fn path(&self) -> std::path::PathBuf;
+    fn file_type(&self) -> std::io::Result<std::fs::FileType>;
+    fn file_name(&self) -> std::ffi::OsString;
+}
+
+impl PathInfo for DirEntry {
+    fn metadata(&self) -> std::io::Result<Metadata> {
+        DirEntry::metadata(self)
+    }
+    fn path(&self) -> std::path::PathBuf {
+        DirEntry::path(self)
+    }
+    fn file_type(&self) -> std::io::Result<std::fs::FileType> {
+        DirEntry::file_type(self)
+    }
+    fn file_name(&self) -> std::ffi::OsString {
+        DirEntry::file_name(self)
+    }
+}
+
+/// Implementation of PathInfo for paths we're given on the commandline, where
+/// generating a DirEntry would be inefficient.
+pub struct GivenPathInfo<'a> {
+    path: &'a Path,
+}
+
+impl<'a> GivenPathInfo<'a> {
+    pub fn new(path: &'a Path) -> GivenPathInfo {
+        GivenPathInfo { path: path }
+    }
+}
+
+impl<'a> PathInfo for GivenPathInfo<'a> {
+    fn metadata(&self) -> std::io::Result<Metadata> {
+        self.path.metadata()
+    }
+    fn path(&self) -> std::path::PathBuf {
+        self.path.to_path_buf()
+    }
+    fn file_type(&self) -> std::io::Result<std::fs::FileType> {
+        let metadata = try!(self.path.metadata());
+        Ok(metadata.file_type())
+    }
+    fn file_name(&self) -> std::ffi::OsString {
+        if let Some(name) = self.path.file_name() {
+            name.to_os_string()
+        } else {
+            std::ffi::OsString::new()
+        }
+
+    }
+}
 
 /// A basic interface that can be used to determine whether a directory entry
 /// is what's being searched for. To a first order approximation, find consists
@@ -17,7 +80,7 @@ use super::Config;
 /// passing each entry to the chain of Matchers.
 pub trait Matcher {
     /// Returns whether the given file matches the object's predicate.
-    fn matches(&self, file_info: &DirEntry) -> bool;
+    fn matches(&self, file_info: &PathInfo) -> bool;
 
     /// Returns whether the matcher has any side-effects. Iff no such matcher
     /// exists in the chain, then the filename will be printed to stdout. While
@@ -50,6 +113,17 @@ fn are_more_expressions(args: &[&str], index: usize) -> bool {
     (index < args.len() - 1) && args[index + 1] != ")"
 }
 
+fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<u32, Box<Error>> {
+    return match value_as_string.parse::<u32>() {
+        Ok(val) => Ok(val),
+        _ => {
+            Err(From::from(format!("Expected a positive decimal integer argument to {}, but got \
+                                    `{}'",
+                                   option_name,
+                                   value_as_string)))
+        }
+    };
+}
 
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
@@ -132,6 +206,22 @@ fn build_matcher_tree(args: &[&str],
             "-d" | "-depth" => {
                 // TODO add warning if it appears after actual testing criterion
                 config.depth_first = true;
+                None
+            }
+            "-maxdepth" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                config.max_depth = try!(convert_arg_to_number(args[i], args[i + 1]));
+                i += 1;
+                None
+            }
+            "-mindepth" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                config.min_depth = try!(convert_arg_to_number(args[i], args[i + 1]));
+                i += 1;
                 None
             }
 

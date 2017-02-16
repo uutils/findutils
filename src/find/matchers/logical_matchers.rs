@@ -4,7 +4,7 @@
 //! when parsing command-line options (e.g. "-foo -o -bar -baz" is equivalent
 //! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
 
-use std::fs::DirEntry;
+use super::PathInfo;
 use std::error::Error;
 
 /// This matcher contains a collection of other matchers. A file only matches
@@ -30,7 +30,7 @@ impl super::Matcher for AndMatcher {
     /// Returns true if all sub-matchers return true. Short-circuiting does take
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &DirEntry) -> bool {
+    fn matches(&self, dir_entry: &PathInfo) -> bool {
         self.submatchers.iter().all(|ref x| x.matches(dir_entry))
     }
 
@@ -75,7 +75,7 @@ impl super::Matcher for OrMatcher {
     /// Returns true if any sub-matcher returns true. Short-circuiting does take
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &DirEntry) -> bool {
+    fn matches(&self, dir_entry: &PathInfo) -> bool {
         self.submatchers.iter().any(|ref x| x.matches(dir_entry))
     }
 
@@ -128,7 +128,7 @@ impl ListMatcher {
 impl super::Matcher for ListMatcher {
     /// Calls matches on all submatcher objects, with no short-circuiting.
     /// Returns the result of the call to the final submatcher
-    fn matches(&self, dir_entry: &DirEntry) -> bool {
+    fn matches(&self, dir_entry: &PathInfo) -> bool {
         let mut rc = false;
         for ref matcher in &self.submatchers {
             rc = matcher.matches(dir_entry);
@@ -146,7 +146,7 @@ pub struct TrueMatcher {
 }
 
 impl super::Matcher for TrueMatcher {
-    fn matches(&self, _dir_entry: &DirEntry) -> bool {
+    fn matches(&self, _dir_entry: &PathInfo) -> bool {
         true
     }
 
@@ -160,7 +160,7 @@ pub struct FalseMatcher {
 }
 
 impl super::Matcher for FalseMatcher {
-    fn matches(&self, _dir_entry: &DirEntry) -> bool {
+    fn matches(&self, _dir_entry: &PathInfo) -> bool {
         false
     }
 
@@ -181,7 +181,7 @@ impl NotMatcher {
 }
 
 impl super::Matcher for NotMatcher {
-    fn matches(&self, dir_entry: &DirEntry) -> bool {
+    fn matches(&self, dir_entry: &PathInfo) -> bool {
         !self.submatcher.matches(dir_entry)
     }
 
@@ -196,13 +196,13 @@ mod tests {
     use super::super::tests::*;
     use super::*;
     use super::super::Matcher;
-    use std::fs::DirEntry;
+    use super::super::PathInfo;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}
 
     impl Matcher for HasSideEffects {
-        fn matches(&self, _: &DirEntry) -> bool {
+        fn matches(&self, _: &PathInfo) -> bool {
             false
         }
 

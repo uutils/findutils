@@ -1,7 +1,7 @@
 use glob::Pattern;
 use glob::PatternError;
 
-use std::fs::DirEntry;
+use super::PathInfo;
 
 
 
@@ -20,7 +20,7 @@ impl CaselessNameMatcher {
 }
 
 impl super::Matcher for CaselessNameMatcher {
-    fn matches(&self, file_info: &DirEntry) -> bool {
+    fn matches(&self, file_info: &PathInfo) -> bool {
         if let Ok(x) = file_info.file_name().into_string() {
             return self.pattern.matches(x.to_lowercase().as_ref());
         }
