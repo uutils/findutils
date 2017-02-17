@@ -181,6 +181,19 @@ impl ListMatcherBuilder {
         self.submatchers.last_mut().unwrap().new_or_condition(arg)
     }
 
+    pub fn check_new_and_condition(&mut self) -> Result<(), Box<Error>> {
+        {
+            let child_or_matcher = &self.submatchers.last().unwrap();
+            let grandchild_and_matcher = &child_or_matcher.submatchers.last().unwrap();
+
+            if grandchild_and_matcher.submatchers.is_empty() {
+                return Err(From::from("invalid expression; you have used a binary operator '-a' \
+                                       with nothing before it."));
+            }
+        }
+        Ok(())
+    }
+
     pub fn new_list_condition(&mut self) -> Result<(), Box<Error>> {
         {
             let child_or_matcher = &self.submatchers.last().unwrap();

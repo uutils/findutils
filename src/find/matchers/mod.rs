@@ -176,6 +176,13 @@ fn build_matcher_tree(args: &[&str],
                 invert_next_matcher = true;
                 None
             }
+            "-a" => {
+                if !are_more_expressions(args, i) {
+                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                }
+                try!(top_level_matcher.check_new_and_condition());
+                None
+            }
             "-or" | "-o" => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
@@ -374,6 +381,48 @@ mod tests {
                 panic!("parsing arugment list that ends with -or should fail");
             }
         }
+    }
+
+    #[test]
+    fn build_top_level_matcher_and_without_expr1() {
+        let output = new_output();
+        let mut config = Config::new();
+
+        if let Err(e) = super::build_top_level_matcher(&["-a", "-true"],
+                                                       &mut config,
+                                                       output.clone()) {
+            assert!(e.description().contains("you have used a binary operator"));
+        } else {
+            panic!("parsing arugment list that begins with -a should fail");
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_and_without_expr2() {
+        let output = new_output();
+        let mut config = Config::new();
+
+        if let Err(e) = super::build_top_level_matcher(&["-true", "-a"],
+                                                       &mut config,
+                                                       output.clone()) {
+            assert!(e.description().contains("expected an expression"));
+        } else {
+            panic!("parsing arugment list that ends with -or should fail");
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_dash_a_works() {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        let output = new_output();
+        let mut config = Config::new();
+
+        // build a matcher using an explicit -a argument
+        let matcher =
+            super::build_top_level_matcher(&["-true", "-a", "-true"], &mut config, output.clone())
+                .unwrap();
+        assert!(matcher.matches(&abbbc));
+        assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
     }
 
     #[test]
