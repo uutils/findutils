@@ -2,6 +2,7 @@ use glob::Pattern;
 use glob::PatternError;
 
 use super::PathInfo;
+use super::SideEffectRefs;
 
 /// This matcher makes a case-sensitive comparison of the name against a
 /// shell wildcard pattern. See glob::Pattern for details on the exact
@@ -22,7 +23,7 @@ impl NameMatcher {
 }
 
 impl super::Matcher for NameMatcher {
-    fn matches(&self, file_info: &PathInfo) -> bool {
+    fn matches(&self, file_info: &PathInfo, _: &mut SideEffectRefs) -> bool {
         if let Ok(x) = file_info.file_name().into_string() {
             return self.pattern.matches(x.as_ref());
         }
@@ -40,27 +41,28 @@ mod tests {
     use super::super::tests::get_dir_entry_for;
     use super::NameMatcher;
     use super::super::Matcher;
+    use super::super::SideEffectRefs;
 
 
     #[test]
     fn matching_with_wrong_case_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = NameMatcher::new(&"A*C".to_string()).unwrap();
-        assert!(!matcher.matches(&abbbc));
+        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]
     fn matching_with_right_case_returns_true() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = NameMatcher::new(&"abb?c".to_string()).unwrap();
-        assert!(matcher.matches(&abbbc));
+        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]
     fn not_matching_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = NameMatcher::new(&"should't match".to_string()).unwrap();
-        assert!(!matcher.matches(&abbbc));
+        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]

@@ -3,6 +3,7 @@ use std::fs::FileType;
 use std::error::Error;
 use std::io::stderr;
 use std::io::Write;
+use super::SideEffectRefs;
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
@@ -28,7 +29,7 @@ impl TypeMatcher {
 }
 
 impl super::Matcher for TypeMatcher {
-    fn matches(&self, file_info: &PathInfo) -> bool {
+    fn matches(&self, file_info: &PathInfo, _: &mut SideEffectRefs) -> bool {
         match file_info.file_type() {
             Ok(file_type) => (self.file_type_fn)(&file_type),
             Err(e) => {
@@ -52,6 +53,7 @@ mod tests {
     use super::super::tests::get_dir_entry_for;
     use super::TypeMatcher;
     use super::super::Matcher;
+    use super::super::SideEffectRefs;
 
 
     #[test]
@@ -60,8 +62,8 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
 
         let matcher = TypeMatcher::new(&"f".to_string()).unwrap();
-        assert!(!matcher.matches(&dir));
-        assert!(matcher.matches(&file));
+        assert!(!matcher.matches(&dir, &mut SideEffectRefs::new()));
+        assert!(matcher.matches(&file, &mut SideEffectRefs::new()));
     }
 
     #[test]
@@ -70,8 +72,8 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
 
         let matcher = TypeMatcher::new(&"d".to_string()).unwrap();
-        assert!(matcher.matches(&dir));
-        assert!(!matcher.matches(&file));
+        assert!(matcher.matches(&dir, &mut SideEffectRefs::new()));
+        assert!(!matcher.matches(&file, &mut SideEffectRefs::new()));
     }
 
     #[test]

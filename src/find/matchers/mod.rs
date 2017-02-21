@@ -2,6 +2,7 @@ mod printer;
 mod name_matcher;
 mod caseless_name_matcher;
 mod logical_matchers;
+mod prune;
 mod type_matcher;
 use std;
 use std::cell::RefCell;
@@ -74,13 +75,23 @@ impl<'a> PathInfo for GivenPathInfo<'a> {
     }
 }
 
+pub struct SideEffectRefs {
+    pub should_skip_current_dir: bool, // output: &'a mut Write,
+}
+
+impl SideEffectRefs {
+    pub fn new() -> SideEffectRefs {
+        SideEffectRefs { should_skip_current_dir: false }
+    }
+}
+
 /// A basic interface that can be used to determine whether a directory entry
 /// is what's being searched for. To a first order approximation, find consists
 /// of building a chain of Matcher objets, and then walking a directory tree,
 /// passing each entry to the chain of Matchers.
 pub trait Matcher {
     /// Returns whether the given file matches the object's predicate.
-    fn matches(&self, file_info: &PathInfo) -> bool;
+    fn matches(&self, file_info: &PathInfo, side_effects: &mut SideEffectRefs) -> bool;
 
     /// Returns whether the matcher has any side-effects. Iff no such matcher
     /// exists in the chain, then the filename will be printed to stdout. While
@@ -169,6 +180,7 @@ fn build_matcher_tree(args: &[&str],
                 i += 1;
                 Some(try!(type_matcher::TypeMatcher::new_box(args[i])))
             }
+            "-prune" => Some(prune::PruneMatcher::new_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
@@ -253,6 +265,7 @@ fn build_matcher_tree(args: &[&str],
 #[cfg(test)]
 mod tests {
     use std::fs::DirEntry;
+    use super::SideEffectRefs;
     use super::super::Config;
     use super::super::test::new_output;
     use super::super::test::get_output_as_string;
@@ -283,8 +296,8 @@ mod tests {
         let matcher =
             super::build_top_level_matcher(&["-name", "a*c"], &mut config, output.clone()).unwrap();
 
-        assert!(matcher.matches(&abbbc_lower));
-        assert!(!matcher.matches(&abbbc_upper));
+        assert!(matcher.matches(&abbbc_lower, &mut SideEffectRefs::new()));
+        assert!(!matcher.matches(&abbbc_upper, &mut SideEffectRefs::new()));
         assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
     }
 
@@ -299,8 +312,8 @@ mod tests {
             super::build_top_level_matcher(&["-iname", "a*c"], &mut config, output.clone())
                 .unwrap();
 
-        assert!(matcher.matches(&abbbc_lower));
-        assert!(matcher.matches(&abbbc_upper));
+        assert!(matcher.matches(&abbbc_lower, &mut SideEffectRefs::new()));
+        assert!(matcher.matches(&abbbc_upper, &mut SideEffectRefs::new()));
         assert_eq!(get_output_as_string(&output),
                    "./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n");
     }
@@ -317,7 +330,7 @@ mod tests {
                                                          output.clone())
                 .unwrap();
 
-            assert!(matcher.matches(&abbbc_lower));
+            assert!(matcher.matches(&abbbc_lower, &mut SideEffectRefs::new()));
             assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
         }
     }
@@ -421,7 +434,7 @@ mod tests {
         let matcher =
             super::build_top_level_matcher(&["-true", "-a", "-true"], &mut config, output.clone())
                 .unwrap();
-        assert!(matcher.matches(&abbbc));
+        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
     }
 
@@ -437,7 +450,7 @@ mod tests {
             let matcher = super::build_top_level_matcher(args, &mut config, output.clone())
                 .unwrap();
 
-            assert!(matcher.matches(&abbbc));
+            assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
             assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
         }
 
@@ -449,7 +462,7 @@ mod tests {
                                                      output.clone())
             .unwrap();
 
-        assert!(!matcher.matches(&abbbc));
+        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         assert_eq!(get_output_as_string(&output), "");
     }
 
@@ -463,7 +476,7 @@ mod tests {
             let matcher = super::build_top_level_matcher(args, &mut config, output.clone())
                 .unwrap();
 
-            assert!(!matcher.matches(&abbbc));
+            assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
             assert_eq!(get_output_as_string(&output), "");
         }
 
@@ -474,7 +487,7 @@ mod tests {
             super::build_top_level_matcher(&["-true", "-true"], &mut config, output.clone())
                 .unwrap();
 
-        assert!(matcher.matches(&abbbc));
+        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
     }
 
@@ -488,7 +501,7 @@ mod tests {
         let matcher = super::build_top_level_matcher(&args, &mut config, output.clone()).unwrap();
 
         // final matcher returns false, so list matcher should too
-        assert!(!matcher.matches(&abbbc));
+        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         // two print matchers means doubled output
         assert_eq!(get_output_as_string(&output),
                    "./test_data/simple/abbbc\n./test_data/simple/abbbc\n");
@@ -582,12 +595,12 @@ mod tests {
         {
             let matcher =
                 super::build_top_level_matcher(&args_without, &mut config, output.clone()).unwrap();
-            assert!(matcher.matches(&abbbc));
+            assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         }
         {
             let matcher = super::build_top_level_matcher(&args_with, &mut config, output.clone())
                 .unwrap();
-            assert!(!matcher.matches(&abbbc));
+            assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         }
     }
 
@@ -604,12 +617,12 @@ mod tests {
         {
             let matcher =
                 super::build_top_level_matcher(&args_without, &mut config, output.clone()).unwrap();
-            assert!(matcher.matches(&abbbc));
+            assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         }
         {
             let matcher = super::build_top_level_matcher(&args_with, &mut config, output.clone())
                 .unwrap();
-            assert!(!matcher.matches(&abbbc));
+            assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
         }
     }
 

@@ -6,6 +6,7 @@
 
 use super::PathInfo;
 use super::Matcher;
+use super::SideEffectRefs;
 use std::error::Error;
 use std::iter::Iterator;
 
@@ -28,8 +29,8 @@ impl Matcher for AndMatcher {
     /// Returns true if all sub-matchers return true. Short-circuiting does take
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &PathInfo) -> bool {
-        self.submatchers.iter().all(|ref x| x.matches(dir_entry))
+    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
+        self.submatchers.iter().all(|ref x| x.matches(dir_entry, side_effects))
     }
 
     fn has_side_effects(&self) -> bool {
@@ -84,8 +85,8 @@ impl Matcher for OrMatcher {
     /// Returns true if any sub-matcher returns true. Short-circuiting does take
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &PathInfo) -> bool {
-        self.submatchers.iter().any(|ref x| x.matches(dir_entry))
+    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
+        self.submatchers.iter().any(|ref x| x.matches(dir_entry, side_effects))
     }
 
     fn has_side_effects(&self) -> bool {
@@ -154,10 +155,10 @@ impl ListMatcher {
 impl Matcher for ListMatcher {
     /// Calls matches on all submatcher objects, with no short-circuiting.
     /// Returns the result of the call to the final submatcher
-    fn matches(&self, dir_entry: &PathInfo) -> bool {
+    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
         let mut rc = false;
         for ref matcher in &self.submatchers {
-            rc = matcher.matches(dir_entry);
+            rc = matcher.matches(dir_entry, side_effects);
         }
         rc
     }
@@ -241,7 +242,7 @@ impl TrueMatcher {
 }
 
 impl Matcher for TrueMatcher {
-    fn matches(&self, _dir_entry: &PathInfo) -> bool {
+    fn matches(&self, _dir_entry: &PathInfo, _: &mut SideEffectRefs) -> bool {
         true
     }
 
@@ -255,7 +256,7 @@ pub struct FalseMatcher {
 }
 
 impl Matcher for FalseMatcher {
-    fn matches(&self, _dir_entry: &PathInfo) -> bool {
+    fn matches(&self, _dir_entry: &PathInfo, _: &mut SideEffectRefs) -> bool {
         false
     }
 
@@ -287,8 +288,8 @@ impl NotMatcher {
 }
 
 impl Matcher for NotMatcher {
-    fn matches(&self, dir_entry: &PathInfo) -> bool {
-        !self.submatcher.matches(dir_entry)
+    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
+        !self.submatcher.matches(dir_entry, side_effects)
     }
 
     fn has_side_effects(&self) -> bool {
@@ -303,12 +304,13 @@ mod tests {
     use super::*;
     use super::super::Matcher;
     use super::super::PathInfo;
+    use super::super::SideEffectRefs;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}
 
     impl Matcher for HasSideEffects {
-        fn matches(&self, _: &PathInfo) -> bool {
+        fn matches(&self, _: &PathInfo, _: &mut SideEffectRefs) -> bool {
             false
         }
 
@@ -332,12 +334,12 @@ mod tests {
 
         // start with one matcher returning true
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc));
+        assert!(builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
 
         builder = AndMatcherBuilder::new();
         builder.new_and_condition(TrueMatcher::new_box());
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc));
+        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]
@@ -347,13 +349,13 @@ mod tests {
 
         // start with one matcher returning false
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc));
+        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
 
         let mut builder = OrMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
         builder.new_or_condition("-o").unwrap();
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc));
+        assert!(builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]
@@ -363,13 +365,13 @@ mod tests {
 
         // result should always match that of the last pushed submatcher
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc));
+        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
 
         builder = ListMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
         builder.new_list_condition().unwrap();
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc));
+        assert!(builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
 
         builder = ListMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
@@ -377,7 +379,7 @@ mod tests {
         builder.new_and_condition(TrueMatcher::new_box());
         builder.new_list_condition().unwrap();
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc));
+        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]
@@ -385,7 +387,7 @@ mod tests {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = TrueMatcher {};
 
-        assert!(matcher.matches(&abbbc));
+        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]
@@ -393,7 +395,7 @@ mod tests {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = FalseMatcher {};
 
-        assert!(!matcher.matches(&abbbc));
+        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]
@@ -455,8 +457,8 @@ mod tests {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let not_true = NotMatcher::new(TrueMatcher::new_box());
         let not_false = NotMatcher::new(FalseMatcher::new_box());
-        assert!(!not_true.matches(&abbbc));
-        assert!(not_false.matches(&abbbc));
+        assert!(!not_true.matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(not_false.matches(&abbbc, &mut SideEffectRefs::new()));
     }
 
     #[test]

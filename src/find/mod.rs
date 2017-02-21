@@ -64,10 +64,15 @@ fn process_dir(dir: &Path,
     let mut found_count = 0;
     let this_dir = GivenPathInfo::new(dir);
     if !config.depth_first {
-        if depth >= config.min_depth && matcher.matches(&this_dir) {
+        let mut side_effects = matchers::SideEffectRefs::new();
+        if depth >= config.min_depth && matcher.matches(&this_dir, &mut side_effects) {
             found_count += 1;
         }
+        if side_effects.should_skip_current_dir {
+            return Ok(found_count);
+        }
     }
+
     match fs::read_dir(dir) {
         Ok(entry_results) => {
             for entry_result in entry_results {
@@ -79,7 +84,9 @@ fn process_dir(dir: &Path,
                     }
                 } else {
                     if depth + 1 >= config.min_depth && depth < config.max_depth {
-                        if matcher.matches(&entry) {
+                        let mut side_effects = matchers::SideEffectRefs::new();
+                        println!("about to call matcher");
+                        if matcher.matches(&entry, &mut side_effects) {
                             found_count += 1;
                         }
                     }
@@ -95,7 +102,8 @@ fn process_dir(dir: &Path,
         }
     }
     if config.depth_first {
-        if depth >= config.min_depth && matcher.matches(&this_dir) {
+        let mut side_effects = matchers::SideEffectRefs::new();
+        if depth >= config.min_depth && matcher.matches(&this_dir, &mut side_effects) {
             found_count += 1;
         }
     }
@@ -235,6 +243,18 @@ mod test {
     //                   ./test_data/depth/1\n\
     //                   ./test_data/depth/f0\n\
     //                   ./test_data/depth\n");
+    //    }
+    //
+    //    #[test]
+    //    fn find_prune() {
+    //        let output = new_output();
+    //        let rc =
+    //            super::find_main(&["find", "./test_data/depth", "-print", ",", "-name", "1", "-prune"],
+    //                             output.clone());
+    //
+    //        assert_eq!(rc, 0);
+    //        assert_eq!(get_output_as_string(&output),
+    //                   "./test_data/depth/1\n./test_data/depth/f0\n./test_data/depth\n");
     //    }
 
     #[test]
