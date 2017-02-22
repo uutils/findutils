@@ -305,6 +305,7 @@ mod tests {
     use super::super::Matcher;
     use super::super::PathInfo;
     use super::super::SideEffectRefs;
+    use find::test::FakeDependencies;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}
@@ -331,47 +332,50 @@ mod tests {
     fn and_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let mut builder = AndMatcherBuilder::new();
+        let deps = FakeDependencies::new();
 
         // start with one matcher returning true
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(builder.build().matches(&abbbc, &mut deps.new_side_effects()));
 
         builder = AndMatcherBuilder::new();
         builder.new_and_condition(TrueMatcher::new_box());
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]
     fn or_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let mut builder = OrMatcherBuilder::new();
+        let deps = FakeDependencies::new();
 
         // start with one matcher returning false
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
 
         let mut builder = OrMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
         builder.new_or_condition("-o").unwrap();
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(builder.build().matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]
     fn list_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let mut builder = ListMatcherBuilder::new();
+        let deps = FakeDependencies::new();
 
         // result should always match that of the last pushed submatcher
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
 
         builder = ListMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
         builder.new_list_condition().unwrap();
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(builder.build().matches(&abbbc, &mut deps.new_side_effects()));
 
         builder = ListMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
@@ -379,23 +383,25 @@ mod tests {
         builder.new_and_condition(TrueMatcher::new_box());
         builder.new_list_condition().unwrap();
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]
     fn true_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = TrueMatcher {};
+        let deps = FakeDependencies::new();
 
-        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]
     fn false_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = FalseMatcher {};
+        let deps = FakeDependencies::new();
 
-        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]
@@ -457,8 +463,9 @@ mod tests {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let not_true = NotMatcher::new(TrueMatcher::new_box());
         let not_false = NotMatcher::new(FalseMatcher::new_box());
-        assert!(!not_true.matches(&abbbc, &mut SideEffectRefs::new()));
-        assert!(not_false.matches(&abbbc, &mut SideEffectRefs::new()));
+        let deps = FakeDependencies::new();
+        assert!(!not_true.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(not_false.matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]

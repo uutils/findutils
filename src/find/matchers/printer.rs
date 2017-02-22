@@ -1,27 +1,23 @@
 use super::PathInfo;
 use super::SideEffectRefs;
-use std::cell::RefCell;
-use std::io::Write;
-use std::rc::Rc;
 
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer {
-    output: Rc<RefCell<Write>>,
 }
 
 impl Printer {
-    pub fn new(output: Rc<RefCell<Write>>) -> Printer {
-        Printer { output: output.clone() }
+    pub fn new() -> Printer {
+        Printer {}
     }
 
-    pub fn new_box(output: Rc<RefCell<Write>>) -> Box<super::Matcher> {
-        Box::new(Printer { output: output.clone() })
+    pub fn new_box() -> Box<super::Matcher> {
+        Box::new(Printer::new())
     }
 }
 
 impl super::Matcher for Printer {
-    fn matches(&self, file_info: &PathInfo, _: &mut SideEffectRefs) -> bool {
-        writeln!(self.output.borrow_mut(),
+    fn matches(&self, file_info: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
+        writeln!(side_effects.deps.get_output().borrow_mut(),
                  "{}",
                  file_info.path().to_string_lossy())
             .unwrap();
@@ -39,23 +35,15 @@ mod tests {
     use super::super::tests::*;
     use super::Printer;
     use super::super::Matcher;
-    use super::super::SideEffectRefs;
-    use std::cell::RefCell;
-    use std::io::Cursor;
-    use std::rc::Rc;
-    use std::io::Read;
+    use find::test::FakeDependencies;
 
     #[test]
     fn prints() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
 
-        let output = Rc::new(RefCell::new(Cursor::new(vec![])));
-        let matcher = Printer::new(output.clone());
-        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
-        let mut cursor = output.borrow_mut();
-        cursor.set_position(0);
-        let mut contents = String::new();
-        cursor.read_to_string(&mut contents).unwrap();
-        assert_eq!("./test_data/simple/abbbc\n", contents);
+        let matcher = Printer::new();
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert_eq!("./test_data/simple/abbbc\n", deps.get_output_as_string());
     }
 }

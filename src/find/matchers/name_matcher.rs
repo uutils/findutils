@@ -41,28 +41,31 @@ mod tests {
     use super::super::tests::get_dir_entry_for;
     use super::NameMatcher;
     use super::super::Matcher;
-    use super::super::SideEffectRefs;
+    use find::test::FakeDependencies;
 
 
     #[test]
     fn matching_with_wrong_case_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = NameMatcher::new(&"A*C".to_string()).unwrap();
-        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+        let deps = FakeDependencies::new();
+        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]
     fn matching_with_right_case_returns_true() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = NameMatcher::new(&"abb?c".to_string()).unwrap();
-        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]
     fn not_matching_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = NameMatcher::new(&"should't match".to_string()).unwrap();
-        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+        let deps = FakeDependencies::new();
+        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
     }
 
     #[test]

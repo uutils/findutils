@@ -5,13 +5,10 @@ mod logical_matchers;
 mod prune;
 mod type_matcher;
 use std;
-use std::cell::RefCell;
 use std::error::Error;
 use std::fs::DirEntry;
 use std::fs::Metadata;
-use std::io::Write;
 use std::path::Path;
-use std::rc::Rc;
 use super::Config;
 
 
@@ -75,13 +72,17 @@ impl<'a> PathInfo for GivenPathInfo<'a> {
     }
 }
 
-pub struct SideEffectRefs {
-    pub should_skip_current_dir: bool, // output: &'a mut Write,
+pub struct SideEffectRefs<'a> {
+    pub should_skip_current_dir: bool,
+    pub deps: &'a super::Dependencies<'a>,
 }
 
-impl SideEffectRefs {
-    pub fn new() -> SideEffectRefs {
-        SideEffectRefs { should_skip_current_dir: false }
+impl<'a> SideEffectRefs<'a> {
+    pub fn new(deps: &'a super::Dependencies<'a>) -> SideEffectRefs<'a> {
+        SideEffectRefs {
+            deps: deps,
+            should_skip_current_dir: false,
+        }
     }
 }
 
@@ -104,16 +105,15 @@ pub trait Matcher {
 /// Builds a single AndMatcher containing the Matcher objects corresponding
 /// to the passed in predicate arguments.
 pub fn build_top_level_matcher(args: &[&str],
-                               config: &mut Config,
-                               output: Rc<RefCell<Write>>)
+                               config: &mut Config)
                                -> Result<Box<Matcher>, Box<Error>> {
-    let (_, top_level_matcher) = try!(build_matcher_tree(args, config, output.clone(), 0, false));
+    let (_, top_level_matcher) = try!(build_matcher_tree(args, config, 0, false));
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
         let mut new_and_matcher = logical_matchers::AndMatcherBuilder::new();
         new_and_matcher.new_and_condition(top_level_matcher);
-        new_and_matcher.new_and_condition(Box::new(printer::Printer::new(output)));
+        new_and_matcher.new_and_condition(printer::Printer::new_box());
         return Ok(new_and_matcher.build());
     }
     Ok(top_level_matcher)
@@ -142,7 +142,6 @@ fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<u32
 /// called recursively) and the resulting matcher.
 fn build_matcher_tree(args: &[&str],
                       config: &mut Config,
-                      output: Rc<RefCell<Write>>,
                       arg_index: usize,
                       expecting_bracket: bool)
                       -> Result<(usize, Box<Matcher>), Box<Error>> {
@@ -156,7 +155,7 @@ fn build_matcher_tree(args: &[&str],
     let mut invert_next_matcher = false;
     while i < args.len() {
         let possible_submatcher = match args[i] {
-            "-print" => Some(printer::Printer::new_box(output.clone())),
+            "-print" => Some(printer::Printer::new_box()),
             "-true" => Some(logical_matchers::TrueMatcher::new_box()),
             "-false" => Some(logical_matchers::FalseMatcher::new_box()),
             "-name" => {
@@ -211,7 +210,7 @@ fn build_matcher_tree(args: &[&str],
             }
             "(" => {
                 let (new_arg_index, sub_matcher) =
-                    try!(build_matcher_tree(args, config, output.clone(), i + 1, true));
+                    try!(build_matcher_tree(args, config, i + 1, true));
                 i = new_arg_index;
                 Some(sub_matcher)
             }
@@ -265,10 +264,7 @@ fn build_matcher_tree(args: &[&str],
 #[cfg(test)]
 mod tests {
     use std::fs::DirEntry;
-    use super::SideEffectRefs;
     use super::super::Config;
-    use super::super::test::new_output;
-    use super::super::test::get_output_as_string;
 
 
 
@@ -290,31 +286,28 @@ mod tests {
     fn build_top_level_matcher_name() {
         let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
         let abbbc_upper = get_dir_entry_for("./test_data/simple/subdir", "ABBBC");
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
-        let matcher =
-            super::build_top_level_matcher(&["-name", "a*c"], &mut config, output.clone()).unwrap();
+        let matcher = super::build_top_level_matcher(&["-name", "a*c"], &mut config).unwrap();
 
-        assert!(matcher.matches(&abbbc_lower, &mut SideEffectRefs::new()));
-        assert!(!matcher.matches(&abbbc_upper, &mut SideEffectRefs::new()));
-        assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+        assert!(matcher.matches(&abbbc_lower, &mut deps.new_side_effects()));
+        assert!(!matcher.matches(&abbbc_upper, &mut deps.new_side_effects()));
+        assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
     }
 
     #[test]
     fn build_top_level_matcher_iname() {
         let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
         let abbbc_upper = get_dir_entry_for("./test_data/simple/subdir", "ABBBC");
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
-        let matcher =
-            super::build_top_level_matcher(&["-iname", "a*c"], &mut config, output.clone())
-                .unwrap();
+        let matcher = super::build_top_level_matcher(&["-iname", "a*c"], &mut config).unwrap();
 
-        assert!(matcher.matches(&abbbc_lower, &mut SideEffectRefs::new()));
-        assert!(matcher.matches(&abbbc_upper, &mut SideEffectRefs::new()));
-        assert_eq!(get_output_as_string(&output),
+        assert!(matcher.matches(&abbbc_lower, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc_upper, &mut deps.new_side_effects()));
+        assert_eq!(deps.get_output_as_string(),
                    "./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n");
     }
 
@@ -322,26 +315,24 @@ mod tests {
     fn build_top_level_matcher_not() {
         for arg in &["-not", "!"] {
             let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
-            let output = new_output();
             let mut config = Config::new();
+            let deps = super::super::test::FakeDependencies::new();
 
             let matcher = super::build_top_level_matcher(&[arg, "-name", "doesntexist"],
-                                                         &mut config,
-                                                         output.clone())
+                                                         &mut config)
                 .unwrap();
 
-            assert!(matcher.matches(&abbbc_lower, &mut SideEffectRefs::new()));
-            assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+            assert!(matcher.matches(&abbbc_lower, &mut deps.new_side_effects()));
+            assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
         }
     }
 
     #[test]
     fn build_top_level_matcher_not_needs_expression() {
         for arg in &["-not", "!"] {
-            let output = new_output();
             let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&[arg], &mut config, output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&[arg], &mut config) {
                 assert!(e.description().contains("expected an expression"));
             } else {
                 panic!("parsing arugment lists that end in -not should fail");
@@ -352,10 +343,9 @@ mod tests {
     #[test]
     fn build_top_level_matcher_missing_args() {
         for arg in &["-iname", "-name", "-type"] {
-            let output = new_output();
             let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&[arg], &mut config, output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&[arg], &mut config) {
                 assert!(e.description().contains("missing argument to"));
                 assert!(e.description().contains(arg));
             } else {
@@ -367,12 +357,9 @@ mod tests {
     #[test]
     fn build_top_level_matcher_or_without_expr1() {
         for arg in &["-or", "-o"] {
-            let output = new_output();
             let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&[arg, "-true"],
-                                                           &mut config,
-                                                           output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&[arg, "-true"], &mut config) {
                 assert!(e.description().contains("you have used a binary operator"));
             } else {
                 panic!("parsing arugment list that begins with -or should fail");
@@ -383,12 +370,9 @@ mod tests {
     #[test]
     fn build_top_level_matcher_or_without_expr2() {
         for arg in &["-or", "-o"] {
-            let output = new_output();
             let mut config = Config::new();
 
-            if let Err(e) = super::build_top_level_matcher(&["-true", arg],
-                                                           &mut config,
-                                                           output.clone()) {
+            if let Err(e) = super::build_top_level_matcher(&["-true", arg], &mut config) {
                 assert!(e.description().contains("expected an expression"));
             } else {
                 panic!("parsing arugment list that ends with -or should fail");
@@ -398,12 +382,9 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_and_without_expr1() {
-        let output = new_output();
         let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-a", "-true"],
-                                                       &mut config,
-                                                       output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-a", "-true"], &mut config) {
             assert!(e.description().contains("you have used a binary operator"));
         } else {
             panic!("parsing arugment list that begins with -a should fail");
@@ -412,12 +393,9 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_and_without_expr2() {
-        let output = new_output();
         let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-true", "-a"],
-                                                       &mut config,
-                                                       output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-true", "-a"], &mut config) {
             assert!(e.description().contains("expected an expression"));
         } else {
             panic!("parsing arugment list that ends with -or should fail");
@@ -427,15 +405,14 @@ mod tests {
     #[test]
     fn build_top_level_matcher_dash_a_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
         // build a matcher using an explicit -a argument
-        let matcher =
-            super::build_top_level_matcher(&["-true", "-a", "-true"], &mut config, output.clone())
-                .unwrap();
-        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
-        assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+        let matcher = super::build_top_level_matcher(&["-true", "-a", "-true"], &mut config)
+            .unwrap();
+        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
     }
 
     #[test]
@@ -444,85 +421,75 @@ mod tests {
         for args in &[["-true", "-o", "-false"],
                       ["-false", "-o", "-true"],
                       ["-true", "-o", "-true"]] {
-            let output = new_output();
             let mut config = Config::new();
+            let deps = super::super::test::FakeDependencies::new();
 
-            let matcher = super::build_top_level_matcher(args, &mut config, output.clone())
-                .unwrap();
+            let matcher = super::build_top_level_matcher(args, &mut config).unwrap();
 
-            assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
-            assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+            assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
         }
 
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
-        let matcher = super::build_top_level_matcher(&["-false", "-o", "-false"],
-                                                     &mut config,
-                                                     output.clone())
+        let matcher = super::build_top_level_matcher(&["-false", "-o", "-false"], &mut config)
             .unwrap();
 
-        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
-        assert_eq!(get_output_as_string(&output), "");
+        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert_eq!(deps.get_output_as_string(), "");
     }
 
     #[test]
     fn build_top_level_matcher_and_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
         for args in &[["-true", "-false"], ["-false", "-true"], ["-false", "-false"]] {
-            let output = new_output();
             let mut config = Config::new();
+            let deps = super::super::test::FakeDependencies::new();
 
-            let matcher = super::build_top_level_matcher(args, &mut config, output.clone())
-                .unwrap();
+            let matcher = super::build_top_level_matcher(args, &mut config).unwrap();
 
-            assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
-            assert_eq!(get_output_as_string(&output), "");
+            assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert_eq!(deps.get_output_as_string(), "");
         }
 
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
-        let matcher =
-            super::build_top_level_matcher(&["-true", "-true"], &mut config, output.clone())
-                .unwrap();
+        let matcher = super::build_top_level_matcher(&["-true", "-true"], &mut config).unwrap();
 
-        assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
-        assert_eq!(get_output_as_string(&output), "./test_data/simple/abbbc\n");
+        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
     }
 
     #[test]
     fn build_top_level_matcher_list_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
         let args = ["-true", "-print", "-false", ",", "-print", "-false"];
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
-        let matcher = super::build_top_level_matcher(&args, &mut config, output.clone()).unwrap();
+        let matcher = super::build_top_level_matcher(&args, &mut config).unwrap();
 
         // final matcher returns false, so list matcher should too
-        assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
         // two print matchers means doubled output
-        assert_eq!(get_output_as_string(&output),
+        assert_eq!(deps.get_output_as_string(),
                    "./test_data/simple/abbbc\n./test_data/simple/abbbc\n");
     }
 
     #[test]
     fn build_top_level_matcher_list_without_expr1() {
-        let output = new_output();
         let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&[",", "-true"],
-                                                       &mut config,
-                                                       output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&[",", "-true"], &mut config) {
             assert!(e.description().contains("you have used a binary operator"));
         } else {
             panic!("parsing arugment list that begins with , should fail");
         }
 
         if let Err(e) = super::build_top_level_matcher(&["-true", "-o", ",", "-true"],
-                                                       &mut config,
-                                                       output.clone()) {
+                                                       &mut config) {
             assert!(e.description().contains("you have used a binary operator"));
         } else {
             panic!("parsing arugment list that contains '-o  ,' should fail");
@@ -532,12 +499,9 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_list_without_expr2() {
-        let output = new_output();
         let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-true", ","],
-                                                       &mut config,
-                                                       output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-true", ","], &mut config) {
             assert!(e.description().contains("expected an expression"));
         } else {
             panic!("parsing arugment list that ends with , should fail");
@@ -546,12 +510,9 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_not_enough_brackets() {
-        let output = new_output();
         let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-true", "("],
-                                                       &mut config,
-                                                       output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-true", "("], &mut config) {
             assert!(e.description().contains("I was expecting to find a ')'"));
         } else {
             panic!("parsing arugment list with not enough closing brackets should fail");
@@ -560,12 +521,9 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_too_many_brackets() {
-        let output = new_output();
         let mut config = Config::new();
 
-        if let Err(e) = super::build_top_level_matcher(&["-true", "(", ")", ")"],
-                                                       &mut config,
-                                                       output.clone()) {
+        if let Err(e) = super::build_top_level_matcher(&["-true", "(", ")", ")"], &mut config) {
             assert!(e.description().contains("too many ')'"));
         } else {
             panic!("parsing arugment list with too many closing brackets should fail");
@@ -574,12 +532,11 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_can_use_bracket_as_arg() {
-        let output = new_output();
         let mut config = Config::new();
         // make sure that if we use a bracket as an argument (e.g. to -name)
         // then it isn't viewed as a bracket
-        super::build_top_level_matcher(&["-name", "("], &mut config, output.clone()).unwrap();
-        super::build_top_level_matcher(&["-name", ")"], &mut config, output.clone()).unwrap();
+        super::build_top_level_matcher(&["-name", "("], &mut config).unwrap();
+        super::build_top_level_matcher(&["-name", ")"], &mut config).unwrap();
     }
 
     #[test]
@@ -589,18 +546,16 @@ mod tests {
         let args_without = ["-true", "-o", "-false", "-false"];
         // same as (true | false) & false = false
         let args_with = ["(", "-true", "-o", "-false", ")", "-false"];
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
         {
-            let matcher =
-                super::build_top_level_matcher(&args_without, &mut config, output.clone()).unwrap();
-            assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+            let matcher = super::build_top_level_matcher(&args_without, &mut config).unwrap();
+            assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
         }
         {
-            let matcher = super::build_top_level_matcher(&args_with, &mut config, output.clone())
-                .unwrap();
-            assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+            let matcher = super::build_top_level_matcher(&args_with, &mut config).unwrap();
+            assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
         }
     }
 
@@ -611,18 +566,16 @@ mod tests {
         let args_without = ["-true", "-not", "-false", "-o", "-true"];
         // same as true & !(false | true) = false
         let args_with = ["-true", "-not", "(", "-false", "-o", "-true", ")"];
-        let output = new_output();
         let mut config = Config::new();
+        let deps = super::super::test::FakeDependencies::new();
 
         {
-            let matcher =
-                super::build_top_level_matcher(&args_without, &mut config, output.clone()).unwrap();
-            assert!(matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+            let matcher = super::build_top_level_matcher(&args_without, &mut config).unwrap();
+            assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
         }
         {
-            let matcher = super::build_top_level_matcher(&args_with, &mut config, output.clone())
-                .unwrap();
-            assert!(!matcher.matches(&abbbc, &mut SideEffectRefs::new()));
+            let matcher = super::build_top_level_matcher(&args_with, &mut config).unwrap();
+            assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
         }
     }
 

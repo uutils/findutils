@@ -50,30 +50,31 @@ impl super::Matcher for TypeMatcher {
 #[cfg(test)]
 
 mod tests {
-    use super::super::tests::get_dir_entry_for;
+    use find::matchers::tests::get_dir_entry_for;
     use super::TypeMatcher;
-    use super::super::Matcher;
-    use super::super::SideEffectRefs;
-
+    use find::matchers::Matcher;
+    use find::test::FakeDependencies;
 
     #[test]
     fn file_type_matcher() {
         let file = get_dir_entry_for("test_data/simple", "abbbc");
         let dir = get_dir_entry_for("test_data", "simple");
+        let deps = FakeDependencies::new();
 
         let matcher = TypeMatcher::new(&"f".to_string()).unwrap();
-        assert!(!matcher.matches(&dir, &mut SideEffectRefs::new()));
-        assert!(matcher.matches(&file, &mut SideEffectRefs::new()));
+        assert!(!matcher.matches(&dir, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&file, &mut deps.new_side_effects()));
     }
 
     #[test]
     fn dir_type_matcher() {
         let file = get_dir_entry_for("test_data/simple", "abbbc");
         let dir = get_dir_entry_for("test_data", "simple");
+        let deps = FakeDependencies::new();
 
         let matcher = TypeMatcher::new(&"d".to_string()).unwrap();
-        assert!(matcher.matches(&dir, &mut SideEffectRefs::new()));
-        assert!(!matcher.matches(&file, &mut SideEffectRefs::new()));
+        assert!(matcher.matches(&dir, &mut deps.new_side_effects()));
+        assert!(!matcher.matches(&file, &mut deps.new_side_effects()));
     }
 
     #[test]

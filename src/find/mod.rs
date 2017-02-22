@@ -5,10 +5,12 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 use std::io::stderr;
+use std::io::stdout;
 
 use std::cell::RefCell;
-use std::io::Write;
 use std::rc::Rc;
+use std::io::Write;
+
 
 pub struct Config {
     depth_first: bool,
@@ -26,7 +28,28 @@ impl Config {
     }
 }
 
+/// Trait that encapsulates various dependencies (output, clocks, etc.) that we
+/// might want to fake out for unit tests.
+pub trait Dependencies<'a> {
+    fn get_output(&'a self) -> &'a RefCell<Write>;
+}
 
+/// Struct that holds the dependencies we use when run as the real executable.
+pub struct StandardDependencies {
+    output: Rc<RefCell<Write>>,
+}
+
+impl StandardDependencies {
+    pub fn new() -> StandardDependencies {
+        StandardDependencies { output: Rc::new(RefCell::new(stdout())) }
+    }
+}
+
+impl<'a> Dependencies<'a> for StandardDependencies {
+    fn get_output(&'a self) -> &'a RefCell<Write> {
+        self.output.as_ref()
+    }
+}
 
 /// The result of parsing the command-line arguments into useful forms.
 struct ParsedInfo {
@@ -35,8 +58,8 @@ struct ParsedInfo {
     config: Config,
 }
 
-
-fn parse_args(args: &[&str], output: Rc<RefCell<Write>>) -> Result<ParsedInfo, Box<Error>> {
+/// Function to generate a ParsedInfoi from the strings supplied on the command-line.
+fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     let mut paths = vec![];
     let mut i = 0;
     let mut config = Config::new();
@@ -48,7 +71,7 @@ fn parse_args(args: &[&str], output: Rc<RefCell<Write>>) -> Result<ParsedInfo, B
     if i == 0 {
         paths.push(".".to_string());
     }
-    let matcher = try!(matchers::build_top_level_matcher(&args[i..], &mut config, output));
+    let matcher = try!(matchers::build_top_level_matcher(&args[i..], &mut config));
     Ok(ParsedInfo {
         matcher: matcher,
         paths: paths,
@@ -56,15 +79,18 @@ fn parse_args(args: &[&str], output: Rc<RefCell<Write>>) -> Result<ParsedInfo, B
     })
 }
 
-fn process_dir(dir: &Path,
-               depth: u32,
-               config: &Config,
-               matcher: &Box<matchers::Matcher>)
-               -> Result<i32, Box<Error>> {
+/// Function that goes through a directory's contents, checking files, and calling
+/// itself recursively for subdirectories.
+fn process_dir<'a>(dir: &Path,
+                   depth: u32,
+                   config: &Config,
+                   deps: &'a Dependencies<'a>,
+                   matcher: &Box<matchers::Matcher>)
+                   -> Result<i32, Box<Error>> {
     let mut found_count = 0;
     let this_dir = GivenPathInfo::new(dir);
     if !config.depth_first {
-        let mut side_effects = matchers::SideEffectRefs::new();
+        let mut side_effects: matchers::SideEffectRefs<'a> = matchers::SideEffectRefs::new(deps);
         if depth >= config.min_depth && matcher.matches(&this_dir, &mut side_effects) {
             found_count += 1;
         }
@@ -80,11 +106,11 @@ fn process_dir(dir: &Path,
                 let path = entry.path();
                 if path.is_dir() {
                     if depth < config.max_depth {
-                        found_count += try!(process_dir(&path, depth + 1, config, matcher));
+                        found_count += try!(process_dir(&path, depth + 1, config, deps, matcher));
                     }
                 } else {
                     if depth + 1 >= config.min_depth && depth < config.max_depth {
-                        let mut side_effects = matchers::SideEffectRefs::new();
+                        let mut side_effects = matchers::SideEffectRefs::new(deps);
                         println!("about to call matcher");
                         if matcher.matches(&entry, &mut side_effects) {
                             found_count += 1;
@@ -102,7 +128,7 @@ fn process_dir(dir: &Path,
         }
     }
     if config.depth_first {
-        let mut side_effects = matchers::SideEffectRefs::new();
+        let mut side_effects = matchers::SideEffectRefs::new(deps);
         if depth >= config.min_depth && matcher.matches(&this_dir, &mut side_effects) {
             found_count += 1;
         }
@@ -111,15 +137,15 @@ fn process_dir(dir: &Path,
 }
 
 
-fn do_find(args: &[&str], output: Rc<RefCell<Write>>) -> Result<i32, Box<Error>> {
-
-    let paths_and_matcher = try!(parse_args(args, output));
+fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<i32, Box<Error>> {
+    let paths_and_matcher = try!(parse_args(args));
     let mut found_count = 0;
     for path in paths_and_matcher.paths {
         let dir = Path::new(&path);
         found_count += try!(process_dir(&dir,
                                         0,
                                         &paths_and_matcher.config,
+                                        deps,
                                         &paths_and_matcher.matcher));
     }
     Ok(found_count)
@@ -144,7 +170,7 @@ Early alpha implementation. Currently the only expressions supported are
 /// All main has to do is pass in the command-line args and exit the process
 /// with the exit code. Note that the first string in args is expected to be
 /// the name of the executable.
-pub fn find_main(args: &[&str], output: Rc<RefCell<Write>>) -> i32 {
+pub fn find_main<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> i32 {
 
     for arg in args {
         match arg.as_ref() {
@@ -155,7 +181,7 @@ pub fn find_main(args: &[&str], output: Rc<RefCell<Write>>) -> i32 {
             _ => (),
         }
     }
-    match do_find(&args[1..], output) {
+    match do_find(&args[1..], deps) {
         Ok(_) => 0,
         Err(e) => {
             writeln!(&mut stderr(), "Error: {}", e).unwrap();
@@ -171,20 +197,40 @@ mod test {
     use std::cell::RefCell;
     use std::vec::Vec;
     use std::io::Cursor;
-    use std::rc::Rc;
     use std::io::Read;
+    use std::io::Write;
+    use super::Dependencies;
 
-    pub fn new_output() -> Rc<RefCell<Cursor<Vec<u8>>>> {
-        Rc::new(RefCell::new(Cursor::new(Vec::<u8>::new())))
+    /// A struct that implements Dependencies, but uses faked implementations,
+    /// allowing us to check output, set the time returned by clocks etc.
+    pub struct FakeDependencies {
+        pub output: RefCell<Cursor<Vec<u8>>>,
     }
 
-    pub fn get_output_as_string(output: &RefCell<Cursor<Vec<u8>>>) -> String {
-        let mut cursor = output.borrow_mut();
-        cursor.set_position(0);
-        let mut contents = String::new();
-        cursor.read_to_string(&mut contents).unwrap();
-        contents
+    impl<'a> FakeDependencies {
+        pub fn new() -> FakeDependencies {
+            FakeDependencies { output: RefCell::new(Cursor::new(Vec::<u8>::new())) }
+        }
+
+        pub fn new_side_effects(&'a self) -> super::matchers::SideEffectRefs<'a> {
+            super::matchers::SideEffectRefs::new(self)
+        }
+
+        pub fn get_output_as_string(&self) -> String {
+            let mut cursor = self.output.borrow_mut();
+            cursor.set_position(0);
+            let mut contents = String::new();
+            cursor.read_to_string(&mut contents).unwrap();
+            contents
+        }
     }
+
+    impl<'a> Dependencies<'a> for FakeDependencies {
+        fn get_output(&'a self) -> &'a RefCell<Write> {
+            &self.output
+        }
+    }
+
 
     // disabled until we can get deterministic directory contents ordering
     //    #[test]
@@ -259,22 +305,21 @@ mod test {
 
     #[test]
     fn find_zero_maxdepth() {
-        let output = new_output();
-        let rc = super::find_main(&["find", "./test_data/depth", "-maxdepth", "0"],
-                                  output.clone());
+        let deps = FakeDependencies::new();
+        let rc = super::find_main(&["find", "./test_data/depth", "-maxdepth", "0"], &deps);
 
         assert_eq!(rc, 0);
-        assert_eq!(get_output_as_string(&output), "./test_data/depth\n");
+        assert_eq!(deps.get_output_as_string(), "./test_data/depth\n");
     }
 
     #[test]
     fn find_zero_maxdepth_depth_first() {
-        let output = new_output();
+        let deps = FakeDependencies::new();
         let rc = super::find_main(&["find", "./test_data/depth", "-maxdepth", "0", "-depth"],
-                                  output.clone());
+                                  &deps);
 
         assert_eq!(rc, 0);
-        assert_eq!(get_output_as_string(&output), "./test_data/depth\n");
+        assert_eq!(deps.get_output_as_string(), "./test_data/depth\n");
     }
 
     // disabled until we can get deterministic directory contents ordering
