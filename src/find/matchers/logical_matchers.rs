@@ -6,7 +6,7 @@
 
 use super::PathInfo;
 use super::Matcher;
-use super::SideEffectRefs;
+use super::MatcherIO;
 use std::error::Error;
 use std::iter::Iterator;
 
@@ -29,8 +29,8 @@ impl Matcher for AndMatcher {
     /// Returns true if all sub-matchers return true. Short-circuiting does take
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
-        self.submatchers.iter().all(|ref x| x.matches(dir_entry, side_effects))
+    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+        self.submatchers.iter().all(|ref x| x.matches(dir_entry, matcher_io))
     }
 
     fn has_side_effects(&self) -> bool {
@@ -85,8 +85,8 @@ impl Matcher for OrMatcher {
     /// Returns true if any sub-matcher returns true. Short-circuiting does take
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
-        self.submatchers.iter().any(|ref x| x.matches(dir_entry, side_effects))
+    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+        self.submatchers.iter().any(|ref x| x.matches(dir_entry, matcher_io))
     }
 
     fn has_side_effects(&self) -> bool {
@@ -155,10 +155,10 @@ impl ListMatcher {
 impl Matcher for ListMatcher {
     /// Calls matches on all submatcher objects, with no short-circuiting.
     /// Returns the result of the call to the final submatcher
-    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
+    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
         let mut rc = false;
         for ref matcher in &self.submatchers {
-            rc = matcher.matches(dir_entry, side_effects);
+            rc = matcher.matches(dir_entry, matcher_io);
         }
         rc
     }
@@ -242,7 +242,7 @@ impl TrueMatcher {
 }
 
 impl Matcher for TrueMatcher {
-    fn matches(&self, _dir_entry: &PathInfo, _: &mut SideEffectRefs) -> bool {
+    fn matches(&self, _dir_entry: &PathInfo, _: &mut MatcherIO) -> bool {
         true
     }
 
@@ -256,7 +256,7 @@ pub struct FalseMatcher {
 }
 
 impl Matcher for FalseMatcher {
-    fn matches(&self, _dir_entry: &PathInfo, _: &mut SideEffectRefs) -> bool {
+    fn matches(&self, _dir_entry: &PathInfo, _: &mut MatcherIO) -> bool {
         false
     }
 
@@ -288,8 +288,8 @@ impl NotMatcher {
 }
 
 impl Matcher for NotMatcher {
-    fn matches(&self, dir_entry: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
-        !self.submatcher.matches(dir_entry, side_effects)
+    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+        !self.submatcher.matches(dir_entry, matcher_io)
     }
 
     fn has_side_effects(&self) -> bool {
@@ -304,14 +304,14 @@ mod tests {
     use super::*;
     use super::super::Matcher;
     use super::super::PathInfo;
-    use super::super::SideEffectRefs;
+    use super::super::MatcherIO;
     use find::test::FakeDependencies;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}
 
     impl Matcher for HasSideEffects {
-        fn matches(&self, _: &PathInfo, _: &mut SideEffectRefs) -> bool {
+        fn matches(&self, _: &PathInfo, _: &mut MatcherIO) -> bool {
             false
         }
 

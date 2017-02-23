@@ -90,11 +90,11 @@ fn process_dir<'a>(dir: &Path,
     let mut found_count = 0;
     let this_dir = GivenPathInfo::new(dir);
     if !config.depth_first {
-        let mut side_effects: matchers::SideEffectRefs<'a> = matchers::SideEffectRefs::new(deps);
-        if depth >= config.min_depth && matcher.matches(&this_dir, &mut side_effects) {
+        let mut matcher_io: matchers::MatcherIO<'a> = matchers::MatcherIO::new(deps);
+        if depth >= config.min_depth && matcher.matches(&this_dir, &mut matcher_io) {
             found_count += 1;
         }
-        if side_effects.should_skip_current_dir {
+        if matcher_io.should_skip_current_dir() {
             return Ok(found_count);
         }
     }
@@ -110,9 +110,9 @@ fn process_dir<'a>(dir: &Path,
                     }
                 } else {
                     if depth + 1 >= config.min_depth && depth < config.max_depth {
-                        let mut side_effects = matchers::SideEffectRefs::new(deps);
+                        let mut matcher_io = matchers::MatcherIO::new(deps);
                         println!("about to call matcher");
-                        if matcher.matches(&entry, &mut side_effects) {
+                        if matcher.matches(&entry, &mut matcher_io) {
                             found_count += 1;
                         }
                     }
@@ -128,8 +128,8 @@ fn process_dir<'a>(dir: &Path,
         }
     }
     if config.depth_first {
-        let mut side_effects = matchers::SideEffectRefs::new(deps);
-        if depth >= config.min_depth && matcher.matches(&this_dir, &mut side_effects) {
+        let mut matcher_io = matchers::MatcherIO::new(deps);
+        if depth >= config.min_depth && matcher.matches(&this_dir, &mut matcher_io) {
             found_count += 1;
         }
     }
@@ -212,8 +212,8 @@ mod test {
             FakeDependencies { output: RefCell::new(Cursor::new(Vec::<u8>::new())) }
         }
 
-        pub fn new_side_effects(&'a self) -> super::matchers::SideEffectRefs<'a> {
-            super::matchers::SideEffectRefs::new(self)
+        pub fn new_side_effects(&'a self) -> super::matchers::MatcherIO<'a> {
+            super::matchers::MatcherIO::new(self)
         }
 
         pub fn get_output_as_string(&self) -> String {

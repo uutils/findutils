@@ -5,10 +5,13 @@ mod logical_matchers;
 mod prune;
 mod type_matcher;
 use std;
+use std::cell::RefCell;
 use std::error::Error;
 use std::fs::DirEntry;
 use std::fs::Metadata;
+use std::io::Write;
 use std::path::Path;
+
 use super::Config;
 
 
@@ -72,17 +75,27 @@ impl<'a> PathInfo for GivenPathInfo<'a> {
     }
 }
 
-pub struct SideEffectRefs<'a> {
-    pub should_skip_current_dir: bool,
-    pub deps: &'a super::Dependencies<'a>,
+/// Struct holding references to outputs and any inputs that can't be derived
+/// from the file/directory info.
+pub struct MatcherIO<'a> {
+    should_skip_dir: bool,
+    deps: &'a super::Dependencies<'a>,
 }
 
-impl<'a> SideEffectRefs<'a> {
-    pub fn new(deps: &'a super::Dependencies<'a>) -> SideEffectRefs<'a> {
-        SideEffectRefs {
+impl<'a> MatcherIO<'a> {
+    pub fn new(deps: &'a super::Dependencies<'a>) -> MatcherIO<'a> {
+        MatcherIO {
             deps: deps,
-            should_skip_current_dir: false,
+            should_skip_dir: false,
         }
+    }
+
+    pub fn mark_current_dir_to_be_skipped(&mut self) {
+        self.should_skip_dir = true;
+    }
+
+    pub fn should_skip_current_dir(&self) -> bool {
+        self.should_skip_dir
     }
 }
 
@@ -92,7 +105,7 @@ impl<'a> SideEffectRefs<'a> {
 /// passing each entry to the chain of Matchers.
 pub trait Matcher {
     /// Returns whether the given file matches the object's predicate.
-    fn matches(&self, file_info: &PathInfo, side_effects: &mut SideEffectRefs) -> bool;
+    fn matches(&self, file_info: &PathInfo, matcher_io: &mut MatcherIO) -> bool;
 
     /// Returns whether the matcher has any side-effects. Iff no such matcher
     /// exists in the chain, then the filename will be printed to stdout. While

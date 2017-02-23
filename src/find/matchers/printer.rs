@@ -1,5 +1,5 @@
 use super::PathInfo;
-use super::SideEffectRefs;
+use super::MatcherIO;
 
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer {
@@ -16,8 +16,8 @@ impl Printer {
 }
 
 impl super::Matcher for Printer {
-    fn matches(&self, file_info: &PathInfo, side_effects: &mut SideEffectRefs) -> bool {
-        writeln!(side_effects.deps.get_output().borrow_mut(),
+    fn matches(&self, file_info: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+        writeln!(matcher_io.deps.get_output().borrow_mut(),
                  "{}",
                  file_info.path().to_string_lossy())
             .unwrap();

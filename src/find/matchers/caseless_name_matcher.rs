@@ -2,7 +2,7 @@ use glob::Pattern;
 use glob::PatternError;
 
 use super::PathInfo;
-use super::SideEffectRefs;
+use super::MatcherIO;
 
 
 
@@ -25,7 +25,7 @@ impl CaselessNameMatcher {
 }
 
 impl super::Matcher for CaselessNameMatcher {
-    fn matches(&self, file_info: &PathInfo, _: &mut SideEffectRefs) -> bool {
+    fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
         if let Ok(x) = file_info.file_name().into_string() {
             return self.pattern.matches(x.to_lowercase().as_ref());
         }

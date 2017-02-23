@@ -2,7 +2,7 @@ use glob::Pattern;
 use glob::PatternError;
 
 use super::PathInfo;
-use super::SideEffectRefs;
+use super::MatcherIO;
 
 /// This matcher makes a case-sensitive comparison of the name against a
 /// shell wildcard pattern. See glob::Pattern for details on the exact
@@ -23,7 +23,7 @@ impl NameMatcher {
 }
 
 impl super::Matcher for NameMatcher {
-    fn matches(&self, file_info: &PathInfo, _: &mut SideEffectRefs) -> bool {
+    fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
         if let Ok(x) = file_info.file_name().into_string() {
             return self.pattern.matches(x.as_ref());
         }

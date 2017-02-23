@@ -3,7 +3,7 @@ use std::fs::FileType;
 use std::error::Error;
 use std::io::stderr;
 use std::io::Write;
-use super::SideEffectRefs;
+use super::MatcherIO;
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
@@ -29,7 +29,7 @@ impl TypeMatcher {
 }
 
 impl super::Matcher for TypeMatcher {
-    fn matches(&self, file_info: &PathInfo, _: &mut SideEffectRefs) -> bool {
+    fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
         match file_info.file_type() {
             Ok(file_type) => (self.file_type_fn)(&file_type),
             Err(e) => {
