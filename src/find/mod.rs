@@ -111,7 +111,6 @@ fn process_dir<'a>(dir: &Path,
                 } else {
                     if depth + 1 >= config.min_depth && depth < config.max_depth {
                         let mut matcher_io = matchers::MatcherIO::new(deps);
-                        println!("about to call matcher");
                         if matcher.matches(&entry, &mut matcher_io) {
                             found_count += 1;
                         }
