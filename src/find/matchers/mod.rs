@@ -5,73 +5,12 @@ mod logical_matchers;
 mod prune;
 mod type_matcher;
 
-use std;
 use std::error::Error;
-use std::fs::{DirEntry, Metadata};
-use std::path::Path;
+use walkdir::DirEntry;
 
 use find::{Config, Dependencies};
 
 
-/// Expose the methods we want from DirEntry in a trait. 99% of the time we'll
-/// want to look at a DirEntry object. But the root directories we look at are
-/// going to be inefficient to get a DirEntry object for (as that would involve
-/// calling read_dir on the parent and then iterating through to find the right
-/// entry.
-pub trait PathInfo {
-    fn metadata(&self) -> std::io::Result<Metadata>;
-    fn path(&self) -> std::path::PathBuf;
-    fn file_type(&self) -> std::io::Result<std::fs::FileType>;
-    fn file_name(&self) -> std::ffi::OsString;
-}
-
-impl PathInfo for DirEntry {
-    fn metadata(&self) -> std::io::Result<Metadata> {
-        DirEntry::metadata(self)
-    }
-    fn path(&self) -> std::path::PathBuf {
-        DirEntry::path(self)
-    }
-    fn file_type(&self) -> std::io::Result<std::fs::FileType> {
-        DirEntry::file_type(self)
-    }
-    fn file_name(&self) -> std::ffi::OsString {
-        DirEntry::file_name(self)
-    }
-}
-
-/// Implementation of PathInfo for paths we're given on the commandline, where
-/// generating a DirEntry would be inefficient.
-pub struct GivenPathInfo<'a> {
-    path: &'a Path,
-}
-
-impl<'a> GivenPathInfo<'a> {
-    pub fn new(path: &'a Path) -> GivenPathInfo {
-        GivenPathInfo { path: path }
-    }
-}
-
-impl<'a> PathInfo for GivenPathInfo<'a> {
-    fn metadata(&self) -> std::io::Result<Metadata> {
-        self.path.metadata()
-    }
-    fn path(&self) -> std::path::PathBuf {
-        self.path.to_path_buf()
-    }
-    fn file_type(&self) -> std::io::Result<std::fs::FileType> {
-        let metadata = try!(self.path.metadata());
-        Ok(metadata.file_type())
-    }
-    fn file_name(&self) -> std::ffi::OsString {
-        if let Some(name) = self.path.file_name() {
-            name.to_os_string()
-        } else {
-            std::ffi::OsString::new()
-        }
-
-    }
-}
 
 /// Struct holding references to outputs and any inputs that can't be derived
 /// from the file/directory info.
@@ -103,7 +42,7 @@ impl<'a> MatcherIO<'a> {
 /// passing each entry to the chain of Matchers.
 pub trait Matcher {
     /// Returns whether the given file matches the object's predicate.
-    fn matches(&self, file_info: &PathInfo, matcher_io: &mut MatcherIO) -> bool;
+    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool;
 
     /// Returns whether the matcher has any side-effects. Iff no such matcher
     /// exists in the chain, then the filename will be printed to stdout. While
@@ -135,8 +74,8 @@ fn are_more_expressions(args: &[&str], index: usize) -> bool {
     (index < args.len() - 1) && args[index + 1] != ")"
 }
 
-fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<u32, Box<Error>> {
-    return match value_as_string.parse::<u32>() {
+fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usize, Box<Error>> {
+    return match value_as_string.parse::<usize>() {
         Ok(val) => Ok(val),
         _ => {
             Err(From::from(format!("Expected a positive decimal integer argument to {}, but got \
@@ -236,6 +175,11 @@ fn build_matcher_tree(args: &[&str],
                 config.depth_first = true;
                 None
             }
+            "-sorted" => {
+                // TODO add warning if it appears after actual testing criterion
+                config.sorted_output = true;
+                None
+            }
             "-maxdepth" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
@@ -274,7 +218,7 @@ fn build_matcher_tree(args: &[&str],
 
 #[cfg(test)]
 mod tests {
-    use std::fs::DirEntry;
+    use walkdir::{DirEntry, WalkDir};
     use find::Config;
     use find::tests::FakeDependencies;
     use super::*;
@@ -285,8 +229,7 @@ mod tests {
     /// probably be a string starting with "test_data/" (cargo's tests run with
     /// a working directory set to the root findutils folder).
     pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
-        let dir_entries = ::std::fs::read_dir(directory).unwrap();
-        for wrapped_dir_entry in dir_entries {
+        for wrapped_dir_entry in WalkDir::new(directory) {
             let dir_entry = wrapped_dir_entry.unwrap();
             if dir_entry.file_name().to_string_lossy() == filename {
                 return dir_entry;

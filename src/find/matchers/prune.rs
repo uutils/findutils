@@ -1,4 +1,6 @@
-use find::matchers::{Matcher, PathInfo, MatcherIO};
+use walkdir::DirEntry;
+
+use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher checks the type of the file.
 pub struct PruneMatcher {
@@ -15,7 +17,7 @@ impl PruneMatcher {
 }
 
 impl Matcher for PruneMatcher {
-    fn matches(&self, _: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, _: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         matcher_io.mark_current_dir_to_be_skipped();
         return true;
     }

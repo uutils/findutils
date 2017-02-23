@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::fs::FileType;
-use std::io::{stderr, Write};
+use walkdir::DirEntry;
 
-use find::matchers::{Matcher, PathInfo, MatcherIO};
+use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
@@ -28,18 +28,8 @@ impl TypeMatcher {
 }
 
 impl Matcher for TypeMatcher {
-    fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
-        match file_info.file_type() {
-            Ok(file_type) => (self.file_type_fn)(&file_type),
-            Err(e) => {
-                writeln!(&mut stderr(),
-                         "Failed to read {}: {}",
-                         file_info.path().to_string_lossy(),
-                         e)
-                    .unwrap();
-                false
-            }
-        }
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        (self.file_type_fn)(&file_info.file_type())
     }
 
     fn has_side_effects(&self) -> bool {

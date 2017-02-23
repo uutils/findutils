@@ -2,17 +2,16 @@ mod matchers;
 
 use std::cell::RefCell;
 use std::error::Error;
-use std::fs;
 use std::io::{Write, stderr, stdout};
-use std::path::Path;
 use std::rc::Rc;
-
-use find::matchers::GivenPathInfo;
+use walkdir::WalkDir;
+use walkdir::WalkDirIterator;
 
 pub struct Config {
     depth_first: bool,
-    min_depth: u32,
-    max_depth: u32,
+    min_depth: usize,
+    max_depth: usize,
+    sorted_output: bool,
 }
 
 impl Config {
@@ -20,7 +19,8 @@ impl Config {
         Config {
             depth_first: false,
             min_depth: 0,
-            max_depth: u32::max_value(),
+            max_depth: usize::max_value(),
+            sorted_output: false,
         }
     }
 }
@@ -76,57 +76,39 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     })
 }
 
-/// Function that goes through a directory's contents, checking files, and calling
-/// itself recursively for subdirectories.
-fn process_dir<'a>(dir: &Path,
-                   depth: u32,
+fn process_dir<'a>(dir: &str,
                    config: &Config,
                    deps: &'a Dependencies<'a>,
                    matcher: &Box<matchers::Matcher>)
                    -> Result<i32, Box<Error>> {
+
     let mut found_count = 0;
-    let this_dir = GivenPathInfo::new(dir);
-    if !config.depth_first {
-        let mut matcher_io: matchers::MatcherIO<'a> = matchers::MatcherIO::new(deps);
-        if depth >= config.min_depth && matcher.matches(&this_dir, &mut matcher_io) {
-            found_count += 1;
-        }
-        if matcher_io.should_skip_current_dir() {
-            return Ok(found_count);
-        }
+    let mut walkdir = WalkDir::new(dir)
+        .contents_first(config.depth_first)
+        .max_depth(config.max_depth)
+        .min_depth(config.min_depth);
+    if config.sorted_output {
+        walkdir = walkdir.sort_by(|a, b| a.cmp(b));
     }
 
-    match fs::read_dir(dir) {
-        Ok(entry_results) => {
-            for entry_result in entry_results {
-                let entry = try!(entry_result);
-                let path = entry.path();
-                if path.is_dir() {
-                    if depth < config.max_depth {
-                        found_count += try!(process_dir(&path, depth + 1, config, deps, matcher));
-                    }
-                } else {
-                    if depth + 1 >= config.min_depth && depth < config.max_depth {
-                        let mut matcher_io = matchers::MatcherIO::new(deps);
-                        if matcher.matches(&entry, &mut matcher_io) {
-                            found_count += 1;
-                        }
-                    }
+    // Slighly yucky loop handling here :-(. See docs for
+    // WalkDirIterator::skip_current_dir for explanation.
+    let mut it = walkdir.into_iter();
+    loop {
+        match it.next() {
+            None => break,
+            Some(Err(err)) => {
+                writeln!(&mut stderr(), "Error: {}: {}", dir, err.description()).unwrap()
+            }
+            Some(Ok(entry)) => {
+                let mut matcher_io = matchers::MatcherIO::new(deps);
+                if matcher.matches(&entry, &mut matcher_io) {
+                    found_count += 1;
+                }
+                if matcher_io.should_skip_current_dir() {
+                    it.skip_current_dir();
                 }
             }
-        }
-        Err(e) => {
-            writeln!(&mut stderr(),
-                     "Error: {}: {}",
-                     dir.to_string_lossy(),
-                     e.description())
-                .unwrap();
-        }
-    }
-    if config.depth_first {
-        let mut matcher_io = matchers::MatcherIO::new(deps);
-        if depth >= config.min_depth && matcher.matches(&this_dir, &mut matcher_io) {
-            found_count += 1;
         }
     }
     Ok(found_count)
@@ -137,9 +119,7 @@ fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<i32, Box<Err
     let paths_and_matcher = try!(parse_args(args));
     let mut found_count = 0;
     for path in paths_and_matcher.paths {
-        let dir = Path::new(&path);
-        found_count += try!(process_dir(&dir,
-                                        0,
+        found_count += try!(process_dir(&path,
                                         &paths_and_matcher.config,
                                         deps,
                                         &paths_and_matcher.matcher));
@@ -228,76 +208,88 @@ mod tests {
     }
 
 
-    // disabled until we can get deterministic directory contents ordering
-    //    #[test]
-    //    fn find_main_not_depth_first() {
-    //        let output = new_output();
-    //
-    //        let rc = find_main(&["find", "./test_data/simple"], output.clone());
-    //
-    //        assert_eq!(rc, 0);
-    //        assert_eq!(get_output_as_string(&output),
-    //                   "./test_data/simple\n\
-    //                   ./test_data/simple/abbbc\n\
-    //                   ./test_data/simple/subdir\n\
-    //                   ./test_data/simple/subdir/ABBBC\n");
-    //    }
-    //
-    //    #[test]
-    //    fn find_main_depth_first() {
-    //        let output = new_output();
-    //
-    //        let rc = find_main(&["find", "./test_data/simple", "-depth"], output.clone());
-    //
-    //        assert_eq!(rc, 0);
-    //        assert_eq!(get_output_as_string(&output),
-    //                   "./test_data/simple/subdir/ABBBC\n\
-    //                   ./test_data/simple/subdir\n\
-    //                   ./test_data/simple/abbbc\n\
-    //                   ./test_data/simple\n");
-    //    }
-    //
-    //    #[test]
-    //    fn find_maxdepth() {
-    //        let output = new_output();
-    //        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "2"],
-    //                                  output.clone());
-    //
-    //        assert_eq!(rc, 0);
-    //        assert_eq!(get_output_as_string(&output),
-    //                   "./test_data/depth\n\
-    //                   ./test_data/depth/f0\n\
-    //                   ./test_data/depth/1\n\
-    //                   ./test_data/depth/1/f1\n\
-    //                   ./test_data/depth/1/2\n");
-    //    }
-    //
-    //    #[test]
-    //    fn find_maxdepth_depth_first() {
-    //        let output = new_output();
-    //        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "2", "-depth"],
-    //                                  output.clone());
-    //
-    //        assert_eq!(rc, 0);
-    //        assert_eq!(get_output_as_string(&output),
-    //                   "./test_data/depth/1/2\n\
-    //                   ./test_data/depth/1/f1\n\
-    //                   ./test_data/depth/1\n\
-    //                   ./test_data/depth/f0\n\
-    //                   ./test_data/depth\n");
-    //    }
-    //
-    //    #[test]
-    //    fn find_prune() {
-    //        let output = new_output();
-    //        let rc =
-    //            find_main(&["find", "./test_data/depth", "-print", ",", "-name", "1", "-prune"],
-    //                             output.clone());
-    //
-    //        assert_eq!(rc, 0);
-    //        assert_eq!(get_output_as_string(&output),
-    //                   "./test_data/depth/1\n./test_data/depth/f0\n./test_data/depth\n");
-    //    }
+    #[test]
+    fn find_main_not_depth_first() {
+        let deps = FakeDependencies::new();
+
+
+        let rc = find_main(&["find", "./test_data/simple", "-sorted"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   "./test_data/simple\n\
+                   ./test_data/simple/abbbc\n\
+                   ./test_data/simple/subdir\n\
+                   ./test_data/simple/subdir/ABBBC\n");
+    }
+
+    #[test]
+    fn find_main_depth_first() {
+        let deps = FakeDependencies::new();
+
+
+        let rc = find_main(&["find", "./test_data/simple", "-depth"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   "./test_data/simple/subdir/ABBBC\n\
+                   ./test_data/simple/subdir\n\
+                   ./test_data/simple/abbbc\n\
+                   ./test_data/simple\n");
+    }
+
+    #[test]
+    fn find_maxdepth() {
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(&["find", "./test_data/depth", "-sorted", "-maxdepth", "2"],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   "./test_data/depth\n\
+                   ./test_data/depth/1\n\
+                   ./test_data/depth/1/2\n\
+                   ./test_data/depth/1/f1\n\
+                   ./test_data/depth/f0\n");
+    }
+
+    #[test]
+    fn find_maxdepth_depth_first() {
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "2", "-depth"],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   "./test_data/depth/1/2\n\
+                   ./test_data/depth/1/f1\n\
+                   ./test_data/depth/1\n\
+                   ./test_data/depth/f0\n\
+                   ./test_data/depth\n");
+    }
+
+    #[test]
+    fn find_prune() {
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(&["find",
+                             "./test_data/depth",
+                             "-sorted",
+                             "-print",
+                             ",",
+                             "-name",
+                             "1",
+                             "-prune"],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   "./test_data/depth\n\
+                   ./test_data/depth/1\n\
+                   ./test_data/depth/f0\n");
+    }
 
     #[test]
     fn find_zero_maxdepth() {
@@ -318,31 +310,29 @@ mod tests {
         assert_eq!(deps.get_output_as_string(), "./test_data/depth\n");
     }
 
-    // disabled until we can get deterministic directory contents ordering
-    //    #[test]
-    //    fn find_mindepth() {
-    //        let output = new_output();
-    //        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3"],
-    //                                  output.clone());
-    //
-    //        assert_eq!(rc, 0);
-    //        assert_eq!(get_output_as_string(&output),
-    //                   "./test_data/depth/1/2/f2\n\
-    //                   ./test_data/depth/1/2/3\n\
-    //                   ./test_data/depth/1/2/3/f3\n");
-    //    }
-    //
-    //    #[test]
-    //    fn find_mindepth_depth_first() {
-    //        let output = new_output();
-    //        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3", "-depth"],
-    //                                  output.clone());
-    //
-    //        assert_eq!(rc, 0);
-    //        assert_eq!(get_output_as_string(&output),
-    //                   "./test_data/depth/1/2/3/f3\n\
-    //                   ./test_data/depth/1/2/3\n\
-    //                   ./test_data/depth/1/2/f2\n");
-    //    }
+    #[test]
+    fn find_mindepth() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   "./test_data/depth/1/2/3\n\
+                   ./test_data/depth/1/2/3/f3\n\
+                   ./test_data/depth/1/2/f2\n");
+    }
+
+    #[test]
+    fn find_mindepth_depth_first() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3", "-depth"],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   "./test_data/depth/1/2/3/f3\n\
+                   ./test_data/depth/1/2/3\n\
+                   ./test_data/depth/1/2/f2\n");
+    }
 
 }

@@ -1,7 +1,8 @@
 use glob::Pattern;
 use glob::PatternError;
+use walkdir::DirEntry;
 
-use find::matchers::{Matcher, PathInfo, MatcherIO};
+use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher makes a case-sensitive comparison of the name against a
 /// shell wildcard pattern. See glob::Pattern for details on the exact
@@ -22,11 +23,8 @@ impl NameMatcher {
 }
 
 impl Matcher for NameMatcher {
-    fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
-        if let Ok(x) = file_info.file_name().into_string() {
-            return self.pattern.matches(x.as_ref());
-        }
-        false
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        return self.pattern.matches(file_info.file_name().to_string_lossy().as_ref());
     }
 
     fn has_side_effects(&self) -> bool {

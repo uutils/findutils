@@ -1,7 +1,8 @@
 use glob::Pattern;
 use glob::PatternError;
+use walkdir::DirEntry;
 
-use find::matchers::{Matcher, PathInfo, MatcherIO};
+use find::matchers::{Matcher, MatcherIO};
 
 
 
@@ -24,11 +25,9 @@ impl CaselessNameMatcher {
 }
 
 impl super::Matcher for CaselessNameMatcher {
-    fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
-        if let Ok(x) = file_info.file_name().into_string() {
-            return self.pattern.matches(x.to_lowercase().as_ref());
-        }
-        false
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        return self.pattern
+            .matches(file_info.file_name().to_string_lossy().to_lowercase().as_ref());
     }
 
     fn has_side_effects(&self) -> bool {

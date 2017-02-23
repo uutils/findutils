@@ -5,8 +5,9 @@
 //! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
 use std::error::Error;
 use std::iter::Iterator;
+use walkdir::DirEntry;
 
-use find::matchers::{Matcher, PathInfo, MatcherIO};
+use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
@@ -27,7 +28,7 @@ impl Matcher for AndMatcher {
     /// Returns true if all sub-matchers return true. Short-circuiting does take
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         self.submatchers.iter().all(|ref x| x.matches(dir_entry, matcher_io))
     }
 
@@ -83,7 +84,7 @@ impl Matcher for OrMatcher {
     /// Returns true if any sub-matcher returns true. Short-circuiting does take
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         self.submatchers.iter().any(|ref x| x.matches(dir_entry, matcher_io))
     }
 
@@ -153,7 +154,7 @@ impl ListMatcher {
 impl Matcher for ListMatcher {
     /// Calls matches on all submatcher objects, with no short-circuiting.
     /// Returns the result of the call to the final submatcher
-    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         let mut rc = false;
         for ref matcher in &self.submatchers {
             rc = matcher.matches(dir_entry, matcher_io);
@@ -240,7 +241,7 @@ impl TrueMatcher {
 }
 
 impl Matcher for TrueMatcher {
-    fn matches(&self, _dir_entry: &PathInfo, _: &mut MatcherIO) -> bool {
+    fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {
         true
     }
 
@@ -254,7 +255,7 @@ pub struct FalseMatcher {
 }
 
 impl Matcher for FalseMatcher {
-    fn matches(&self, _dir_entry: &PathInfo, _: &mut MatcherIO) -> bool {
+    fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {
         false
     }
 
@@ -286,7 +287,7 @@ impl NotMatcher {
 }
 
 impl Matcher for NotMatcher {
-    fn matches(&self, dir_entry: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         !self.submatcher.matches(dir_entry, matcher_io)
     }
 
@@ -298,16 +299,17 @@ impl Matcher for NotMatcher {
 #[cfg(test)]
 
 mod tests {
+    use walkdir::DirEntry;
     use find::matchers::tests::get_dir_entry_for;
     use super::*;
-    use find::matchers::{Matcher, PathInfo, MatcherIO};
+    use find::matchers::{Matcher, MatcherIO};
     use find::tests::FakeDependencies;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}
 
     impl Matcher for HasSideEffects {
-        fn matches(&self, _: &PathInfo, _: &mut MatcherIO) -> bool {
+        fn matches(&self, _: &DirEntry, _: &mut MatcherIO) -> bool {
             false
         }
 

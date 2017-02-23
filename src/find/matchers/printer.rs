@@ -1,4 +1,6 @@
-use find::matchers::{Matcher, PathInfo, MatcherIO};
+use walkdir::DirEntry;
+
+use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer {
@@ -15,7 +17,7 @@ impl Printer {
 }
 
 impl Matcher for Printer {
-    fn matches(&self, file_info: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         writeln!(matcher_io.deps.get_output().borrow_mut(),
                  "{}",
                  file_info.path().to_string_lossy())
