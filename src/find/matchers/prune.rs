@@ -1,6 +1,4 @@
-use super::PathInfo;
-
-use super::MatcherIO;
+use find::matchers::{Matcher, PathInfo, MatcherIO};
 
 /// This matcher checks the type of the file.
 pub struct PruneMatcher {
@@ -11,12 +9,12 @@ impl PruneMatcher {
         PruneMatcher {}
     }
 
-    pub fn new_box() -> Box<super::Matcher> {
+    pub fn new_box() -> Box<Matcher> {
         Box::new(PruneMatcher::new())
     }
 }
 
-impl super::Matcher for PruneMatcher {
+impl Matcher for PruneMatcher {
     fn matches(&self, _: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
         matcher_io.mark_current_dir_to_be_skipped();
         return true;
@@ -29,10 +27,10 @@ impl super::Matcher for PruneMatcher {
 #[cfg(test)]
 
 mod tests {
-    use super::super::tests::get_dir_entry_for;
-    use super::PruneMatcher;
-    use super::super::Matcher;
-    use find::test::FakeDependencies;
+    use find::matchers::Matcher;
+    use find::matchers::tests::get_dir_entry_for;
+    use find::tests::FakeDependencies;
+    use super::*;
 
     #[test]
     fn file_type_matcher() {

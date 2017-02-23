@@ -1,8 +1,7 @@
 use glob::Pattern;
 use glob::PatternError;
 
-use super::PathInfo;
-use super::MatcherIO;
+use find::matchers::{Matcher, PathInfo, MatcherIO};
 
 /// This matcher makes a case-sensitive comparison of the name against a
 /// shell wildcard pattern. See glob::Pattern for details on the exact
@@ -17,12 +16,12 @@ impl NameMatcher {
         Ok(NameMatcher { pattern: p })
     }
 
-    pub fn new_box(pattern_string: &str) -> Result<Box<super::Matcher>, PatternError> {
+    pub fn new_box(pattern_string: &str) -> Result<Box<Matcher>, PatternError> {
         Ok(Box::new(try!(NameMatcher::new(pattern_string))))
     }
 }
 
-impl super::Matcher for NameMatcher {
+impl Matcher for NameMatcher {
     fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
         if let Ok(x) = file_info.file_name().into_string() {
             return self.pattern.matches(x.as_ref());
@@ -38,10 +37,10 @@ impl super::Matcher for NameMatcher {
 #[cfg(test)]
 
 mod tests {
-    use super::super::tests::get_dir_entry_for;
-    use super::NameMatcher;
-    use super::super::Matcher;
-    use find::test::FakeDependencies;
+    use find::matchers::Matcher;
+    use find::matchers::tests::get_dir_entry_for;
+    use find::tests::FakeDependencies;
+    use super::*;
 
 
     #[test]

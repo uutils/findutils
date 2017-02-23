@@ -3,12 +3,10 @@
 //! always-false matchers). The design is strongly tied to the precedence rules
 //! when parsing command-line options (e.g. "-foo -o -bar -baz" is equivalent
 //! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
-
-use super::PathInfo;
-use super::Matcher;
-use super::MatcherIO;
 use std::error::Error;
 use std::iter::Iterator;
+
+use find::matchers::{Matcher, PathInfo, MatcherIO};
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
@@ -300,12 +298,10 @@ impl Matcher for NotMatcher {
 #[cfg(test)]
 
 mod tests {
-    use super::super::tests::*;
+    use find::matchers::tests::get_dir_entry_for;
     use super::*;
-    use super::super::Matcher;
-    use super::super::PathInfo;
-    use super::super::MatcherIO;
-    use find::test::FakeDependencies;
+    use find::matchers::{Matcher, PathInfo, MatcherIO};
+    use find::tests::FakeDependencies;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}

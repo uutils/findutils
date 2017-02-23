@@ -1,16 +1,13 @@
 mod matchers;
-use self::matchers::GivenPathInfo;
-
-use std::error::Error;
-use std::fs;
-use std::path::Path;
-use std::io::stderr;
-use std::io::stdout;
 
 use std::cell::RefCell;
+use std::error::Error;
+use std::fs;
+use std::io::{Write, stderr, stdout};
+use std::path::Path;
 use std::rc::Rc;
-use std::io::Write;
 
+use find::matchers::GivenPathInfo;
 
 pub struct Config {
     depth_first: bool,
@@ -190,15 +187,15 @@ pub fn find_main<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> i32 {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
 
 
     use std::cell::RefCell;
+    use std::io::{Cursor, Read, Write};
     use std::vec::Vec;
-    use std::io::Cursor;
-    use std::io::Read;
-    use std::io::Write;
-    use super::Dependencies;
+    use find::matchers::MatcherIO;
+
+    use super::*;
 
     /// A struct that implements Dependencies, but uses faked implementations,
     /// allowing us to check output, set the time returned by clocks etc.
@@ -211,8 +208,8 @@ mod test {
             FakeDependencies { output: RefCell::new(Cursor::new(Vec::<u8>::new())) }
         }
 
-        pub fn new_side_effects(&'a self) -> super::matchers::MatcherIO<'a> {
-            super::matchers::MatcherIO::new(self)
+        pub fn new_side_effects(&'a self) -> MatcherIO<'a> {
+            MatcherIO::new(self)
         }
 
         pub fn get_output_as_string(&self) -> String {
@@ -236,7 +233,7 @@ mod test {
     //    fn find_main_not_depth_first() {
     //        let output = new_output();
     //
-    //        let rc = super::find_main(&["find", "./test_data/simple"], output.clone());
+    //        let rc = find_main(&["find", "./test_data/simple"], output.clone());
     //
     //        assert_eq!(rc, 0);
     //        assert_eq!(get_output_as_string(&output),
@@ -250,7 +247,7 @@ mod test {
     //    fn find_main_depth_first() {
     //        let output = new_output();
     //
-    //        let rc = super::find_main(&["find", "./test_data/simple", "-depth"], output.clone());
+    //        let rc = find_main(&["find", "./test_data/simple", "-depth"], output.clone());
     //
     //        assert_eq!(rc, 0);
     //        assert_eq!(get_output_as_string(&output),
@@ -263,7 +260,7 @@ mod test {
     //    #[test]
     //    fn find_maxdepth() {
     //        let output = new_output();
-    //        let rc = super::find_main(&["find", "./test_data/depth", "-maxdepth", "2"],
+    //        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "2"],
     //                                  output.clone());
     //
     //        assert_eq!(rc, 0);
@@ -278,7 +275,7 @@ mod test {
     //    #[test]
     //    fn find_maxdepth_depth_first() {
     //        let output = new_output();
-    //        let rc = super::find_main(&["find", "./test_data/depth", "-maxdepth", "2", "-depth"],
+    //        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "2", "-depth"],
     //                                  output.clone());
     //
     //        assert_eq!(rc, 0);
@@ -294,7 +291,7 @@ mod test {
     //    fn find_prune() {
     //        let output = new_output();
     //        let rc =
-    //            super::find_main(&["find", "./test_data/depth", "-print", ",", "-name", "1", "-prune"],
+    //            find_main(&["find", "./test_data/depth", "-print", ",", "-name", "1", "-prune"],
     //                             output.clone());
     //
     //        assert_eq!(rc, 0);
@@ -305,7 +302,7 @@ mod test {
     #[test]
     fn find_zero_maxdepth() {
         let deps = FakeDependencies::new();
-        let rc = super::find_main(&["find", "./test_data/depth", "-maxdepth", "0"], &deps);
+        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "0"], &deps);
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(), "./test_data/depth\n");
@@ -314,8 +311,8 @@ mod test {
     #[test]
     fn find_zero_maxdepth_depth_first() {
         let deps = FakeDependencies::new();
-        let rc = super::find_main(&["find", "./test_data/depth", "-maxdepth", "0", "-depth"],
-                                  &deps);
+        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "0", "-depth"],
+                           &deps);
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(), "./test_data/depth\n");
@@ -325,7 +322,7 @@ mod test {
     //    #[test]
     //    fn find_mindepth() {
     //        let output = new_output();
-    //        let rc = super::find_main(&["find", "./test_data/depth", "-mindepth", "3"],
+    //        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3"],
     //                                  output.clone());
     //
     //        assert_eq!(rc, 0);
@@ -338,7 +335,7 @@ mod test {
     //    #[test]
     //    fn find_mindepth_depth_first() {
     //        let output = new_output();
-    //        let rc = super::find_main(&["find", "./test_data/depth", "-mindepth", "3", "-depth"],
+    //        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3", "-depth"],
     //                                  output.clone());
     //
     //        assert_eq!(rc, 0);

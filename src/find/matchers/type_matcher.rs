@@ -1,9 +1,8 @@
-use super::PathInfo;
-use std::fs::FileType;
 use std::error::Error;
-use std::io::stderr;
-use std::io::Write;
-use super::MatcherIO;
+use std::fs::FileType;
+use std::io::{stderr, Write};
+
+use find::matchers::{Matcher, PathInfo, MatcherIO};
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
@@ -23,12 +22,12 @@ impl TypeMatcher {
         Ok(TypeMatcher { file_type_fn: function })
     }
 
-    pub fn new_box(type_string: &str) -> Result<Box<super::Matcher>, Box<Error>> {
+    pub fn new_box(type_string: &str) -> Result<Box<Matcher>, Box<Error>> {
         Ok(Box::new(try!(TypeMatcher::new(type_string))))
     }
 }
 
-impl super::Matcher for TypeMatcher {
+impl Matcher for TypeMatcher {
     fn matches(&self, file_info: &PathInfo, _: &mut MatcherIO) -> bool {
         match file_info.file_type() {
             Ok(file_type) => (self.file_type_fn)(&file_type),
@@ -50,10 +49,10 @@ impl super::Matcher for TypeMatcher {
 #[cfg(test)]
 
 mod tests {
-    use find::matchers::tests::get_dir_entry_for;
-    use super::TypeMatcher;
     use find::matchers::Matcher;
-    use find::test::FakeDependencies;
+    use find::matchers::tests::get_dir_entry_for;
+    use find::tests::FakeDependencies;
+    use super::*;
 
     #[test]
     fn file_type_matcher() {

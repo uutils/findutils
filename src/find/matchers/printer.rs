@@ -1,5 +1,4 @@
-use super::PathInfo;
-use super::MatcherIO;
+use find::matchers::{Matcher, PathInfo, MatcherIO};
 
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer {
@@ -10,12 +9,12 @@ impl Printer {
         Printer {}
     }
 
-    pub fn new_box() -> Box<super::Matcher> {
+    pub fn new_box() -> Box<Matcher> {
         Box::new(Printer::new())
     }
 }
 
-impl super::Matcher for Printer {
+impl Matcher for Printer {
     fn matches(&self, file_info: &PathInfo, matcher_io: &mut MatcherIO) -> bool {
         writeln!(matcher_io.deps.get_output().borrow_mut(),
                  "{}",
@@ -32,10 +31,10 @@ impl super::Matcher for Printer {
 #[cfg(test)]
 
 mod tests {
-    use super::super::tests::*;
-    use super::Printer;
-    use super::super::Matcher;
-    use find::test::FakeDependencies;
+    use find::matchers::tests::get_dir_entry_for;
+    use find::matchers::Matcher;
+    use find::tests::FakeDependencies;
+    use super::*;
 
     #[test]
     fn prints() {
