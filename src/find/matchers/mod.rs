@@ -1,8 +1,9 @@
-mod printer;
-mod name_matcher;
 mod caseless_name_matcher;
 mod logical_matchers;
+mod name_matcher;
+mod printer;
 mod prune;
+mod time;
 mod type_matcher;
 
 use std::error::Error;
@@ -128,6 +129,13 @@ fn build_matcher_tree(args: &[&str],
                 }
                 i += 1;
                 Some(try!(type_matcher::TypeMatcher::new_box(args[i])))
+            }
+            "-newer" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(try!(time::NewerMatcher::new_box(args[i])))
             }
             "-prune" => Some(prune::PruneMatcher::new_box()),
             "-not" | "!" => {
