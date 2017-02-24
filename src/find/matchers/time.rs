@@ -87,11 +87,11 @@ mod tests {
         let deps = FakeDependencies::new();
 
         // old_file isn't newer than new_dir
-        assert!(!matcher_for_new.matches(&old_file, &mut deps.new_side_effects()));
+        assert!(!matcher_for_new.matches(&old_file, &mut deps.new_matcher_io()));
         // old_file isn't newer than new_dir
-        assert!(matcher_for_old.matches(&new_file, &mut deps.new_side_effects()));
+        assert!(matcher_for_old.matches(&new_file, &mut deps.new_matcher_io()));
         // old_file isn't newer than itself
-        assert!(!matcher_for_old.matches(&old_file, &mut deps.new_side_effects()));
+        assert!(!matcher_for_old.matches(&old_file, &mut deps.new_matcher_io()));
     }
     //    #[test]
     //    fn dir_type_matcher() {
@@ -100,8 +100,8 @@ mod tests {
     //        let deps = FakeDependencies::new();
     //
     //        let matcher = TypeMatcher::new(&"d".to_string()).unwrap();
-    //        assert!(matcher.matches(&dir, &mut deps.new_side_effects()));
-    //        assert!(!matcher.matches(&file, &mut deps.new_side_effects()));
+    //        assert!(matcher.matches(&dir, &mut deps.new_matcher_io()));
+    //        assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
     //    }
     //
     //    #[test]

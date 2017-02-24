@@ -188,7 +188,7 @@ mod tests {
             FakeDependencies { output: RefCell::new(Cursor::new(Vec::<u8>::new())) }
         }
 
-        pub fn new_side_effects(&'a self) -> MatcherIO<'a> {
+        pub fn new_matcher_io(&'a self) -> MatcherIO<'a> {
             MatcherIO::new(self)
         }
 

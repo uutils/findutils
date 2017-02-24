@@ -255,8 +255,8 @@ mod tests {
 
         let matcher = build_top_level_matcher(&["-name", "a*c"], &mut config).unwrap();
 
-        assert!(matcher.matches(&abbbc_lower, &mut deps.new_side_effects()));
-        assert!(!matcher.matches(&abbbc_upper, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
+        assert!(!matcher.matches(&abbbc_upper, &mut deps.new_matcher_io()));
         assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
     }
 
@@ -269,8 +269,8 @@ mod tests {
 
         let matcher = build_top_level_matcher(&["-iname", "a*c"], &mut config).unwrap();
 
-        assert!(matcher.matches(&abbbc_lower, &mut deps.new_side_effects()));
-        assert!(matcher.matches(&abbbc_upper, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
+        assert!(matcher.matches(&abbbc_upper, &mut deps.new_matcher_io()));
         assert_eq!(deps.get_output_as_string(),
                    "./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n");
     }
@@ -285,7 +285,7 @@ mod tests {
             let matcher = build_top_level_matcher(&[arg, "-name", "doesntexist"], &mut config)
                 .unwrap();
 
-            assert!(matcher.matches(&abbbc_lower, &mut deps.new_side_effects()));
+            assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
             assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
         }
     }
@@ -373,7 +373,7 @@ mod tests {
 
         // build a matcher using an explicit -a argument
         let matcher = build_top_level_matcher(&["-true", "-a", "-true"], &mut config).unwrap();
-        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
     }
 
@@ -388,7 +388,7 @@ mod tests {
 
             let matcher = build_top_level_matcher(args, &mut config).unwrap();
 
-            assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
             assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
         }
 
@@ -397,7 +397,7 @@ mod tests {
 
         let matcher = build_top_level_matcher(&["-false", "-o", "-false"], &mut config).unwrap();
 
-        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         assert_eq!(deps.get_output_as_string(), "");
     }
 
@@ -410,7 +410,7 @@ mod tests {
 
             let matcher = build_top_level_matcher(args, &mut config).unwrap();
 
-            assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
             assert_eq!(deps.get_output_as_string(), "");
         }
 
@@ -419,7 +419,7 @@ mod tests {
 
         let matcher = build_top_level_matcher(&["-true", "-true"], &mut config).unwrap();
 
-        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
     }
 
@@ -433,7 +433,7 @@ mod tests {
         let matcher = build_top_level_matcher(&args, &mut config).unwrap();
 
         // final matcher returns false, so list matcher should too
-        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         // two print matchers means doubled output
         assert_eq!(deps.get_output_as_string(),
                    "./test_data/simple/abbbc\n./test_data/simple/abbbc\n");
@@ -511,11 +511,11 @@ mod tests {
 
         {
             let matcher = build_top_level_matcher(&args_without, &mut config).unwrap();
-            assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         }
         {
             let matcher = build_top_level_matcher(&args_with, &mut config).unwrap();
-            assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         }
     }
 
@@ -531,11 +531,11 @@ mod tests {
 
         {
             let matcher = build_top_level_matcher(&args_without, &mut config).unwrap();
-            assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         }
         {
             let matcher = build_top_level_matcher(&args_with, &mut config).unwrap();
-            assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+            assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         }
     }
 

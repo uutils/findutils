@@ -44,7 +44,7 @@ mod tests {
 
         let matcher = Printer::new();
         let deps = FakeDependencies::new();
-        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         assert_eq!("./test_data/simple/abbbc\n", deps.get_output_as_string());
     }
 }

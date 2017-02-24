@@ -49,7 +49,7 @@ mod tests {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = CaselessNameMatcher::new(&"A*C".to_string()).unwrap();
         let deps = FakeDependencies::new();
-        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -57,7 +57,7 @@ mod tests {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = CaselessNameMatcher::new(&"abb?c".to_string()).unwrap();
         let deps = FakeDependencies::new();
-        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -65,7 +65,7 @@ mod tests {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
         let matcher = CaselessNameMatcher::new(&"should't match".to_string()).unwrap();
         let deps = FakeDependencies::new();
-        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]

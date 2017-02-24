@@ -39,7 +39,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
         let deps = FakeDependencies::new();
 
-        let mut matcher_io = deps.new_side_effects();
+        let mut matcher_io = deps.new_matcher_io();
         assert!(!matcher_io.should_skip_current_dir());
         let matcher = PruneMatcher::new();
         assert!(matcher.matches(&dir, &mut matcher_io));

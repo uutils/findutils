@@ -334,12 +334,12 @@ mod tests {
 
         // start with one matcher returning true
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         builder = AndMatcherBuilder::new();
         builder.new_and_condition(TrueMatcher::new_box());
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -350,13 +350,13 @@ mod tests {
 
         // start with one matcher returning false
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         let mut builder = OrMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
         builder.new_or_condition("-o").unwrap();
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -367,13 +367,13 @@ mod tests {
 
         // result should always match that of the last pushed submatcher
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         builder = ListMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
         builder.new_list_condition().unwrap();
         builder.new_and_condition(TrueMatcher::new_box());
-        assert!(builder.build().matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         builder = ListMatcherBuilder::new();
         builder.new_and_condition(FalseMatcher::new_box());
@@ -381,7 +381,7 @@ mod tests {
         builder.new_and_condition(TrueMatcher::new_box());
         builder.new_list_condition().unwrap();
         builder.new_and_condition(FalseMatcher::new_box());
-        assert!(!builder.build().matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -390,7 +390,7 @@ mod tests {
         let matcher = TrueMatcher {};
         let deps = FakeDependencies::new();
 
-        assert!(matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -399,7 +399,7 @@ mod tests {
         let matcher = FalseMatcher {};
         let deps = FakeDependencies::new();
 
-        assert!(!matcher.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -462,8 +462,8 @@ mod tests {
         let not_true = NotMatcher::new(TrueMatcher::new_box());
         let not_false = NotMatcher::new(FalseMatcher::new_box());
         let deps = FakeDependencies::new();
-        assert!(!not_true.matches(&abbbc, &mut deps.new_side_effects()));
-        assert!(not_false.matches(&abbbc, &mut deps.new_side_effects()));
+        assert!(!not_true.matches(&abbbc, &mut deps.new_matcher_io()));
+        assert!(not_false.matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]

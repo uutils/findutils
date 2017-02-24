@@ -51,8 +51,8 @@ mod tests {
         let deps = FakeDependencies::new();
 
         let matcher = TypeMatcher::new(&"f".to_string()).unwrap();
-        assert!(!matcher.matches(&dir, &mut deps.new_side_effects()));
-        assert!(matcher.matches(&file, &mut deps.new_side_effects()));
+        assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
+        assert!(matcher.matches(&file, &mut deps.new_matcher_io()));
     }
 
     #[test]
@@ -62,8 +62,8 @@ mod tests {
         let deps = FakeDependencies::new();
 
         let matcher = TypeMatcher::new(&"d".to_string()).unwrap();
-        assert!(matcher.matches(&dir, &mut deps.new_side_effects()));
-        assert!(!matcher.matches(&file, &mut deps.new_side_effects()));
+        assert!(matcher.matches(&dir, &mut deps.new_matcher_io()));
+        assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
     }
 
     #[test]
