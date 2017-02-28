@@ -6,7 +6,11 @@ mod prune;
 mod time;
 mod type_matcher;
 
+use regex::Regex;
+use std;
 use std::error::Error;
+use std::time::SystemTime;
+use num_traits;
 use walkdir::DirEntry;
 
 use find::{Config, Dependencies};
@@ -35,6 +39,10 @@ impl<'a> MatcherIO<'a> {
     pub fn should_skip_current_dir(&self) -> bool {
         self.should_skip_dir
     }
+
+    pub fn now(&self) -> SystemTime {
+        self.deps.now()
+    }
 }
 
 /// A basic interface that can be used to determine whether a directory entry
@@ -50,6 +58,22 @@ pub trait Matcher {
     /// this is a compile-time fact for most matchers, it's run-time for matchers
     /// that contain a collection of sub-Matchers.
     fn has_side_effects(&self) -> bool;
+}
+
+pub enum ComparableValue<T: num_traits::int::PrimInt + std::str::FromStr> {
+    MoreThan(T),
+    EqualTo(T),
+    LessThan(T),
+}
+
+impl<T: num_traits::int::PrimInt + std::str::FromStr> ComparableValue<T> {
+    fn matches(&self, value: T) -> bool {
+        match *self {
+            ComparableValue::MoreThan(limit) => value > limit,
+            ComparableValue::EqualTo(limit) => value == limit, 
+            ComparableValue::LessThan(limit) => value < limit, 
+        }
+    }
 }
 
 
@@ -85,6 +109,26 @@ fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usi
                                    value_as_string)))
         }
     };
+}
+
+fn convert_arg_to_comparable_value<T: num_traits::int::PrimInt + std::str::FromStr>
+    (option_name: &str,
+     value_as_string: &str)
+     -> Result<ComparableValue<T>, Box<Error>> {
+    let re = try!(Regex::new(r"([+-]?)(\d+)$"));
+    if let Some(groups) = re.captures(value_as_string) {
+        if let Ok(val) = groups[2].parse::<T>() {
+            return Ok(match &groups[1] {
+                "+" => ComparableValue::MoreThan(val),
+                "-" => ComparableValue::LessThan(val),
+                _ => ComparableValue::EqualTo(val),
+            });
+        }
+    }
+    Err(From::from(format!("Expected a decimal integer (with optional + or - prefix) argument \
+                            to {}, but got `{}'",
+                           option_name,
+                           value_as_string)))
 }
 
 /// The main "translate command-line args into a matcher" function. Will call
@@ -137,6 +181,23 @@ fn build_matcher_tree(args: &[&str],
                 i += 1;
                 Some(try!(time::NewerMatcher::new_box(args[i])))
             }
+            "-mtime" | "-atime" | "-ctime" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let file_time_type = match args[i] {
+                    "-atime" => time::FileTimeType::Accessed,
+                    "-ctime" => time::FileTimeType::Created,
+                    "-mtime" => time::FileTimeType::Modified,
+                    // This shouldn't be possible. We've already checked the value
+                    // is one of those three values.
+                    _ => panic!("Encountered unexpected value {}", args[i]),
+                };
+                let days = try!(convert_arg_to_comparable_value::<i64>(args[i], args[i + 1]));
+                i += 1;
+                Some(time::FileTimeMatcher::new_box(file_time_type, days))
+            }
+
             "-prune" => Some(prune::PruneMatcher::new_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {

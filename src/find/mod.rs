@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::io::{Write, stderr, stdout};
 use std::rc::Rc;
+use std::time::SystemTime;
 use walkdir::WalkDir;
 use walkdir::WalkDirIterator;
 
@@ -29,22 +30,31 @@ impl Config {
 /// might want to fake out for unit tests.
 pub trait Dependencies<'a> {
     fn get_output(&'a self) -> &'a RefCell<Write>;
+    fn now(&'a self) -> SystemTime;
 }
 
 /// Struct that holds the dependencies we use when run as the real executable.
 pub struct StandardDependencies {
     output: Rc<RefCell<Write>>,
+    now: SystemTime,
 }
 
 impl StandardDependencies {
     pub fn new() -> StandardDependencies {
-        StandardDependencies { output: Rc::new(RefCell::new(stdout())) }
+        StandardDependencies {
+            output: Rc::new(RefCell::new(stdout())),
+            now: SystemTime::now(),
+        }
     }
 }
 
 impl<'a> Dependencies<'a> for StandardDependencies {
     fn get_output(&'a self) -> &'a RefCell<Write> {
         self.output.as_ref()
+    }
+
+    fn now(&'a self) -> SystemTime {
+        self.now
     }
 }
 
@@ -171,8 +181,12 @@ mod tests {
 
 
     use std::cell::RefCell;
+    use std::fs;
     use std::io::{Cursor, Read, Write};
+    use std::time::{Duration, SystemTime};
     use std::vec::Vec;
+    use tempdir::TempDir;
+
     use find::matchers::MatcherIO;
 
     use super::*;
@@ -181,11 +195,19 @@ mod tests {
     /// allowing us to check output, set the time returned by clocks etc.
     pub struct FakeDependencies {
         pub output: RefCell<Cursor<Vec<u8>>>,
+        now: SystemTime,
     }
 
     impl<'a> FakeDependencies {
         pub fn new() -> FakeDependencies {
-            FakeDependencies { output: RefCell::new(Cursor::new(Vec::<u8>::new())) }
+            FakeDependencies {
+                output: RefCell::new(Cursor::new(Vec::<u8>::new())),
+                now: SystemTime::now(),
+            }
+        }
+
+        pub fn set_time(&mut self, new_time: SystemTime) {
+            self.now = new_time;
         }
 
         pub fn new_matcher_io(&'a self) -> MatcherIO<'a> {
@@ -204,6 +226,10 @@ mod tests {
     impl<'a> Dependencies<'a> for FakeDependencies {
         fn get_output(&'a self) -> &'a RefCell<Write> {
             &self.output
+        }
+
+        fn now(&'a self) -> SystemTime {
+            self.now
         }
     }
 
@@ -334,5 +360,102 @@ mod tests {
                    ./test_data/depth/1/2/3\n\
                    ./test_data/depth/1/2/f2\n");
     }
+
+    #[test]
+    fn find_newer() {
+        // create a temp directory and file that are newer than the static
+        // files in the source tree.
+        let new_dir = TempDir::new("find_newer").unwrap();
+
+        let deps = FakeDependencies::new();
+
+
+        let rc = find_main(&["find",
+                             &new_dir.path().to_string_lossy(),
+                             "-newer",
+                             "./test_data/simple/abbbc"],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(),
+                   (&new_dir).path().to_string_lossy().to_string() + "\n");
+
+        // now do it the other way around, and nothing should be output
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find",
+                             "./test_data/simple/abbbc",
+                             "-newer",
+                             &new_dir.path().to_string_lossy()],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+
+    }
+
+    #[test]
+    fn find_mtime() {
+        let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
+
+        // metadata can return errors like StringError("creation time is not available on this platform currently")
+        // so skip tests that won't pass due to shortcomings in std:;fs.
+        if let Ok(file_time) = meta.modified() {
+            file_time_helper(file_time, "-mtime");
+        }
+
+    }
+
+    #[test]
+    fn find_ctime() {
+        let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
+
+        // metadata can return errors like StringError("creation time is not available on this platform currently")
+        // so skip tests that won't pass due to shortcomings in std:;fs.
+        if let Ok(file_time) = meta.created() {
+            file_time_helper(file_time, "-ctime");
+        }
+
+    }
+
+    #[test]
+    fn find_atime() {
+        let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
+
+        // metadata can return errors like StringError("creation time is not available on this platform currently")
+        // so skip tests that won't pass due to shortcomings in std:;fs.
+        if let Ok(file_time) = meta.accessed() {
+            file_time_helper(file_time, "-atime");
+        }
+
+    }
+
+    /// Helper function for the find_ctime/find_atime/find_mtime tests.
+    fn file_time_helper(file_time: SystemTime, arg: &str) {
+        // check file time matches a file that's old enough
+        {
+            let mut deps = FakeDependencies::new();
+            deps.set_time(file_time);
+
+            let rc = find_main(&["find", "./test_data/simple/subdir", "-type", "f", arg, "0"],
+                               &deps);
+
+            assert_eq!(rc, 0);
+            assert_eq!(deps.get_output_as_string(),
+                       "./test_data/simple/subdir/ABBBC\n");
+        }
+
+        // now Check file time doesn't match a file that's too new
+        {
+            let mut deps = FakeDependencies::new();
+            deps.set_time(file_time - Duration::from_secs(1));
+
+            let rc = find_main(&["find", "./test_data/simple/subdir", "-type", "f", arg, "0"],
+                               &deps);
+
+            assert_eq!(rc, 0);
+            assert_eq!(deps.get_output_as_string(), "");
+        }
+    }
+
 
 }

@@ -10,6 +10,8 @@ glob = "0.2"
 # new release made, let's access my branch directly.
 walkdir = { git = "https://github.com/mcharsley/walkdir", rev = "dffefcf8db97a331a0f81d120e8aa20c1b36251e" }
 tempdir = "0.3"
+regex = "0.2"
+num-traits = "0.1.37"
 
 [[bin]]
 name = "find"
