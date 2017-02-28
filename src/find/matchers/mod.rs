@@ -1,6 +1,5 @@
-mod caseless_name_matcher;
 mod logical_matchers;
-mod name_matcher;
+mod name;
 mod printer;
 mod prune;
 mod time;
@@ -158,14 +157,14 @@ fn build_matcher_tree(args: &[&str],
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(try!(name_matcher::NameMatcher::new_box(args[i].as_ref())))
+                Some(try!(name::NameMatcher::new_box(args[i].as_ref())))
             }
             "-iname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(try!(caseless_name_matcher::CaselessNameMatcher::new_box(args[i])))
+                Some(try!(name::CaselessNameMatcher::new_box(args[i])))
             }
             "-type" => {
                 if i >= args.len() - 1 {
