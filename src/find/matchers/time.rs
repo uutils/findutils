@@ -77,7 +77,7 @@ impl FileTimeType {
 /// This matcher checks whether a file's accessed|creation|modification time is
 /// {less than | exactly | more than} N days old.
 pub struct FileTimeMatcher {
-    days: ComparableValue<i64>,
+    days: ComparableValue,
     file_time_type: FileTimeType,
 }
 
@@ -125,17 +125,17 @@ impl FileTimeMatcher {
         // whereas we want truncation towards negative infinity - i.e. files whose
         // date are 1 second to 24 hours in the future count as -1 day old.
         let age_in_days = age_in_seconds / SECS_PER_DAY + if is_negative { -1 } else { 0 };
-        Ok(self.days.matches(age_in_days))
+        Ok(self.days.imatches(age_in_days))
     }
 
-    pub fn new(file_time_type: FileTimeType, days: ComparableValue<i64>) -> FileTimeMatcher {
+    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> FileTimeMatcher {
         FileTimeMatcher {
             file_time_type: file_time_type,
             days: days,
         }
     }
 
-    pub fn new_box(file_time_type: FileTimeType, days: ComparableValue<i64>) -> Box<Matcher> {
+    pub fn new_box(file_time_type: FileTimeType, days: ComparableValue) -> Box<Matcher> {
         Box::new(FileTimeMatcher::new(file_time_type, days))
     }
 }

@@ -390,7 +390,6 @@ mod tests {
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(), "");
-
     }
 
     #[test]
@@ -402,7 +401,6 @@ mod tests {
         if let Ok(file_time) = meta.modified() {
             file_time_helper(file_time, "-mtime");
         }
-
     }
 
     #[test]
@@ -414,7 +412,6 @@ mod tests {
         if let Ok(file_time) = meta.created() {
             file_time_helper(file_time, "-ctime");
         }
-
     }
 
     #[test]
@@ -426,7 +423,6 @@ mod tests {
         if let Ok(file_time) = meta.accessed() {
             file_time_helper(file_time, "-atime");
         }
-
     }
 
     /// Helper function for the find_ctime/find_atime/find_mtime tests.
@@ -457,5 +453,24 @@ mod tests {
         }
     }
 
+    #[test]
+    fn find_size() {
+        let deps = FakeDependencies::new();
+        // only look at files because the "size" of a directory is a system (and filesystem)
+        // dependent thing and we want these tests to be universal.
+        let rc = find_main(&["find", "./test_data/size", "-type", "f", "-size", "1b"],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "./test_data/size/512bytes\n");
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/size", "-type", "f", "-size", "+1b"],
+                           &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+
+    }
 
 }

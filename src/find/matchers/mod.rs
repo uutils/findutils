@@ -2,14 +2,13 @@ mod logical_matchers;
 mod name;
 mod printer;
 mod prune;
+mod size;
 mod time;
 mod type_matcher;
 
 use regex::Regex;
-use std;
 use std::error::Error;
 use std::time::SystemTime;
-use num_traits;
 use walkdir::DirEntry;
 
 use find::{Config, Dependencies};
@@ -59,18 +58,27 @@ pub trait Matcher {
     fn has_side_effects(&self) -> bool;
 }
 
-pub enum ComparableValue<T: num_traits::int::PrimInt + std::str::FromStr> {
-    MoreThan(T),
-    EqualTo(T),
-    LessThan(T),
+pub enum ComparableValue {
+    MoreThan(u64),
+    EqualTo(u64),
+    LessThan(u64),
 }
 
-impl<T: num_traits::int::PrimInt + std::str::FromStr> ComparableValue<T> {
-    fn matches(&self, value: T) -> bool {
+impl ComparableValue {
+    fn matches(&self, value: u64) -> bool {
         match *self {
             ComparableValue::MoreThan(limit) => value > limit,
             ComparableValue::EqualTo(limit) => value == limit, 
             ComparableValue::LessThan(limit) => value < limit, 
+        }
+    }
+
+    /// same as matches, but takes a signed value
+    fn imatches(&self, value: i64) -> bool {
+        match *self {
+            ComparableValue::MoreThan(limit) => value >= 0 && (value as u64) > limit,
+            ComparableValue::EqualTo(limit) => value >= 0 && (value as u64) == limit, 
+            ComparableValue::LessThan(limit) => value < 0 || (value as u64) < limit, 
         }
     }
 }
@@ -110,13 +118,12 @@ fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usi
     };
 }
 
-fn convert_arg_to_comparable_value<T: num_traits::int::PrimInt + std::str::FromStr>
-    (option_name: &str,
-     value_as_string: &str)
-     -> Result<ComparableValue<T>, Box<Error>> {
+fn convert_arg_to_comparable_value(option_name: &str,
+                                   value_as_string: &str)
+                                   -> Result<ComparableValue, Box<Error>> {
     let re = try!(Regex::new(r"([+-]?)(\d+)$"));
     if let Some(groups) = re.captures(value_as_string) {
-        if let Ok(val) = groups[2].parse::<T>() {
+        if let Ok(val) = groups[2].parse::<u64>() {
             return Ok(match &groups[1] {
                 "+" => ComparableValue::MoreThan(val),
                 "-" => ComparableValue::LessThan(val),
@@ -129,6 +136,27 @@ fn convert_arg_to_comparable_value<T: num_traits::int::PrimInt + std::str::FromS
                            option_name,
                            value_as_string)))
 }
+
+fn convert_arg_to_comparable_value_and_suffix(option_name: &str,
+                                              value_as_string: &str)
+                                              -> Result<(ComparableValue, String), Box<Error>> {
+    let re = try!(Regex::new(r"([+-]?)(\d+)(.*)$"));
+    if let Some(groups) = re.captures(value_as_string) {
+        if let Ok(val) = groups[2].parse::<u64>() {
+            return Ok((match &groups[1] {
+                           "+" => ComparableValue::MoreThan(val),
+                           "-" => ComparableValue::LessThan(val),
+                           _ => ComparableValue::EqualTo(val),
+                       },
+                       groups[3].to_string()));
+        }
+    }
+    Err(From::from(format!("Expected a decimal integer (with optional + or - prefix) and \
+                            (optional suffix) argument to {}, but got `{}'",
+                           option_name,
+                           value_as_string)))
+}
+
 
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
@@ -192,9 +220,18 @@ fn build_matcher_tree(args: &[&str],
                     // is one of those three values.
                     _ => panic!("Encountered unexpected value {}", args[i]),
                 };
-                let days = try!(convert_arg_to_comparable_value::<i64>(args[i], args[i + 1]));
+                let days = try!(convert_arg_to_comparable_value(args[i], args[i + 1]));
                 i += 1;
                 Some(time::FileTimeMatcher::new_box(file_time_type, days))
+            }
+            "-size" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let (size, unit) = try!(convert_arg_to_comparable_value_and_suffix(args[i],
+                                                                                   args[i + 1]));
+                i += 1;
+                Some(try!(size::SizeMatcher::new_box(size, &unit)))
             }
 
             "-prune" => Some(prune::PruneMatcher::new_box()),
@@ -598,5 +635,98 @@ mod tests {
             assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         }
     }
+
+    #[test]
+    fn comparable_value_matches() {
+
+        assert!(!ComparableValue::LessThan(0).matches(0),
+                "0 should not be less than 0");
+        assert!(ComparableValue::LessThan(u64::max_value()).matches(0),
+                "0 should be less than max_value");
+        assert!(!ComparableValue::LessThan(0).matches(u64::max_value()),
+                "max_value should not be less than 0");
+        assert!(!ComparableValue::LessThan(u64::max_value()).matches(u64::max_value()),
+                "max_value should not be less than max_value");
+
+        assert!(ComparableValue::EqualTo(0).matches(0),
+                "0 should be equal to 0");
+        assert!(!ComparableValue::EqualTo(u64::max_value()).matches(0),
+                "0 should not be equal to max_value");
+        assert!(!ComparableValue::EqualTo(0).matches(u64::max_value()),
+                "max_value should not be equal to 0");
+        assert!(ComparableValue::EqualTo(u64::max_value()).matches(u64::max_value()),
+                "max_value should be equal to max_value");
+
+        assert!(!ComparableValue::MoreThan(0).matches(0),
+                "0 should not be more than 0");
+        assert!(!ComparableValue::MoreThan(u64::max_value()).matches(0),
+                "0 should not be more than max_value");
+        assert!(ComparableValue::MoreThan(0).matches(u64::max_value()),
+                "max_value should be more than 0");
+        assert!(!ComparableValue::MoreThan(u64::max_value()).matches(u64::max_value()),
+                "max_value should not be more than max_value");
+
+    }
+
+    #[test]
+    fn comparable_value_imatches() {
+
+        assert!(!ComparableValue::LessThan(0).imatches(0),
+                "0 should not be less than 0");
+        assert!(ComparableValue::LessThan(u64::max_value()).imatches(0),
+                "0 should be less than max_value");
+        assert!(!ComparableValue::LessThan(0).imatches(i64::max_value()),
+                "max_value should not be less than 0");
+        assert!(ComparableValue::LessThan(u64::max_value()).imatches(i64::max_value()),
+                "max_value should be less than max_value");
+        assert!(ComparableValue::LessThan(0).imatches(i64::min_value()),
+                "min_value should be less than 0");
+        assert!(ComparableValue::LessThan(u64::max_value()).imatches(i64::min_value()),
+                "min_value should be less than max_value");
+
+        assert!(ComparableValue::EqualTo(0).imatches(0),
+                "0 should be equal to 0");
+        assert!(!ComparableValue::EqualTo(u64::max_value()).imatches(0),
+                "0 should not be equal to max_value");
+        assert!(!ComparableValue::EqualTo(0).imatches(i64::max_value()),
+                "max_value should not be equal to 0");
+        assert!(!ComparableValue::EqualTo(u64::max_value()).imatches(i64::max_value()),
+                "max_value should not be equal to i64::max_value");
+        assert!(ComparableValue::EqualTo(i64::max_value() as u64).imatches(i64::max_value()),
+                "i64::max_value should be equal to i64::max_value");
+        assert!(!ComparableValue::EqualTo(0).imatches(i64::min_value()),
+                "min_value should not be equal to 0");
+        assert!(!ComparableValue::EqualTo(u64::max_value()).imatches(i64::min_value()),
+                "min_value should not be equal to max_value");
+
+        assert!(!ComparableValue::MoreThan(0).imatches(0),
+                "0 should not be more than 0");
+        assert!(!ComparableValue::MoreThan(u64::max_value()).imatches(0),
+                "0 should not be more than max_value");
+        assert!(ComparableValue::MoreThan(0).imatches(i64::max_value()),
+                "max_value should be more than 0");
+        assert!(!ComparableValue::MoreThan(u64::max_value()).imatches(i64::max_value()),
+                "max_value should not be more than max_value");
+        assert!(!ComparableValue::MoreThan(0).imatches(i64::min_value()),
+                "min_value should not be more than 0");
+        assert!(!ComparableValue::MoreThan(u64::max_value()).imatches(i64::min_value()),
+                "min_value should not be more than max_value");
+
+    }
+
+    #[test]
+    fn build_top_level_matcher_bad_ctime_value() {
+        let mut config = Config::new();
+
+        if let Err(e) = build_top_level_matcher(&["-ctime", "-123."], &mut config) {
+            assert!(e.description().contains("Expected a decimal integer"),
+                    "bad description: {}",
+                    e);
+        } else {
+            panic!("parsing a bad ctime value should fail");
+        }
+    }
+
+
 
 }
