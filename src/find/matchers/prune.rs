@@ -3,8 +3,7 @@ use walkdir::DirEntry;
 use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher checks the type of the file.
-pub struct PruneMatcher {
-}
+pub struct PruneMatcher;
 
 impl PruneMatcher {
     pub fn new() -> PruneMatcher {

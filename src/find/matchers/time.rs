@@ -7,7 +7,7 @@ use walkdir::DirEntry;
 
 use find::matchers::{ComparableValue, Matcher, MatcherIO};
 
-const SECS_PER_DAY: i64 = 60 * 60 * 24;
+const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 
 /// This matcher checks whether a file is newer than the file the matcher is initialized with.
 pub struct NewerMatcher {
@@ -122,9 +122,10 @@ impl FileTimeMatcher {
         let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
         // rust division truncates towards zero (see
         // https://github.com/rust-lang/rust/blob/master/src/libcore/ops.rs#L580 )
-        // whereas we want truncation towards negative infinity - i.e. files whose
-        // date are 1 second to 24 hours in the future count as -1 day old.
-        let age_in_days = age_in_seconds / SECS_PER_DAY + if is_negative { -1 } else { 0 };
+        // so a simple age_in_seconds / SECONDS_PER_DAY gives the wrong answer
+        // for negative ages: a file whose age is 1 second in the future needs to
+        // count as -1 day old, not 0.
+        let age_in_days = age_in_seconds / SECONDS_PER_DAY + if is_negative { -1 } else { 0 };
         Ok(self.days.imatches(age_in_days))
     }
 
@@ -198,7 +199,7 @@ mod tests {
 
         // set "now" to 2 days after the file was modified.
         let mut deps = FakeDependencies::new();
-        deps.set_time(files_mtime + Duration::new(2 * super::SECS_PER_DAY as u64, 0));
+        deps.set_time(files_mtime + Duration::new(2 * super::SECONDS_PER_DAY as u64, 0));
         assert!(!exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
                 "2 day old file shouldn't match exactly 1 day old");
         assert!(more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
@@ -209,7 +210,7 @@ mod tests {
                 "2 day old file shouldn't match exactly 0 days old");
 
         // set "now" to 1 day after the file was modified.
-        deps.set_time(files_mtime + Duration::new((3 * super::SECS_PER_DAY / 2) as u64, 0));
+        deps.set_time(files_mtime + Duration::new((3 * super::SECONDS_PER_DAY / 2) as u64, 0));
         assert!(exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
                 "1 day old file should match exactly 1 day old");
         assert!(!more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),

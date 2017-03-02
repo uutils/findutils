@@ -231,8 +231,7 @@ impl ListMatcherBuilder {
 
 
 /// A simple matcher that always matches.
-pub struct TrueMatcher {
-}
+pub struct TrueMatcher;
 
 impl TrueMatcher {
     pub fn new_box() -> Box<Matcher> {
@@ -251,8 +250,7 @@ impl Matcher for TrueMatcher {
 }
 
 /// A simple matcher that never matches.
-pub struct FalseMatcher {
-}
+pub struct FalseMatcher;
 
 impl Matcher for FalseMatcher {
     fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {

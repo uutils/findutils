@@ -218,7 +218,7 @@ fn build_matcher_tree(args: &[&str],
                     "-mtime" => time::FileTimeType::Modified,
                     // This shouldn't be possible. We've already checked the value
                     // is one of those three values.
-                    _ => panic!("Encountered unexpected value {}", args[i]),
+                    _ => unreachable!("Encountered unexpected value {}", args[i]),
                 };
                 let days = try!(convert_arg_to_comparable_value(args[i], args[i + 1]));
                 i += 1;

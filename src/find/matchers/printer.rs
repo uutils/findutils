@@ -3,8 +3,7 @@ use walkdir::DirEntry;
 use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher just prints the name of the file to stdout.
-pub struct Printer {
-}
+pub struct Printer;
 
 impl Printer {
     pub fn new() -> Printer {

@@ -65,7 +65,7 @@ struct ParsedInfo {
     config: Config,
 }
 
-/// Function to generate a ParsedInfoi from the strings supplied on the command-line.
+/// Function to generate a ParsedInfo from the strings supplied on the command-line.
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     let mut paths = vec![];
     let mut i = 0;
@@ -90,9 +90,9 @@ fn process_dir<'a>(dir: &str,
                    config: &Config,
                    deps: &'a Dependencies<'a>,
                    matcher: &Box<matchers::Matcher>)
-                   -> Result<i32, Box<Error>> {
+                   -> Result<u64, Box<Error>> {
 
-    let mut found_count = 0;
+    let mut found_count: u64 = 0;
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
@@ -125,9 +125,9 @@ fn process_dir<'a>(dir: &str,
 }
 
 
-fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<i32, Box<Error>> {
+fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<u64, Box<Error>> {
     let paths_and_matcher = try!(parse_args(args));
-    let mut found_count = 0;
+    let mut found_count: u64 = 0;
     for path in paths_and_matcher.paths {
         found_count += try!(process_dir(&path,
                                         &paths_and_matcher.config,
@@ -148,6 +148,25 @@ Early alpha implementation. Currently the only expressions supported are
  -iname case-insensitive_filename_pattern
  -type type_char
     currently type_char can only be f (for file) or d (for directory) 
+ -size [+-]N[bcwkMG]
+ -prune
+ -not
+ -a
+ -o[r]
+ ,
+ ()
+ -true
+ -false
+ -maxdepth N
+ -mindepth N
+ -d[epth]
+ -ctime [+-]N
+ -atime [+-]N
+ -mtime [+-]N
+ -newer path_to_file
+ -sorted 
+    a non-standard extension that sorts directory contents by name before 
+    processing them. Less efficient, but allows for deterministic output.
 ");
 }
 
