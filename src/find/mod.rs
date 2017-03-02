@@ -15,8 +15,8 @@ pub struct Config {
     sorted_output: bool,
 }
 
-impl Config {
-    fn new() -> Config {
+impl Default for Config {
+    fn default() -> Config {
         Config {
             depth_first: false,
             min_depth: 0,
@@ -25,6 +25,7 @@ impl Config {
         }
     }
 }
+
 
 /// Trait that encapsulates various dependencies (output, clocks, etc.) that we
 /// might want to fake out for unit tests.
@@ -69,7 +70,7 @@ struct ParsedInfo {
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     let mut paths = vec![];
     let mut i = 0;
-    let mut config = Config::new();
+    let mut config = Config::default();
 
     while i < args.len() && !args[i].starts_with('-') && args[i] != "!" && args[i] != "(" {
         paths.push(args[i].to_string());

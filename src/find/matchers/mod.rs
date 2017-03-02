@@ -347,7 +347,7 @@ mod tests {
     fn build_top_level_matcher_name() {
         let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
         let abbbc_upper = get_dir_entry_for("./test_data/simple/subdir", "ABBBC");
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         let matcher = build_top_level_matcher(&["-name", "a*c"], &mut config).unwrap();
@@ -361,7 +361,7 @@ mod tests {
     fn build_top_level_matcher_iname() {
         let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
         let abbbc_upper = get_dir_entry_for("./test_data/simple/subdir", "ABBBC");
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         let matcher = build_top_level_matcher(&["-iname", "a*c"], &mut config).unwrap();
@@ -376,7 +376,7 @@ mod tests {
     fn build_top_level_matcher_not() {
         for arg in &["-not", "!"] {
             let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
-            let mut config = Config::new();
+            let mut config = Config::default();
             let deps = FakeDependencies::new();
 
             let matcher = build_top_level_matcher(&[arg, "-name", "doesntexist"], &mut config)
@@ -390,7 +390,7 @@ mod tests {
     #[test]
     fn build_top_level_matcher_not_needs_expression() {
         for arg in &["-not", "!"] {
-            let mut config = Config::new();
+            let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
                 assert!(e.description().contains("expected an expression"));
@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn build_top_level_matcher_missing_args() {
         for arg in &["-iname", "-name", "-type"] {
-            let mut config = Config::new();
+            let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
                 assert!(e.description().contains("missing argument to"));
@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn build_top_level_matcher_or_without_expr1() {
         for arg in &["-or", "-o"] {
-            let mut config = Config::new();
+            let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&[arg, "-true"], &mut config) {
                 assert!(e.description().contains("you have used a binary operator"));
@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn build_top_level_matcher_or_without_expr2() {
         for arg in &["-or", "-o"] {
-            let mut config = Config::new();
+            let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&["-true", arg], &mut config) {
                 assert!(e.description().contains("expected an expression"));
@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_and_without_expr1() {
-        let mut config = Config::new();
+        let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-a", "-true"], &mut config) {
             assert!(e.description().contains("you have used a binary operator"));
@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_and_without_expr2() {
-        let mut config = Config::new();
+        let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", "-a"], &mut config) {
             assert!(e.description().contains("expected an expression"));
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn build_top_level_matcher_dash_a_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         // build a matcher using an explicit -a argument
@@ -480,7 +480,7 @@ mod tests {
         for args in &[["-true", "-o", "-false"],
                       ["-false", "-o", "-true"],
                       ["-true", "-o", "-true"]] {
-            let mut config = Config::new();
+            let mut config = Config::default();
             let deps = FakeDependencies::new();
 
             let matcher = build_top_level_matcher(args, &mut config).unwrap();
@@ -489,7 +489,7 @@ mod tests {
             assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
         }
 
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         let matcher = build_top_level_matcher(&["-false", "-o", "-false"], &mut config).unwrap();
@@ -502,7 +502,7 @@ mod tests {
     fn build_top_level_matcher_and_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
         for args in &[["-true", "-false"], ["-false", "-true"], ["-false", "-false"]] {
-            let mut config = Config::new();
+            let mut config = Config::default();
             let deps = FakeDependencies::new();
 
             let matcher = build_top_level_matcher(args, &mut config).unwrap();
@@ -511,7 +511,7 @@ mod tests {
             assert_eq!(deps.get_output_as_string(), "");
         }
 
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         let matcher = build_top_level_matcher(&["-true", "-true"], &mut config).unwrap();
@@ -524,7 +524,7 @@ mod tests {
     fn build_top_level_matcher_list_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
         let args = ["-true", "-print", "-false", ",", "-print", "-false"];
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         let matcher = build_top_level_matcher(&args, &mut config).unwrap();
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_list_without_expr1() {
-        let mut config = Config::new();
+        let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&[",", "-true"], &mut config) {
             assert!(e.description().contains("you have used a binary operator"));
@@ -551,12 +551,11 @@ mod tests {
         } else {
             panic!("parsing arugment list that contains '-o  ,' should fail");
         }
-
     }
 
     #[test]
     fn build_top_level_matcher_list_without_expr2() {
-        let mut config = Config::new();
+        let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", ","], &mut config) {
             assert!(e.description().contains("expected an expression"));
@@ -567,7 +566,7 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_not_enough_brackets() {
-        let mut config = Config::new();
+        let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", "("], &mut config) {
             assert!(e.description().contains("I was expecting to find a ')'"));
@@ -578,7 +577,7 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_too_many_brackets() {
-        let mut config = Config::new();
+        let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", "(", ")", ")"], &mut config) {
             assert!(e.description().contains("too many ')'"));
@@ -589,7 +588,7 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_can_use_bracket_as_arg() {
-        let mut config = Config::new();
+        let mut config = Config::default();
         // make sure that if we use a bracket as an argument (e.g. to -name)
         // then it isn't viewed as a bracket
         build_top_level_matcher(&["-name", "("], &mut config).unwrap();
@@ -603,7 +602,7 @@ mod tests {
         let args_without = ["-true", "-o", "-false", "-false"];
         // same as (true | false) & false = false
         let args_with = ["(", "-true", "-o", "-false", ")", "-false"];
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         {
@@ -623,7 +622,7 @@ mod tests {
         let args_without = ["-true", "-not", "-false", "-o", "-true"];
         // same as true & !(false | true) = false
         let args_with = ["-true", "-not", "(", "-false", "-o", "-true", ")"];
-        let mut config = Config::new();
+        let mut config = Config::default();
         let deps = FakeDependencies::new();
 
         {
@@ -665,7 +664,6 @@ mod tests {
                 "max_value should be more than 0");
         assert!(!ComparableValue::MoreThan(u64::max_value()).matches(u64::max_value()),
                 "max_value should not be more than max_value");
-
     }
 
     #[test]
@@ -711,12 +709,11 @@ mod tests {
                 "min_value should not be more than 0");
         assert!(!ComparableValue::MoreThan(u64::max_value()).imatches(i64::min_value()),
                 "min_value should not be more than max_value");
-
     }
 
     #[test]
     fn build_top_level_matcher_bad_ctime_value() {
-        let mut config = Config::new();
+        let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-ctime", "-123."], &mut config) {
             assert!(e.description().contains("Expected a decimal integer"),
@@ -726,7 +723,4 @@ mod tests {
             panic!("parsing a bad ctime value should fail");
         }
     }
-
-
-
 }
