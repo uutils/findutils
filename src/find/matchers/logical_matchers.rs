@@ -1,3 +1,9 @@
+// Copyright 2017 Google Inc.
+//
+// Use of this source code is governed by a MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 //! This modules contains the matchers used for combining other matchers and
 //! performing boolean logic on them (and a couple of trivial always-true and
 //! always-false matchers). The design is strongly tied to the precedence rules
