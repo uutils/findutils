@@ -89,7 +89,7 @@ impl ComparableValue {
 pub fn build_top_level_matcher(args: &[&str],
                                config: &mut Config)
                                -> Result<Box<Matcher>, Box<Error>> {
-    let (_, top_level_matcher) = try!(build_matcher_tree(args, config, 0, false));
+    let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, false))?;
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
@@ -121,7 +121,7 @@ fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usi
 fn convert_arg_to_comparable_value(option_name: &str,
                                    value_as_string: &str)
                                    -> Result<ComparableValue, Box<Error>> {
-    let re = try!(Regex::new(r"([+-]?)(\d+)$"));
+    let re = Regex::new(r"([+-]?)(\d+)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok(match &groups[1] {
@@ -140,7 +140,7 @@ fn convert_arg_to_comparable_value(option_name: &str,
 fn convert_arg_to_comparable_value_and_suffix(option_name: &str,
                                               value_as_string: &str)
                                               -> Result<(ComparableValue, String), Box<Error>> {
-    let re = try!(Regex::new(r"([+-]?)(\d+)(.*)$"));
+    let re = Regex::new(r"([+-]?)(\d+)(.*)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok((match &groups[1] {
@@ -185,28 +185,28 @@ fn build_matcher_tree(args: &[&str],
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(try!(name::NameMatcher::new_box(args[i].as_ref())))
+                Some(name::NameMatcher::new_box(args[i].as_ref())?)
             }
             "-iname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(try!(name::CaselessNameMatcher::new_box(args[i])))
+                Some(name::CaselessNameMatcher::new_box(args[i])?)
             }
             "-type" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(try!(type_matcher::TypeMatcher::new_box(args[i])))
+                Some(type_matcher::TypeMatcher::new_box(args[i])?)
             }
             "-newer" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(try!(time::NewerMatcher::new_box(args[i])))
+                Some(time::NewerMatcher::new_box(args[i])?)
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
@@ -220,7 +220,7 @@ fn build_matcher_tree(args: &[&str],
                     // is one of those three values.
                     _ => unreachable!("Encountered unexpected value {}", args[i]),
                 };
-                let days = try!(convert_arg_to_comparable_value(args[i], args[i + 1]));
+                let days = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
                 Some(time::FileTimeMatcher::new_box(file_time_type, days))
             }
@@ -228,10 +228,10 @@ fn build_matcher_tree(args: &[&str],
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                let (size, unit) = try!(convert_arg_to_comparable_value_and_suffix(args[i],
-                                                                                   args[i + 1]));
+                let (size, unit) = convert_arg_to_comparable_value_and_suffix(args[i],
+                                                                              args[i + 1])?;
                 i += 1;
-                Some(try!(size::SizeMatcher::new_box(size, &unit)))
+                Some(size::SizeMatcher::new_box(size, &unit)?)
             }
 
             "-prune" => Some(prune::PruneMatcher::new_box()),
@@ -246,26 +246,25 @@ fn build_matcher_tree(args: &[&str],
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
-                try!(top_level_matcher.check_new_and_condition());
+                top_level_matcher.check_new_and_condition()?;
                 None
             }
             "-or" | "-o" => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
-                try!(top_level_matcher.new_or_condition(args[i]));
+                top_level_matcher.new_or_condition(args[i])?;
                 None
             }
             "," => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
-                try!(top_level_matcher.new_list_condition());
+                top_level_matcher.new_list_condition()?;
                 None
             }
             "(" => {
-                let (new_arg_index, sub_matcher) =
-                    try!(build_matcher_tree(args, config, i + 1, true));
+                let (new_arg_index, sub_matcher) = build_matcher_tree(args, config, i + 1, true)?;
                 i = new_arg_index;
                 Some(sub_matcher)
             }
@@ -289,7 +288,7 @@ fn build_matcher_tree(args: &[&str],
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                config.max_depth = try!(convert_arg_to_number(args[i], args[i + 1]));
+                config.max_depth = convert_arg_to_number(args[i], args[i + 1])?;
                 i += 1;
                 None
             }
@@ -297,7 +296,7 @@ fn build_matcher_tree(args: &[&str],
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                config.min_depth = try!(convert_arg_to_number(args[i], args[i + 1]));
+                config.min_depth = convert_arg_to_number(args[i], args[i + 1])?;
                 i += 1;
                 None
             }

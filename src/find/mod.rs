@@ -79,7 +79,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     if i == 0 {
         paths.push(".".to_string());
     }
-    let matcher = try!(matchers::build_top_level_matcher(&args[i..], &mut config));
+    let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
     Ok(ParsedInfo {
         matcher: matcher,
         paths: paths,
@@ -127,13 +127,13 @@ fn process_dir<'a>(dir: &str,
 
 
 fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<u64, Box<Error>> {
-    let paths_and_matcher = try!(parse_args(args));
+    let paths_and_matcher = parse_args(args)?;
     let mut found_count: u64 = 0;
     for path in paths_and_matcher.paths {
-        found_count += try!(process_dir(&path,
-                                        &paths_and_matcher.config,
-                                        deps,
-                                        &paths_and_matcher.matcher));
+        found_count += process_dir(&path,
+                                   &paths_and_matcher.config,
+                                   deps,
+                                   &paths_and_matcher.matcher)?;
     }
     Ok(found_count)
 }

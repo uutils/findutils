@@ -13,12 +13,12 @@ pub struct NameMatcher {
 
 impl NameMatcher {
     pub fn new(pattern_string: &str) -> Result<NameMatcher, PatternError> {
-        let p = try!(Pattern::new(pattern_string));
+        let p = Pattern::new(pattern_string)?;
         Ok(NameMatcher { pattern: p })
     }
 
     pub fn new_box(pattern_string: &str) -> Result<Box<Matcher>, PatternError> {
-        Ok(Box::new(try!(NameMatcher::new(pattern_string))))
+        Ok(Box::new(NameMatcher::new(pattern_string)?))
     }
 }
 
@@ -41,12 +41,12 @@ pub struct CaselessNameMatcher {
 
 impl CaselessNameMatcher {
     pub fn new(pattern_string: &str) -> Result<CaselessNameMatcher, PatternError> {
-        let p = try!(Pattern::new(&pattern_string.to_lowercase()));
+        let p = Pattern::new(&pattern_string.to_lowercase())?;
         Ok(CaselessNameMatcher { pattern: p })
     }
 
     pub fn new_box(pattern_string: &str) -> Result<Box<Matcher>, PatternError> {
-        Ok(Box::new(try!(CaselessNameMatcher::new(pattern_string))))
+        Ok(Box::new(CaselessNameMatcher::new(pattern_string)?))
     }
 }
 

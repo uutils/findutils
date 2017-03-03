@@ -16,19 +16,19 @@ pub struct NewerMatcher {
 
 impl NewerMatcher {
     pub fn new(path_to_file: &str) -> Result<NewerMatcher, Box<Error>> {
-        let f = try!(File::open(path_to_file));
-        let metadata = try!(f.metadata());
-        Ok(NewerMatcher { given_modification_time: try!(metadata.modified()) })
+        let f = File::open(path_to_file)?;
+        let metadata = f.metadata()?;
+        Ok(NewerMatcher { given_modification_time: metadata.modified()? })
     }
 
     pub fn new_box(path_to_file: &str) -> Result<Box<Matcher>, Box<Error>> {
-        Ok(Box::new(try!(NewerMatcher::new(path_to_file))))
+        Ok(Box::new(NewerMatcher::new(path_to_file)?))
     }
 
     /// Impementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<Error>> {
-        let this_time = try!(try!(file_info.metadata()).modified());
+        let this_time = file_info.metadata()?.modified()?;
         // duration_since returns an Ok duration if this_time <= given_modification_time
         // and returns an Err (with a duration) otherwise. So if this_time >
         // given_modification_time (in which case we want to return true) then
@@ -108,7 +108,7 @@ impl FileTimeMatcher {
     /// Impementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
     fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<Error>> {
-        let this_time = try!(self.file_time_type.get_file_time(try!(file_info.metadata())));
+        let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
         let mut is_negative = false;
         // durations can't be negative. So duration_since returns a duration
         // wrapped in an error if now < this_time.

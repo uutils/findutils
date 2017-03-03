@@ -68,7 +68,7 @@ impl SizeMatcher {
                suffix_string: &str)
                -> Result<SizeMatcher, Box<Error>> {
         Ok(SizeMatcher {
-            unit: try!(suffix_string.parse()),
+            unit: suffix_string.parse()?,
             value_to_match: value_to_match,
         })
     }
@@ -76,7 +76,7 @@ impl SizeMatcher {
     pub fn new_box(value_to_match: ComparableValue,
                    suffix_string: &str)
                    -> Result<Box<Matcher>, Box<Error>> {
-        Ok(Box::new(try!(SizeMatcher::new(value_to_match, suffix_string))))
+        Ok(Box::new(SizeMatcher::new(value_to_match, suffix_string)?))
     }
 }
 

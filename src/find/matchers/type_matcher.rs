@@ -23,7 +23,7 @@ impl TypeMatcher {
     }
 
     pub fn new_box(type_string: &str) -> Result<Box<Matcher>, Box<Error>> {
-        Ok(Box::new(try!(TypeMatcher::new(type_string))))
+        Ok(Box::new(TypeMatcher::new(type_string)?))
     }
 }
 
