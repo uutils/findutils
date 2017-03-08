@@ -1,0 +1,17 @@
+[package]
+name = "findutils"
+version = "0.1.0"
+authors = ["mcharsley <mcharsley@google.com>"]
+
+[dependencies]
+glob = "0.2"
+# Current release of walkdir doesn't support depth-first operation. While we 
+# wait for https://github.com/BurntSushi/walkdir/pull/19 to be accepted and a
+# new release made, let's access my branch directly.
+walkdir = { git = "https://github.com/mcharsley/walkdir", rev = "dffefcf8db97a331a0f81d120e8aa20c1b36251e" }
+tempdir = "0.3"
+regex = "0.2"
+
+[[bin]]
+name = "find"
+path = "src/find/main.rs"
