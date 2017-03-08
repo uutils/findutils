@@ -499,5 +499,4 @@ mod tests {
         assert_eq!(deps.get_output_as_string(), "");
 
     }
-
 }
