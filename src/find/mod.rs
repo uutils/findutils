@@ -280,13 +280,13 @@ mod tests {
         let deps = FakeDependencies::new();
 
 
-        let rc = find_main(&["find", "./test_data/simple", "-depth"], &deps);
+        let rc = find_main(&["find", "./test_data/simple", "-sorted", "-depth"], &deps);
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(),
-                   "./test_data/simple/subdir/ABBBC\n\
+                   "./test_data/simple/abbbc\n\
+                   ./test_data/simple/subdir/ABBBC\n\
                    ./test_data/simple/subdir\n\
-                   ./test_data/simple/abbbc\n\
                    ./test_data/simple\n");
     }
 
@@ -310,7 +310,7 @@ mod tests {
     fn find_maxdepth_depth_first() {
         let deps = FakeDependencies::new();
 
-        let rc = find_main(&["find", "./test_data/depth", "-maxdepth", "2", "-depth"],
+        let rc = find_main(&["find", "./test_data/depth", "-sorted", "-maxdepth", "2", "-depth"],
                            &deps);
 
         assert_eq!(rc, 0);
@@ -365,7 +365,8 @@ mod tests {
     #[test]
     fn find_mindepth() {
         let deps = FakeDependencies::new();
-        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3"], &deps);
+        let rc = find_main(&["find", "./test_data/depth", "-sorted", "-mindepth", "3"],
+                           &deps);
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(),
@@ -377,7 +378,7 @@ mod tests {
     #[test]
     fn find_mindepth_depth_first() {
         let deps = FakeDependencies::new();
-        let rc = find_main(&["find", "./test_data/depth", "-mindepth", "3", "-depth"],
+        let rc = find_main(&["find", "./test_data/depth", "-sorted", "-mindepth", "3", "-depth"],
                            &deps);
 
         assert_eq!(rc, 0);
