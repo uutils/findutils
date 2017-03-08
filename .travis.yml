@@ -1,0 +1,20 @@
+language: rust
+
+sudo: false
+os:
+  - linux
+  - osx
+rust:
+  - stable
+  - nightly
+
+matrix:
+  fast_finish: true
+
+branches:
+  only:
+    - master
+
+script:
+  - cargo build --verbose
+  - cargo test --verbose
