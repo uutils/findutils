@@ -26,10 +26,6 @@ impl Matcher for PruneMatcher {
         matcher_io.mark_current_dir_to_be_skipped();
         return true;
     }
-
-    fn has_side_effects(&self) -> bool {
-        false
-    }
 }
 #[cfg(test)]
 

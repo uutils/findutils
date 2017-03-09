@@ -249,10 +249,6 @@ impl Matcher for TrueMatcher {
     fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {
         true
     }
-
-    fn has_side_effects(&self) -> bool {
-        false
-    }
 }
 
 /// A simple matcher that never matches.
@@ -260,10 +256,6 @@ pub struct FalseMatcher;
 
 impl Matcher for FalseMatcher {
     fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {
-        false
-    }
-
-    fn has_side_effects(&self) -> bool {
         false
     }
 }

@@ -57,10 +57,6 @@ impl Matcher for NewerMatcher {
             Ok(t) => t,
         }
     }
-
-    fn has_side_effects(&self) -> bool {
-        false
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -101,10 +97,6 @@ impl Matcher for FileTimeMatcher {
             }
             Ok(t) => t,
         }
-    }
-
-    fn has_side_effects(&self) -> bool {
-        false
     }
 }
 

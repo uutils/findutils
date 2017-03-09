@@ -37,10 +37,6 @@ impl Matcher for TypeMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         (self.file_type_fn)(&file_info.file_type())
     }
-
-    fn has_side_effects(&self) -> bool {
-        false
-    }
 }
 #[cfg(test)]
 

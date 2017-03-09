@@ -57,11 +57,15 @@ pub trait Matcher {
     /// Returns whether the given file matches the object's predicate.
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool;
 
-    /// Returns whether the matcher has any side-effects. Iff no such matcher
-    /// exists in the chain, then the filename will be printed to stdout. While
-    /// this is a compile-time fact for most matchers, it's run-time for matchers
-    /// that contain a collection of sub-Matchers.
-    fn has_side_effects(&self) -> bool;
+    /// Returns whether the matcher has any side-effects (e.g. executing a
+    /// command, deleting a file). Iff no such matcher exists in the chain, then
+    /// the filename will be printed to stdout. While this is a compile-time
+    /// fact for most matchers, it's run-time for matchers that contain a
+    /// collection of sub-Matchers.
+    fn has_side_effects(&self) -> bool {
+        // most matchers don't have side-effects, so supply a default implementation.
+        return false;
+    }
 }
 
 pub enum ComparableValue {
