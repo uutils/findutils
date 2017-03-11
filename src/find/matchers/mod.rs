@@ -90,7 +90,7 @@ impl ComparableValue {
 }
 
 
-/// Builds a single AndMatcher containing the Matcher objects corresponding
+/// Builds a single `AndMatcher` containing the Matcher objects corresponding
 /// to the passed in predicate arguments.
 pub fn build_top_level_matcher(args: &[&str],
                                config: &mut Config)
@@ -107,13 +107,13 @@ pub fn build_top_level_matcher(args: &[&str],
     Ok(top_level_matcher)
 }
 
-/// Helper function for build_matcher_tree
+/// Helper function for `build_matcher_tree`.
 fn are_more_expressions(args: &[&str], index: usize) -> bool {
     (index < args.len() - 1) && args[index + 1] != ")"
 }
 
 fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usize, Box<Error>> {
-    return match value_as_string.parse::<usize>() {
+    match value_as_string.parse::<usize>() {
         Ok(val) => Ok(val),
         _ => {
             Err(From::from(format!("Expected a positive decimal integer argument to {}, but got \
@@ -121,7 +121,7 @@ fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usi
                                    option_name,
                                    value_as_string)))
         }
-    };
+    }
 }
 
 fn convert_arg_to_comparable_value(option_name: &str,

@@ -24,7 +24,7 @@ impl PruneMatcher {
 impl Matcher for PruneMatcher {
     fn matches(&self, _: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         matcher_io.mark_current_dir_to_be_skipped();
-        return true;
+        true
     }
 
     fn has_side_effects(&self) -> bool {
