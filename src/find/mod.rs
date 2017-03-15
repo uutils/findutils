@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-mod matchers;
+pub mod matchers;
 
 use std::cell::RefCell;
 use std::error::Error;
@@ -171,6 +171,7 @@ Early alpha implementation. Currently the only expressions supported are
  -atime [+-]N
  -mtime [+-]N
  -newer path_to_file
+ -exec[dir] executable [args] [{{}}] [more args];
  -sorted 
     a non-standard extension that sorts directory contents by name before 
     processing them. Less efficient, but allows for deterministic output.

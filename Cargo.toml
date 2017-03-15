@@ -15,3 +15,7 @@ regex = "0.2"
 [[bin]]
 name = "find"
 path = "src/find/main.rs"
+
+[[bin]]
+name = "testing-commandline"
+path = "src/testing/commandline/main.rs"
