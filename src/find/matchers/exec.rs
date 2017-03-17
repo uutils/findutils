@@ -13,13 +13,16 @@ use walkdir::DirEntry;
 
 use find::matchers::{Matcher, MatcherIO};
 
-pub struct SingleExecMatcher {
-    executable: String,
-    args: Vec<Option<OsString>>,
-    exec_in_parent_dir: bool,
+enum Arg {
+    Filename,
+    LiteralArg(OsString),
 }
 
-
+pub struct SingleExecMatcher {
+    executable: String,
+    args: Vec<Arg>,
+    exec_in_parent_dir: bool,
+}
 
 impl SingleExecMatcher {
     pub fn new(executable: &str,
@@ -29,8 +32,8 @@ impl SingleExecMatcher {
 
         let transformed_args = args.iter()
             .map(|&a| match a {
-                "{}" => None,
-                _ => Some(OsString::from(a)),
+                "{}" => Arg::Filename,
+                _ => Arg::LiteralArg(OsString::from(a)),
             })
             .collect();
 
@@ -63,9 +66,9 @@ impl Matcher for SingleExecMatcher {
         };
 
         for arg in &self.args {
-            command.arg(match arg.as_ref() {
-                Some(a) => &a.as_os_str(),
-                None => path_to_file.as_os_str(),
+            command.arg(match arg {
+                &Arg::LiteralArg(ref a) => a.as_os_str(),
+                &Arg::Filename => path_to_file.as_os_str(),
             });
         }
         if self.exec_in_parent_dir {
@@ -89,7 +92,6 @@ impl Matcher for SingleExecMatcher {
 
 
 #[cfg(test)]
-
 /// No tests here, because we need to call out to an external executable. See
 /// tests/exec_unit_tests.rs instead.
 mod tests {}

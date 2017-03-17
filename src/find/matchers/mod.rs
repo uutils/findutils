@@ -70,7 +70,7 @@ pub trait Matcher {
     }
 
     /// Notification that find has finished processing a given directory.
-    fn finished_dir(&self, _: &PathBuf) {}
+    fn finished_dir(&self, _finished_directory: &PathBuf) {}
 
     /// Notification that find has finished processing all directories -
     /// allowing for any cleanup that isn't suitable for destructors (e.g.

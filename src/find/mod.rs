@@ -171,7 +171,7 @@ Early alpha implementation. Currently the only expressions supported are
  -atime [+-]N
  -mtime [+-]N
  -newer path_to_file
- -exec[dir] executable [args] [{{}}] [more args];
+ -exec[dir] executable [args] [{{}}] [more args] ;
  -sorted 
     a non-standard extension that sorts directory contents by name before 
     processing them. Less efficient, but allows for deterministic output.

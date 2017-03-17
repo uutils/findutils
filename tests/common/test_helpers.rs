@@ -8,7 +8,6 @@
 use std::cell::RefCell;
 use std::env;
 use std::io::{Cursor, Read, Write};
-use std::path::PathBuf;
 use std::time::SystemTime;
 use std::vec::Vec;
 use walkdir::{DirEntry, WalkDir};
