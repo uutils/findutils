@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+pub mod exec;
 mod logical_matchers;
 mod name;
 mod printer;
@@ -14,6 +15,7 @@ mod type_matcher;
 
 use regex::Regex;
 use std::error::Error;
+use std::path::PathBuf;
 use std::time::SystemTime;
 use walkdir::DirEntry;
 
@@ -57,11 +59,23 @@ pub trait Matcher {
     /// Returns whether the given file matches the object's predicate.
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool;
 
-    /// Returns whether the matcher has any side-effects. Iff no such matcher
-    /// exists in the chain, then the filename will be printed to stdout. While
-    /// this is a compile-time fact for most matchers, it's run-time for matchers
-    /// that contain a collection of sub-Matchers.
-    fn has_side_effects(&self) -> bool;
+    /// Returns whether the matcher has any side-effects (e.g. executing a
+    /// command, deleting a file). Iff no such matcher exists in the chain, then
+    /// the filename will be printed to stdout. While this is a compile-time
+    /// fact for most matchers, it's run-time for matchers that contain a
+    /// collection of sub-Matchers.
+    fn has_side_effects(&self) -> bool {
+        // most matchers don't have side-effects, so supply a default implementation.
+        return false;
+    }
+
+    /// Notification that find has finished processing a given directory.
+    fn finished_dir(&self, _finished_directory: &PathBuf) {}
+
+    /// Notification that find has finished processing all directories -
+    /// allowing for any cleanup that isn't suitable for destructors (e.g.
+    /// blocking calls, I/O etc.)
+    fn finished(&self) {}
 }
 
 pub enum ComparableValue {
@@ -239,7 +253,30 @@ fn build_matcher_tree(args: &[&str],
                 i += 1;
                 Some(size::SizeMatcher::new_box(size, &unit)?)
             }
-
+            "-exec" | "-execdir" => {
+                let mut arg_index = i + 1;
+                while arg_index < args.len() && args[arg_index] != ";" {
+                    if args[arg_index] == "+" {
+                        // MultiExecMatcher isn't written yet
+                        return Err(From::from(format!("{} [args...] + isn't supported yet. \
+                                                       Only {} [args...] ;",
+                                                      args[i],
+                                                      args[i])));
+                    }
+                    arg_index += 1;
+                }
+                if arg_index < i + 2 || arg_index == args.len() {
+                    // at the minimum we need the executable and the ';'
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let expression = args[i];
+                let executable = args[i + 1];
+                let exec_args = &args[i + 2..arg_index];
+                i = arg_index;
+                Some(exec::SingleExecMatcher::new_box(executable,
+                                                      exec_args,
+                                                      expression == "-execdir")?)
+            }
             "-prune" => Some(prune::PruneMatcher::new_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
@@ -728,4 +765,35 @@ mod tests {
             panic!("parsing a bad ctime value should fail");
         }
     }
+
+    #[test]
+    fn build_top_level_exec_not_enough_args() {
+        let mut config = Config::default();
+
+        if let Err(e) = build_top_level_matcher(&["-exec"], &mut config) {
+            assert!(e.description().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no executable or semi-colon should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", ";"], &mut config) {
+            assert!(e.description().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no executable should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "foo"], &mut config) {
+            assert!(e.description().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no executable should fail");
+        }
+    }
+
+    #[test]
+    fn build_top_level_exec_should_eat_args() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["-exec", "foo", "-o", "(", ";"], &mut config)
+            .expect("parsing argument list with exec that takes brackets and -os should work");
+    }
+
 }

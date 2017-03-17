@@ -32,10 +32,6 @@ impl Matcher for NameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         self.pattern.matches(file_info.file_name().to_string_lossy().as_ref())
     }
-
-    fn has_side_effects(&self) -> bool {
-        false
-    }
 }
 
 /// This matcher makes a case-insensitive comparison of the name against a
@@ -60,10 +56,6 @@ impl super::Matcher for CaselessNameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         self.pattern
             .matches(file_info.file_name().to_string_lossy().to_lowercase().as_ref())
-    }
-
-    fn has_side_effects(&self) -> bool {
-        false
     }
 }
 

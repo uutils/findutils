@@ -103,10 +103,6 @@ impl Matcher for SizeMatcher {
             }
         }
     }
-
-    fn has_side_effects(&self) -> bool {
-        false
-    }
 }
 
 #[cfg(test)]
