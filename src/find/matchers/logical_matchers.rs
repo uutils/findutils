@@ -36,11 +36,23 @@ impl Matcher for AndMatcher {
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        self.submatchers.iter().all(|ref x| x.matches(dir_entry, matcher_io))
+        self.submatchers.iter().all(|x| x.matches(dir_entry, matcher_io))
     }
 
     fn has_side_effects(&self) -> bool {
-        self.submatchers.iter().any(|ref x| x.has_side_effects())
+        self.submatchers.iter().any(|x| x.has_side_effects())
+    }
+
+    fn finished_dir(&self, dir: &PathBuf) {
+        for m in &self.submatchers {
+            m.finished_dir(dir);
+        }
+    }
+
+    fn finished(&self) {
+        for m in &self.submatchers {
+            m.finished();
+        }
     }
 
     fn finished_dir(&self, dir: &PathBuf) {
@@ -104,11 +116,23 @@ impl Matcher for OrMatcher {
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        self.submatchers.iter().any(|ref x| x.matches(dir_entry, matcher_io))
+        self.submatchers.iter().any(|x| x.matches(dir_entry, matcher_io))
     }
 
     fn has_side_effects(&self) -> bool {
-        self.submatchers.iter().any(|ref x| x.has_side_effects())
+        self.submatchers.iter().any(|x| x.has_side_effects())
+    }
+
+    fn finished_dir(&self, dir: &PathBuf) {
+        for m in &self.submatchers {
+            m.finished_dir(dir);
+        }
+    }
+
+    fn finished(&self) {
+        for m in &self.submatchers {
+            m.finished();
+        }
     }
 
     fn finished_dir(&self, dir: &PathBuf) {
@@ -167,10 +191,10 @@ impl OrMatcherBuilder {
 
 
 /// This matcher contains a collection of other matchers. In contrast to
-/// OrMatcher and AndMatcher, all the submatcher objects are called regardless
-/// of the results of previous submatchers. This is primarily used for
-/// submatchers with side-effects. For such sub-matchers the side effects occur
-/// in the same order as the sub-matchers were pushed into the collection.
+/// `OrMatcher` and `AndMatcher`, all the submatcher objects are called
+/// regardless of the results of previous submatchers. This is primarily used
+/// for submatchers with side-effects. For such sub-matchers the side effects
+/// occur in the same order as the sub-matchers were pushed into the collection.
 pub struct ListMatcher {
     submatchers: Vec<Box<Matcher>>,
 }
@@ -187,14 +211,26 @@ impl Matcher for ListMatcher {
     /// Returns the result of the call to the final submatcher
     fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         let mut rc = false;
-        for ref matcher in &self.submatchers {
+        for matcher in &self.submatchers {
             rc = matcher.matches(dir_entry, matcher_io);
         }
         rc
     }
 
     fn has_side_effects(&self) -> bool {
-        self.submatchers.iter().any(|ref x| x.has_side_effects())
+        self.submatchers.iter().any(|x| x.has_side_effects())
+    }
+
+    fn finished_dir(&self, dir: &PathBuf) {
+        for m in &self.submatchers {
+            m.finished_dir(dir);
+        }
+    }
+
+    fn finished(&self) {
+        for m in &self.submatchers {
+            m.finished();
+        }
     }
 
     fn finished_dir(&self, dir: &PathBuf) {

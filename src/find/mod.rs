@@ -72,7 +72,7 @@ struct ParsedInfo {
     config: Config,
 }
 
-/// Function to generate a ParsedInfo from the strings supplied on the command-line.
+/// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     let mut paths = vec![];
     let mut i = 0;
