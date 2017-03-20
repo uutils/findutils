@@ -11,7 +11,7 @@ use walkdir::DirEntry;
 use find::matchers::{Matcher, MatcherIO};
 
 /// This matcher makes a case-sensitive comparison of the name against a
-/// shell wildcard pattern. See glob::Pattern for details on the exact
+/// shell wildcard pattern. See `glob::Pattern` for details on the exact
 /// syntax.
 pub struct NameMatcher {
     pattern: Pattern,
@@ -30,12 +30,12 @@ impl NameMatcher {
 
 impl Matcher for NameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        return self.pattern.matches(file_info.file_name().to_string_lossy().as_ref());
+        self.pattern.matches(file_info.file_name().to_string_lossy().as_ref())
     }
 }
 
 /// This matcher makes a case-insensitive comparison of the name against a
-/// shell wildcard pattern. See glob::Pattern for details on the exact
+/// shell wildcard pattern. See `glob::Pattern` for details on the exact
 /// syntax.
 pub struct CaselessNameMatcher {
     pattern: Pattern,
@@ -54,8 +54,8 @@ impl CaselessNameMatcher {
 
 impl super::Matcher for CaselessNameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        return self.pattern
-            .matches(file_info.file_name().to_string_lossy().to_lowercase().as_ref());
+        self.pattern
+            .matches(file_info.file_name().to_string_lossy().to_lowercase().as_ref())
     }
 }
 
