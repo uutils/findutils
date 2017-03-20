@@ -170,6 +170,7 @@ Early alpha implementation. Currently the only expressions supported are
  -ctime [+-]N
  -atime [+-]N
  -mtime [+-]N
+ -perm [-/]{octal|u=rwx,go=w}
  -newer path_to_file
  -exec[dir] executable [args] [{{}}] [more args] ;
  -sorted 
