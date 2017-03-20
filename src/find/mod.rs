@@ -145,7 +145,7 @@ fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<u64, Box<Err
 }
 
 fn print_help() {
-    println!("Usage: find [path...] [expression]
+    println!(r"Usage: find [path...] [expression]
 
 If no path is supplied then the current working directory is used by default.
 
@@ -170,7 +170,7 @@ Early alpha implementation. Currently the only expressions supported are
  -ctime [+-]N
  -atime [+-]N
  -mtime [+-]N
- -perm [-/]{octal|u=rwx,go=w}
+ -perm [-/]{{octal|u=rwx,go=w}}
  -newer path_to_file
  -exec[dir] executable [args] [{{}}] [more args] ;
  -sorted 
