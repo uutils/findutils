@@ -4,9 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-/// ! find's permission matching uses a very unix-centric approach, that would
-/// ! be tricky to both implement and use on a windows platform. So we don't
-/// ! even try.
+//! find's permission matching uses a very unix-centric approach, that would
+//! be tricky to both implement and use on a windows platform. So we don't
+//! even try.
 
 use std::error::Error;
 use std::io::{stderr, Write};
@@ -234,8 +234,17 @@ mod parsing {
         // have we been given a simple octal based string (e.g. /222)?
         if let Some(m) = re.captures(string_value) {
             // all these unwraps are safe because we checked the string in the regex above
-            return Ok((u32::from_str_radix(m.get(2).unwrap().as_str(), 8).unwrap(),
-                       m.get(1).unwrap().as_str().parse().unwrap()));
+            match u32::from_str_radix(m.get(2).unwrap().as_str(), 8) {
+                Ok(val) => {
+                    return Ok((val, m.get(1).unwrap().as_str().parse().unwrap()));
+                }
+                Err(e) => {
+                    return Err(From::from(format!("Failed to parse -perm argument {}: {}",
+                                                  m.get(2).unwrap().as_str(),
+                                                  e)));
+                }
+            }
+
         }
         // no: so we've got a /u=rw,g=r form instead (or an invalid string).
         let mut p = Parser::new(string_value);
@@ -414,6 +423,8 @@ mod tests {
                 "missing comma should fail");
         assert!(parsing::parse("u_rwx,g=rx,o+r").is_err(),
                 "invalid category/permissoin spearator should fail");
+        assert!(parsing::parse("77777777777777").is_err(),
+                "overflowing octal value should fail");
     }
 
     #[test]
