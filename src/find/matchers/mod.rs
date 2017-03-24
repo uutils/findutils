@@ -7,6 +7,7 @@
 pub mod exec;
 mod logical_matchers;
 mod name;
+mod perm;
 mod printer;
 mod prune;
 mod size;
@@ -276,6 +277,13 @@ fn build_matcher_tree(args: &[&str],
                 Some(exec::SingleExecMatcher::new_box(executable,
                                                       exec_args,
                                                       expression == "-execdir")?)
+            }
+            "-perm" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(perm::PermMatcher::new_box(args[i])?)
             }
             "-prune" => Some(prune::PruneMatcher::new_box()),
             "-not" | "!" => {
@@ -796,4 +804,57 @@ mod tests {
             .expect("parsing argument list with exec that takes brackets and -os should work");
     }
 
+    #[test]
+    #[cfg(unix)]
+    fn build_top_level_matcher_perm() {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        let mut config = Config::default();
+
+        // this should match: abbbc is readable
+        let matcher_readable = build_top_level_matcher(&["-perm", "-u+r"], &mut config).unwrap();
+        // this shouldn't match: abbbc isn't executable
+        let matcher_executable = build_top_level_matcher(&["-perm", "-u+x"], &mut config).unwrap();
+
+        let deps = FakeDependencies::new();
+        assert!(matcher_readable.matches(&abbbc, &mut deps.new_matcher_io()));
+        assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
+
+        let deps = FakeDependencies::new();
+        assert!(!matcher_executable.matches(&abbbc, &mut deps.new_matcher_io()));
+        assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn build_top_level_matcher_perm_bad() {
+        let mut config = Config::default();
+        if let Err(e) = build_top_level_matcher(&["-perm", "foo"], &mut config) {
+            assert!(e.description().contains("invalid mode"));
+        } else {
+            panic!("-perm with bad mode pattern should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-perm"], &mut config) {
+            assert!(e.description().contains("missing argument"));
+        } else {
+            panic!("-perm with no mode pattern should fail");
+        }
+    }
+
+    #[test]
+    #[cfg(not(unix))]
+    fn build_top_level_matcher_perm_not_unix() {
+        let mut config = Config::default();
+        if let Err(e) = build_top_level_matcher(&["-perm", "444"], &mut config) {
+            assert!(e.description().contains("not available"));
+        } else {
+            panic!("-perm on non-unix systems shouldn't be available");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-perm"], &mut config) {
+            assert!(e.description().contains("missing argument"));
+        } else {
+            panic!("-perm with no mode pattern should fail");
+        }
+    }
 }
