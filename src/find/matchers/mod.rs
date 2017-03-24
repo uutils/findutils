@@ -375,6 +375,7 @@ fn build_matcher_tree(args: &[&str],
 mod tests {
     use walkdir::{DirEntry, WalkDir};
     use find::Config;
+    use find::tests::fix_up_slashes;
     use find::tests::FakeDependencies;
     use super::*;
 
@@ -384,7 +385,7 @@ mod tests {
     /// probably be a string starting with "test_data/" (cargo's tests run with
     /// a working directory set to the root findutils folder).
     pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
-        for wrapped_dir_entry in WalkDir::new(directory) {
+        for wrapped_dir_entry in WalkDir::new(fix_up_slashes(directory)) {
             let dir_entry = wrapped_dir_entry.unwrap();
             if dir_entry.file_name().to_string_lossy() == filename {
                 return dir_entry;
@@ -404,7 +405,8 @@ mod tests {
 
         assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
         assert!(!matcher.matches(&abbbc_upper, &mut deps.new_matcher_io()));
-        assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
+        assert_eq!(deps.get_output_as_string(),
+                   fix_up_slashes("./test_data/simple/abbbc\n"));
     }
 
     #[test]
@@ -419,7 +421,7 @@ mod tests {
         assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&abbbc_upper, &mut deps.new_matcher_io()));
         assert_eq!(deps.get_output_as_string(),
-                   "./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n");
+                   fix_up_slashes("./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n"));
     }
 
     #[test]
@@ -433,7 +435,8 @@ mod tests {
                 .unwrap();
 
             assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
-            assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
+            assert_eq!(deps.get_output_as_string(),
+                       fix_up_slashes("./test_data/simple/abbbc\n"));
         }
     }
 
@@ -521,7 +524,8 @@ mod tests {
         // build a matcher using an explicit -a argument
         let matcher = build_top_level_matcher(&["-true", "-a", "-true"], &mut config).unwrap();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-        assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
+        assert_eq!(deps.get_output_as_string(),
+                   fix_up_slashes("./test_data/simple/abbbc\n"));
     }
 
     #[test]
@@ -536,7 +540,8 @@ mod tests {
             let matcher = build_top_level_matcher(args, &mut config).unwrap();
 
             assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-            assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
+            assert_eq!(deps.get_output_as_string(),
+                       fix_up_slashes("./test_data/simple/abbbc\n"));
         }
 
         let mut config = Config::default();
@@ -567,7 +572,8 @@ mod tests {
         let matcher = build_top_level_matcher(&["-true", "-true"], &mut config).unwrap();
 
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-        assert_eq!(deps.get_output_as_string(), "./test_data/simple/abbbc\n");
+        assert_eq!(deps.get_output_as_string(),
+                   fix_up_slashes("./test_data/simple/abbbc\n"));
     }
 
     #[test]
@@ -583,7 +589,7 @@ mod tests {
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         // two print matchers means doubled output
         assert_eq!(deps.get_output_as_string(),
-                   "./test_data/simple/abbbc\n./test_data/simple/abbbc\n");
+                   fix_up_slashes("./test_data/simple/abbbc\n./test_data/simple/abbbc\n"));
     }
 
     #[test]

@@ -41,6 +41,7 @@ mod tests {
     use find::matchers::tests::get_dir_entry_for;
     use find::matchers::Matcher;
     use find::tests::FakeDependencies;
+    use find::tests::fix_up_slashes;
     use super::*;
 
     #[test]
@@ -50,6 +51,7 @@ mod tests {
         let matcher = Printer::new();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-        assert_eq!("./test_data/simple/abbbc\n", deps.get_output_as_string());
+        assert_eq!(fix_up_slashes("./test_data/simple/abbbc\n"),
+                   deps.get_output_as_string());
     }
 }
