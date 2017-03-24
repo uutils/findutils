@@ -6,7 +6,7 @@
 
 use std;
 use std::error::Error;
-use std::fs::{self, Metadata};
+use std::fs::{File, Metadata};
 use std::io::{stderr, Write};
 use std::time::SystemTime;
 use walkdir::DirEntry;
@@ -22,7 +22,8 @@ pub struct NewerMatcher {
 
 impl NewerMatcher {
     pub fn new(path_to_file: &str) -> Result<NewerMatcher, Box<Error>> {
-        let metadata = fs::metadata(path_to_file)?;
+        let f = File::open(path_to_file)?;
+        let metadata = f.metadata()?;
         Ok(NewerMatcher { given_modification_time: metadata.modified()? })
     }
 

@@ -62,13 +62,10 @@ fn main() {
         // first two args are going to be the path to this executable and
         // the destination_dir we want to write to. Don't write either of those
         // as they'll be non-deterministic.
-        f.write_fmt(format_args!("cwd={}\nargs=\n",
-                                    env::current_dir().unwrap().to_string_lossy()))
+        f.write_fmt(format_args!("cwd={}\nargs={:?}\n",
+                                    env::current_dir().unwrap().to_string_lossy(),
+                                    &args[2..]))
             .expect("failed to write to file");
-        for arg in &args[2..] {
-            f.write_fmt(format_args!("{}\n", arg)).expect("failed to write to file");
-        }
-
     }
     std::process::exit(if config.exit_with_failure { 2 } else { 0 });
 }

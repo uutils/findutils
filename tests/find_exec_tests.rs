@@ -31,7 +31,7 @@ fn find_exec() {
     let deps = FakeDependencies::new();
 
     let rc = find_main(&["find",
-                         &fix_up_slashes("./test_data/simple/subdir"),
+                         "./test_data/simple/subdir",
                          "-type",
                          "f",
                          "-exec",
@@ -53,8 +53,8 @@ fn find_exec() {
     let mut s = String::new();
     f.read_to_string(&mut s).expect("failed to read output file");
     assert_eq!(s,
-               fix_up_slashes(&format!("cwd={}\nargs=\n(\n./test_data/simple/subdir/ABBBC\n-o\n",
-                                       env::current_dir().unwrap().to_string_lossy())));
+               format!("cwd={}\nargs=[\"(\", \"./test_data/simple/subdir/ABBBC\", \"-o\"]\n",
+                       env::current_dir().unwrap().to_string_lossy()));
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn find_execdir() {
     // only look at files because the "size" of a directory is a system (and filesystem)
     // dependent thing and we want these tests to be universal.
     let rc = find_main(&["find",
-                         &fix_up_slashes("./test_data/simple/subdir"),
+                         "./test_data/simple/subdir",
                          "-type",
                          "f",
                          "-execdir",
@@ -87,7 +87,7 @@ fn find_execdir() {
     let mut s = String::new();
     f.read_to_string(&mut s).expect("failed to read output file");
     assert_eq!(s,
-               fix_up_slashes(&format!("cwd={}/test_data/simple/subdir\nargs=\n)\n./ABBBC\n,\n",
-                                       env::current_dir().unwrap().to_string_lossy())));
+               format!("cwd={}/test_data/simple/subdir\nargs=[\")\", \"./ABBBC\", \",\"]\n",
+                       env::current_dir().unwrap().to_string_lossy()));
 
 }
