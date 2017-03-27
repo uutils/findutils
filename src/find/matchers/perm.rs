@@ -10,6 +10,7 @@
 
 use std::error::Error;
 use std::io::{stderr, Write};
+#[cfg(unix)]
 use std::str::FromStr;
 use walkdir::DirEntry;
 
@@ -17,6 +18,7 @@ use find::matchers::{Matcher, MatcherIO};
 
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(unix)]
 pub enum ComparisonType {
     /// mode bits have to match exactly
     Exact,
@@ -27,6 +29,7 @@ pub enum ComparisonType {
     AnyOf,
 }
 
+#[cfg(unix)]
 impl FromStr for ComparisonType {
     type Err = Box<Error>;
     fn from_str(s: &str) -> Result<ComparisonType, Box<Error>> {
@@ -43,6 +46,7 @@ impl FromStr for ComparisonType {
     }
 }
 
+#[cfg(unix)]
 impl ComparisonType {
     fn mode_bits_match(&self, pattern: u32, value: u32) -> bool {
         match *self {
@@ -53,6 +57,7 @@ impl ComparisonType {
     }
 }
 
+#[cfg(unix)]
 mod parsing {
     use regex::Regex;
     use std::error::Error;
@@ -255,10 +260,14 @@ mod parsing {
     }
 }
 
+#[cfg(unix)]
 pub struct PermMatcher {
     pattern: u32,
     comparison_type: ComparisonType,
 }
+
+#[cfg(not(unix))]
+pub struct PermMatcher {}
 
 impl PermMatcher {
     #[cfg(unix)]
@@ -271,8 +280,8 @@ impl PermMatcher {
     }
 
     #[cfg(not(unix))]
-    pub fn new(pattern: &str) -> Result<PermMatcher, Box<Error>> {
-        Err(From("Permission matching is not available on this platform"))
+    pub fn new(_dummy_pattern: &str) -> Result<PermMatcher, Box<Error>> {
+        Err(From::from("Permission matching is not available on this platform"))
     }
 
     pub fn new_box(pattern: &str) -> Result<Box<Matcher>, Box<Error>> {
@@ -300,14 +309,17 @@ impl Matcher for PermMatcher {
     }
 
     #[cfg(not(unix))]
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        stderr().write("Permission matching not available on this platform!");
+    fn matches(&self, _dummy_file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        writeln!(&mut stderr(),
+                 "Permission matching not available on this platform!")
+            .unwrap();
         return false;
     }
 }
 
 
 #[cfg(test)]
+#[cfg(unix)]
 mod tests {
     use find::matchers::Matcher;
     use find::matchers::tests::get_dir_entry_for;
@@ -475,7 +487,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn perm_matches() {
         let file_info = get_dir_entry_for("test_data/simple", "abbbc");
         let deps = FakeDependencies::new();

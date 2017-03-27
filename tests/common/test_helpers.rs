@@ -71,12 +71,24 @@ pub fn path_to_testing_commandline() -> String {
         .to_string()
 }
 
+#[cfg(windows)]
+/// A copy of find::tests::fix_up_slashes.
+/// TODO: find out how to share #[cfg(test)] functions/structs between unit
+/// and integration tests.
+pub fn fix_up_slashes(path: &str) -> String {
+    path.replace("/", "\\")
+}
+
+#[cfg(not(windows))]
+pub fn fix_up_slashes(path: &str) -> String {
+    path.to_string()
+}
 
 /// A copy of find::tests::FakeDependencies.
 /// TODO: find out how to share #[cfg(test)] functions/structs between unit
 /// and integration tests.
 pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
-    for wrapped_dir_entry in WalkDir::new(directory) {
+    for wrapped_dir_entry in WalkDir::new(fix_up_slashes(directory)) {
         let dir_entry = wrapped_dir_entry.unwrap();
         if dir_entry.file_name().to_string_lossy() == filename {
             return dir_entry;

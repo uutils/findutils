@@ -44,8 +44,8 @@ fn matching_executes_code() {
     let mut s = String::new();
     f.read_to_string(&mut s).expect("failed to read output file");
     assert_eq!(s,
-               format!("cwd={}\nargs=[\"abc\", \"test_data/simple/abbbc\", \"xyz\"]\n",
-                       env::current_dir().unwrap().to_string_lossy()));
+               fix_up_slashes(&format!("cwd={}\nargs=\nabc\ntest_data/simple/abbbc\nxyz\n",
+                                       env::current_dir().unwrap().to_string_lossy())));
 }
 
 #[test]
@@ -66,8 +66,8 @@ fn matching_executes_code_in_files_directory() {
     let mut s = String::new();
     f.read_to_string(&mut s).expect("failed to read output file");
     assert_eq!(s,
-               format!("cwd={}/test_data/simple\nargs=[\"abc\", \"./abbbc\", \"xyz\"]\n",
-                       env::current_dir().unwrap().to_string_lossy()));
+               fix_up_slashes(&format!("cwd={}/test_data/simple\nargs=\nabc\n./abbbc\nxyz\n",
+                                       env::current_dir().unwrap().to_string_lossy())));
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn matching_fails_if_executable_fails() {
     let mut s = String::new();
     f.read_to_string(&mut s).expect("failed to read output file");
     assert_eq!(s,
-               format!("cwd={}/test_data/simple\nargs=[\"--exit_with_failure\", \"abc\", \
-                        \"./abbbc\", \"xyz\"]\n",
-                       env::current_dir().unwrap().to_string_lossy()));
+               fix_up_slashes(&format!("cwd={}/test_data/simple\nargs=\n--exit_with_failure\nabc\n.\
+                                        /abbbc\nxyz\n",
+                                       env::current_dir().unwrap().to_string_lossy())));
 }
