@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+mod delete;
 pub mod exec;
 mod logical_matchers;
 mod name;
@@ -224,6 +225,11 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(type_matcher::TypeMatcher::new_box(args[i])?)
+            }
+            "-delete" => {
+                // -delete implicitly requires -depth
+                config.depth_first = true;
+                Some(delete::DeleteMatcher::new_box())
             }
             "-newer" => {
                 if i >= args.len() - 1 {

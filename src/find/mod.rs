@@ -164,8 +164,9 @@ Early alpha implementation. Currently the only expressions supported are
  -name case-sensitive_filename_pattern
  -iname case-insensitive_filename_pattern
  -type type_char
-    currently type_char can only be f (for file) or d (for directory) 
+    currently type_char can only be f (for file) or d (for directory)
  -size [+-]N[bcwkMG]
+ -delete
  -prune
  -not
  -a
@@ -183,8 +184,8 @@ Early alpha implementation. Currently the only expressions supported are
  -perm [-/]{{octal|u=rwx,go=w}}
  -newer path_to_file
  -exec[dir] executable [args] [{{}}] [more args] ;
- -sorted 
-    a non-standard extension that sorts directory contents by name before 
+ -sorted
+    a non-standard extension that sorts directory contents by name before
     processing them. Less efficient, but allows for deterministic output.
 "
     );
