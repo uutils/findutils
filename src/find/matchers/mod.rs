@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+mod delete;
 pub mod exec;
 mod logical_matchers;
 mod name;
@@ -89,8 +90,8 @@ impl ComparableValue {
     fn matches(&self, value: u64) -> bool {
         match *self {
             ComparableValue::MoreThan(limit) => value > limit,
-            ComparableValue::EqualTo(limit) => value == limit, 
-            ComparableValue::LessThan(limit) => value < limit, 
+            ComparableValue::EqualTo(limit) => value == limit,
+            ComparableValue::LessThan(limit) => value < limit,
         }
     }
 
@@ -98,8 +99,8 @@ impl ComparableValue {
     fn imatches(&self, value: i64) -> bool {
         match *self {
             ComparableValue::MoreThan(limit) => value >= 0 && (value as u64) > limit,
-            ComparableValue::EqualTo(limit) => value >= 0 && (value as u64) == limit, 
-            ComparableValue::LessThan(limit) => value < 0 || (value as u64) < limit, 
+            ComparableValue::EqualTo(limit) => value >= 0 && (value as u64) == limit,
+            ComparableValue::LessThan(limit) => value < 0 || (value as u64) < limit,
         }
     }
 }
@@ -221,6 +222,11 @@ fn build_matcher_tree(args: &[&str],
                 }
                 i += 1;
                 Some(type_matcher::TypeMatcher::new_box(args[i])?)
+            }
+            "-delete" => {
+                // -delete implicitly requires -depth
+                config.depth_first = true;
+                Some(delete::DeleteMatcher::new_box())
             }
             "-newer" => {
                 if i >= args.len() - 1 {
