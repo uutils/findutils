@@ -351,6 +351,10 @@ fn build_matcher_tree(args: &[&str],
                 i += 1;
                 None
             }
+            "-help" | "--help" => {
+                config.help_requested = true;
+                None
+            }
 
             _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
         };
