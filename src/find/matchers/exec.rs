@@ -59,7 +59,7 @@ impl Matcher for SingleExecMatcher {
             if let Some(f) = file_info.path().file_name() {
                 Path::new(".").join(f)
             } else {
-                file_info.path().to_path_buf()
+                Path::new(".").join(file_info.path())
             }
         } else {
             file_info.path().to_path_buf()
@@ -72,7 +72,10 @@ impl Matcher for SingleExecMatcher {
             });
         }
         if self.exec_in_parent_dir {
-            if let Some(parent) = file_info.path().parent() {
+
+            if file_info.path() == Path::new(".") {
+                command.current_dir(file_info.path());
+            } else if let Some(parent) = file_info.path().parent() {
                 command.current_dir(parent);
             }
         }

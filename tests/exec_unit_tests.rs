@@ -18,6 +18,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use tempdir::TempDir;
+use walkdir::WalkDir;
 
 
 use findutils::find::matchers::Matcher;
@@ -67,6 +68,34 @@ fn matching_executes_code_in_files_directory() {
     f.read_to_string(&mut s).expect("failed to read output file");
     assert_eq!(s,
                fix_up_slashes(&format!("cwd={}/test_data/simple\nargs=\nabc\n./abbbc\nxyz\n",
+                                       env::current_dir().unwrap().to_string_lossy())));
+}
+
+#[test]
+/// Running "find . -execdir whatever \;" failed with a No such file or directory error.
+/// It's now fixed, and this is a regression test to check that it stays fixed.
+fn execdir_in_current_directory() {
+
+    let temp_dir = TempDir::new("execdir_in_current_directory").unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    let current_dir_entry = WalkDir::new(".")
+        .into_iter()
+        .next()
+        .expect("iterator was empty")
+        .expect("result wasn't OK");
+    let matcher = SingleExecMatcher::new(&path_to_testing_commandline(),
+                                         &vec![temp_dir_path.as_ref(), "abc", "{}", "xyz"],
+                                         true)
+        .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&current_dir_entry, &mut deps.new_matcher_io()));
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s).expect("failed to read output file");
+    assert_eq!(s,
+               fix_up_slashes(&format!("cwd={}\nargs=\nabc\n./.\nxyz\n",
                                        env::current_dir().unwrap().to_string_lossy())));
 }
 
