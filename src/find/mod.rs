@@ -78,7 +78,8 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     let mut i = 0;
     let mut config = Config::default();
 
-    while i < args.len() && !args[i].starts_with('-') && args[i] != "!" && args[i] != "(" {
+    while i < args.len() && (args[i] == "-" || !args[i].starts_with('-')) && args[i] != "!" &&
+          args[i] != "(" {
         paths.push(args[i].to_string());
         i += 1;
     }
@@ -270,6 +271,24 @@ mod tests {
 
         fn now(&'a self) -> SystemTime {
             self.now
+        }
+    }
+
+    #[test]
+    fn parse_args_handles_single_dash() {
+        // Apparently "-" should be treated as a directory name.
+        let parsed_info = super::parse_args(&["-"]).expect("parsing should succeed");
+        assert_eq!(parsed_info.paths, ["-"]);
+    }
+
+    #[test]
+    fn parse_args_bad_flag() {
+        //
+        let result = super::parse_args(&["-asdadsafsfsadcs"]);
+        if let Err(e) = result {
+            assert_eq!(e.description(), "Unrecognized flag: '-asdadsafsfsadcs'");
+        } else {
+            panic!("parse_args should have returned an error");
         }
     }
 
