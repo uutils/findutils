@@ -73,10 +73,15 @@ impl Matcher for SingleExecMatcher {
         }
         if self.exec_in_parent_dir {
 
-            if file_info.path() == Path::new(".") {
-                command.current_dir(file_info.path());
-            } else if let Some(parent) = file_info.path().parent() {
-                command.current_dir(parent);
+            if let Some(parent) = file_info.path().parent() {
+                if parent == Path::new("") {
+                    command.current_dir(Path::new("."));
+                } else {
+                    command.current_dir(parent);
+                }
+            } else {
+                command.current_dir(Path::new("."));
+
             }
         }
         match command.status() {
