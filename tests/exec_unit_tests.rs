@@ -69,6 +69,7 @@ fn matching_executes_code_in_files_directory() {
     assert_eq!(s,
                fix_up_slashes(&format!("cwd={}/test_data/simple\nargs=\nabc\n./abbbc\nxyz\n",
                                        env::current_dir().unwrap().to_string_lossy())));
+
 }
 
 #[test]
