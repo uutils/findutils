@@ -19,6 +19,7 @@ pub struct Config {
     min_depth: usize,
     max_depth: usize,
     sorted_output: bool,
+    help_requested: bool,
 }
 
 impl Default for Config {
@@ -28,6 +29,7 @@ impl Default for Config {
             min_depth: 0,
             max_depth: usize::max_value(),
             sorted_output: false,
+            help_requested: false,
         }
     }
 }
@@ -135,6 +137,10 @@ fn process_dir<'a>(dir: &str,
 
 fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<u64, Box<Error>> {
     let paths_and_matcher = parse_args(args)?;
+    if paths_and_matcher.config.help_requested {
+        print_help();
+        return Ok(0);
+    }
     let mut found_count: u64 = 0;
     for path in paths_and_matcher.paths {
         found_count += process_dir(&path,
@@ -187,15 +193,6 @@ Early alpha implementation. Currently the only expressions supported are
 /// the name of the executable.
 pub fn find_main<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> i32 {
 
-    for arg in args {
-        match arg.as_ref() {
-            "-help" | "--help" => {
-                print_help();
-                return 0;
-            }
-            _ => (),
-        }
-    }
     match do_find(&args[1..], deps) {
         Ok(_) => 0,
         Err(e) => {
