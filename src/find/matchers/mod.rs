@@ -226,7 +226,7 @@ fn build_matcher_tree(args: &[&str],
             "-delete" => {
                 // -delete implicitly requires -depth
                 config.depth_first = true;
-                Some(delete::DeleteMatcher::new_box())
+                Some(delete::DeleteMatcher::new_box()?)
             }
             "-newer" => {
                 if i >= args.len() - 1 {
