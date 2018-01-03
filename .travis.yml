@@ -18,3 +18,10 @@ branches:
 script:
   - cargo build --verbose
   - cargo test --verbose
+
+after_script: |
+  if [ "$TRAVIS_OS_NAME" = linux -a "$TRAVIS_RUST_VERSION" = stable ]; then
+    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
+    cargo tarpaulin --out Xml
+    bash <(curl -s https://codecov.io/bash)
+  fi
