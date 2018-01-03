@@ -7,39 +7,47 @@
  * file that was distributed with this source code.
  */
 
+use std::env;
 use std::io::{self, stderr, Write};
 use std::fs::{self, FileType};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use walkdir::DirEntry;
 
 use find::matchers::{Matcher, MatcherIO};
 
-pub struct DeleteMatcher;
+pub struct DeleteMatcher {
+    current_dir: PathBuf
+}
 
 impl DeleteMatcher {
-    pub fn new() -> DeleteMatcher {
-        DeleteMatcher
+    pub fn new() -> io::Result<DeleteMatcher> {
+        Ok(DeleteMatcher {
+            current_dir: env::current_dir()?
+        })
     }
 
-    pub fn new_box() -> Box<Matcher> {
-        Box::new(DeleteMatcher::new())
+    pub fn new_box() -> io::Result<Box<Matcher>> {
+        Ok(Box::new(DeleteMatcher::new()?))
     }
 
     fn delete(&self, file_path: &Path, file_type: FileType) -> io::Result<()> {
-        if file_type.is_file() || file_type.is_symlink() {
-            fs::remove_file(file_path)
-        } else if file_type.is_dir() {
+        if file_type.is_dir() {
             fs::remove_dir(file_path)
         } else {
-            unimplemented!() // TODO: not sure what find does for block devices, etc.
+            fs::remove_file(file_path)
         }
     }
 }
 
 impl Matcher for DeleteMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        match self.delete(file_info.path(), file_info.file_type()) {
+        let path = file_info.path();
+        if path == self.current_dir {
+            return false;
+        }
+
+        match self.delete(path, file_info.file_type()) {
             Ok(_) => true,
             Err(f) => {
                 writeln!(&mut stderr(),
