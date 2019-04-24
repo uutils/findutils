@@ -12,7 +12,6 @@ use std::io::{Write, stderr, stdout};
 use std::rc::Rc;
 use std::time::SystemTime;
 use walkdir::WalkDir;
-use walkdir::WalkDirIterator;
 
 pub struct Config {
     depth_first: bool,
@@ -108,7 +107,7 @@ fn process_dir<'a>(dir: &str,
         .max_depth(config.max_depth)
         .min_depth(config.min_depth);
     if config.sorted_output {
-        walkdir = walkdir.sort_by(|a, b| a.cmp(b));
+        walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }
 
     // Slighly yucky loop handling here :-(. See docs for
