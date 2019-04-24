@@ -290,7 +290,7 @@ fn build_matcher_tree(args: &[&str],
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!("expected an expression after {}", args[i])));
                 }
-                invert_next_matcher = true;
+                invert_next_matcher = !invert_next_matcher;
                 None
             }
             "-a" => {
@@ -454,6 +454,28 @@ mod tests {
             } else {
                 panic!("parsing arugment lists that end in -not should fail");
             }
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_not_double_negation() {
+        for arg in &["-not", "!"] {
+            let abbbc_lower = get_dir_entry_for("./test_data/simple", "abbbc");
+            let mut config = Config::default();
+            let deps = FakeDependencies::new();
+
+            let matcher = build_top_level_matcher(&[arg, arg, "-name", "abbbc"], &mut config)
+                .unwrap();
+
+            assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
+            assert_eq!(deps.get_output_as_string(),
+                       fix_up_slashes("./test_data/simple/abbbc\n"));
+
+            config = Config::default();
+            let matcher = build_top_level_matcher(&[arg, arg, "-name", "doesntexist"], &mut config)
+                .unwrap();
+
+            assert!(!matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
         }
     }
 
