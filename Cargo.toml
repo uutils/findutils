@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["mcharsley <mcharsley@google.com>"]
 
 [dependencies]
-glob = "0.2"
+glob = "0.3"
 # Current release of walkdir doesn't support depth-first operation. While we 
 # wait for https://github.com/BurntSushi/walkdir/pull/19 to be accepted and a
 # new release made, let's access my branch directly.
