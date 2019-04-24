@@ -14,7 +14,7 @@ use std::iter::Iterator;
 use std::path::PathBuf;
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
@@ -341,10 +341,10 @@ impl Matcher for NotMatcher {
 
 mod tests {
     use walkdir::DirEntry;
-    use find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::tests::get_dir_entry_for;
     use super::*;
-    use find::matchers::{Matcher, MatcherIO};
-    use find::tests::FakeDependencies;
+    use crate::find::matchers::{Matcher, MatcherIO};
+    use crate::find::tests::FakeDependencies;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}

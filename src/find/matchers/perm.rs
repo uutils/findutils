@@ -14,7 +14,7 @@ use std::io::{stderr, Write};
 use std::str::FromStr;
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -321,9 +321,9 @@ impl Matcher for PermMatcher {
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
-    use find::matchers::Matcher;
-    use find::matchers::tests::get_dir_entry_for;
-    use find::tests::FakeDependencies;
+    use crate::find::matchers::Matcher;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::tests::FakeDependencies;
     use super::*;
     use super::parsing;
 

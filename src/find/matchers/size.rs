@@ -9,7 +9,7 @@ use std::io::{stderr, Write};
 use std::str::FromStr;
 use walkdir::DirEntry;
 
-use find::matchers::{ComparableValue, Matcher, MatcherIO};
+use super::{ComparableValue, Matcher, MatcherIO};
 
 #[derive(Clone, Copy, Debug)]
 enum Unit {
@@ -107,9 +107,9 @@ impl Matcher for SizeMatcher {
 
 #[cfg(test)]
 mod tests {
-    use find::matchers::{ComparableValue, Matcher};
-    use find::matchers::tests::get_dir_entry_for;
-    use find::tests::FakeDependencies;
+    use crate::find::matchers::{ComparableValue, Matcher};
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::tests::FakeDependencies;
     use super::*;
     // need to explicitly use non-pub members
     use super::{byte_size_to_unit_size, Unit};

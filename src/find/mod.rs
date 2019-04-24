@@ -212,7 +212,7 @@ mod tests {
     use std::vec::Vec;
     use tempdir::TempDir;
 
-    use find::matchers::MatcherIO;
+    use crate::find::matchers::MatcherIO;
 
     use super::*;
 

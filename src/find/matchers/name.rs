@@ -8,7 +8,7 @@ use glob::Pattern;
 use glob::PatternError;
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 /// This matcher makes a case-sensitive comparison of the name against a
 /// shell wildcard pattern. See `glob::Pattern` for details on the exact
@@ -63,9 +63,9 @@ impl super::Matcher for CaselessNameMatcher {
 #[cfg(test)]
 
 mod tests {
-    use find::matchers::Matcher;
-    use find::matchers::tests::get_dir_entry_for;
-    use find::tests::FakeDependencies;
+    use crate::find::matchers::Matcher;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::tests::FakeDependencies;
     use super::*;
 
 

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::Command;
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 enum Arg {
     Filename,

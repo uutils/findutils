@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use walkdir::DirEntry;
 
-use find::{Config, Dependencies};
+use super::{Config, Dependencies};
 
 
 
@@ -378,9 +378,9 @@ fn build_matcher_tree(args: &[&str],
 #[cfg(test)]
 mod tests {
     use walkdir::{DirEntry, WalkDir};
-    use find::Config;
-    use find::tests::fix_up_slashes;
-    use find::tests::FakeDependencies;
+    use crate::find::Config;
+    use crate::find::tests::fix_up_slashes;
+    use crate::find::tests::FakeDependencies;
     use super::*;
 
 

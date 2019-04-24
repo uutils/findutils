@@ -6,7 +6,7 @@
 
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer;
@@ -38,10 +38,10 @@ impl Matcher for Printer {
 #[cfg(test)]
 
 mod tests {
-    use find::matchers::tests::get_dir_entry_for;
-    use find::matchers::Matcher;
-    use find::tests::FakeDependencies;
-    use find::tests::fix_up_slashes;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::Matcher;
+    use crate::find::tests::FakeDependencies;
+    use crate::find::tests::fix_up_slashes;
     use super::*;
 
     #[test]

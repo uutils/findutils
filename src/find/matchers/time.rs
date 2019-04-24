@@ -11,7 +11,7 @@ use std::io::{stderr, Write};
 use std::time::SystemTime;
 use walkdir::DirEntry;
 
-use find::matchers::{ComparableValue, Matcher, MatcherIO};
+use super::{ComparableValue, Matcher, MatcherIO};
 
 const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 
@@ -147,9 +147,9 @@ mod tests {
     use tempdir::TempDir;
     use walkdir::DirEntry;
 
-    use find::matchers::{ComparableValue, Matcher};
-    use find::matchers::tests::get_dir_entry_for;
-    use find::tests::FakeDependencies;
+    use crate::find::matchers::{ComparableValue, Matcher};
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::tests::FakeDependencies;
     use super::*;
 
     #[test]
