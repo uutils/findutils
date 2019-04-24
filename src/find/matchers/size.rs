@@ -32,9 +32,11 @@ impl FromStr for Unit {
             "M" => Unit::MebiByte,
             "G" => Unit::GibiByte,
             _ => {
-                return Err(From::from(format!("Invalid suffix {} for -size. Only allowed \
-                                               values are <nothing>, b, c, w, k, M or G",
-                                              s)));
+                return Err(From::from(format!(
+                    "Invalid suffix {} for -size. Only allowed \
+                     values are <nothing>, b, c, w, k, M or G",
+                    s
+                )));
             }
         })
     }
@@ -70,18 +72,20 @@ pub struct SizeMatcher {
 }
 
 impl SizeMatcher {
-    pub fn new(value_to_match: ComparableValue,
-               suffix_string: &str)
-               -> Result<SizeMatcher, Box<Error>> {
+    pub fn new(
+        value_to_match: ComparableValue,
+        suffix_string: &str,
+    ) -> Result<SizeMatcher, Box<Error>> {
         Ok(SizeMatcher {
             unit: suffix_string.parse()?,
             value_to_match: value_to_match,
         })
     }
 
-    pub fn new_box(value_to_match: ComparableValue,
-                   suffix_string: &str)
-                   -> Result<Box<Matcher>, Box<Error>> {
+    pub fn new_box(
+        value_to_match: ComparableValue,
+        suffix_string: &str,
+    ) -> Result<Box<Matcher>, Box<Error>> {
         Ok(Box::new(SizeMatcher::new(value_to_match, suffix_string)?))
     }
 }
@@ -89,16 +93,17 @@ impl SizeMatcher {
 impl Matcher for SizeMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         match file_info.metadata() {
-            Ok(metadata) => {
-                self.value_to_match
-                    .matches(byte_size_to_unit_size(self.unit, metadata.len()))
-            }
+            Ok(metadata) => self
+                .value_to_match
+                .matches(byte_size_to_unit_size(self.unit, metadata.len())),
             Err(e) => {
-                writeln!(&mut stderr(),
-                         "Error getting file size for {}: {}",
-                         file_info.path().to_string_lossy(),
-                         e)
-                    .unwrap();
+                writeln!(
+                    &mut stderr(),
+                    "Error getting file size for {}: {}",
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
                 false
             }
         }
@@ -107,10 +112,10 @@ impl Matcher for SizeMatcher {
 
 #[cfg(test)]
 mod tests {
-    use crate::find::matchers::{ComparableValue, Matcher};
-    use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::tests::FakeDependencies;
     use super::*;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::{ComparableValue, Matcher};
+    use crate::find::tests::FakeDependencies;
     // need to explicitly use non-pub members
     use super::{byte_size_to_unit_size, Unit};
 
@@ -125,8 +130,10 @@ mod tests {
         assert_eq!(byte_size_to_unit_size(Unit::Block, 1025), 3);
         assert_eq!(byte_size_to_unit_size(Unit::KibiByte, 1025), 2);
         assert_eq!(byte_size_to_unit_size(Unit::MebiByte, 1024 * 1024 + 1), 2);
-        assert_eq!(byte_size_to_unit_size(Unit::GibiByte, 1024 * 1024 * 1024 + 1),
-                   2);
+        assert_eq!(
+            byte_size_to_unit_size(Unit::GibiByte, 1024 * 1024 * 1024 + 1),
+            2
+        );
     }
 
     #[test]
@@ -136,18 +143,24 @@ mod tests {
         assert_eq!(byte_size_to_unit_size("b".parse().unwrap(), 513), 2);
         assert_eq!(byte_size_to_unit_size("".parse().unwrap(), 513), 2);
         assert_eq!(byte_size_to_unit_size("k".parse().unwrap(), 1025), 2);
-        assert_eq!(byte_size_to_unit_size("M".parse().unwrap(), 1024 * 1024 + 1),
-                   2);
-        assert_eq!(byte_size_to_unit_size("G".parse().unwrap(), 2024 * 1024 * 1024 + 1),
-                   2);
+        assert_eq!(
+            byte_size_to_unit_size("M".parse().unwrap(), 1024 * 1024 + 1),
+            2
+        );
+        assert_eq!(
+            byte_size_to_unit_size("G".parse().unwrap(), 2024 * 1024 * 1024 + 1),
+            2
+        );
     }
 
     #[test]
     fn size_matcher_bad_unit() {
         if let Err(e) = SizeMatcher::new(ComparableValue::EqualTo(2), "xyz") {
-            assert!(e.description().contains("Invalid suffix") && e.description().contains("xyz"),
-                    "bad description: {}",
-                    e);
+            assert!(
+                e.description().contains("Invalid suffix") && e.description().contains("xyz"),
+                "bad description: {}",
+                e
+            );
         } else {
             panic!("parsing a unit string should fail");
         }
@@ -161,9 +174,13 @@ mod tests {
         let equal_to_1_blocks = SizeMatcher::new(ComparableValue::EqualTo(1), "b").unwrap();
         let deps = FakeDependencies::new();
 
-        assert!(!equal_to_2_blocks.matches(&file_info, &mut deps.new_matcher_io()),
-                "512-byte file should not match size of 2 blocks");
-        assert!(equal_to_1_blocks.matches(&file_info, &mut deps.new_matcher_io()),
-                "512-byte file should match size of 1 block");
+        assert!(
+            !equal_to_2_blocks.matches(&file_info, &mut deps.new_matcher_io()),
+            "512-byte file should not match size of 2 blocks"
+        );
+        assert!(
+            equal_to_1_blocks.matches(&file_info, &mut deps.new_matcher_io()),
+            "512-byte file should match size of 1 block"
+        );
     }
 }

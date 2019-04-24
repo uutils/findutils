@@ -21,8 +21,9 @@ struct Config {
 }
 
 fn open_file(destination_dir: &str) -> File {
-    let mut file_number =
-        fs::read_dir(destination_dir).expect("failed to read destination").count();
+    let mut file_number = fs::read_dir(destination_dir)
+        .expect("failed to read destination")
+        .count();
 
     loop {
         file_number += 1;
@@ -31,7 +32,8 @@ fn open_file(destination_dir: &str) -> File {
         if let Ok(f) = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(file_path) {
+            .open(file_path)
+        {
             return f;
         }
     }
@@ -62,13 +64,15 @@ fn main() {
         // first two args are going to be the path to this executable and
         // the destination_dir we want to write to. Don't write either of those
         // as they'll be non-deterministic.
-        f.write_fmt(format_args!("cwd={}\nargs=\n",
-                                    env::current_dir().unwrap().to_string_lossy()))
-            .expect("failed to write to file");
+        f.write_fmt(format_args!(
+            "cwd={}\nargs=\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+        .expect("failed to write to file");
         for arg in &args[2..] {
-            f.write_fmt(format_args!("{}\n", arg)).expect("failed to write to file");
+            f.write_fmt(format_args!("{}\n", arg))
+                .expect("failed to write to file");
         }
-
     }
     std::process::exit(if config.exit_with_failure { 2 } else { 0 });
 }

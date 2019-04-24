@@ -23,7 +23,9 @@ pub struct NewerMatcher {
 impl NewerMatcher {
     pub fn new(path_to_file: &str) -> Result<NewerMatcher, Box<Error>> {
         let metadata = fs::metadata(path_to_file)?;
-        Ok(NewerMatcher { given_modification_time: metadata.modified()? })
+        Ok(NewerMatcher {
+            given_modification_time: metadata.modified()?,
+        })
     }
 
     pub fn new_box(path_to_file: &str) -> Result<Box<Matcher>, Box<Error>> {
@@ -38,7 +40,10 @@ impl NewerMatcher {
         // and returns an Err (with a duration) otherwise. So if this_time >
         // given_modification_time (in which case we want to return true) then
         // duration_since will return an error.
-        Ok(self.given_modification_time.duration_since(this_time).is_err())
+        Ok(self
+            .given_modification_time
+            .duration_since(this_time)
+            .is_err())
     }
 }
 
@@ -46,11 +51,13 @@ impl Matcher for NewerMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         match self.matches_impl(file_info) {
             Err(e) => {
-                writeln!(&mut stderr(),
-                         "Error getting modification time for {}: {}",
-                         file_info.path().to_string_lossy(),
-                         e)
-                    .unwrap();
+                writeln!(
+                    &mut stderr(),
+                    "Error getting modification time for {}: {}",
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
                 false
             }
             Ok(t) => t,
@@ -86,20 +93,20 @@ impl Matcher for FileTimeMatcher {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         match self.matches_impl(file_info, matcher_io.now()) {
             Err(e) => {
-                writeln!(&mut stderr(),
-                         "Error getting {:?} time for {}: {}",
-                         self.file_time_type,
-                         file_info.path().to_string_lossy(),
-                         e)
-                    .unwrap();
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} time for {}: {}",
+                    self.file_time_type,
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
                 false
             }
             Ok(t) => t,
         }
     }
 }
-
-
 
 impl FileTimeMatcher {
     /// Impementation of matches that returns a result, allowing use to use try!
@@ -147,10 +154,10 @@ mod tests {
     use tempdir::TempDir;
     use walkdir::DirEntry;
 
-    use crate::find::matchers::{ComparableValue, Matcher};
-    use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::tests::FakeDependencies;
     use super::*;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::{ComparableValue, Matcher};
+    use crate::find::tests::FakeDependencies;
 
     #[test]
     fn newer_matcher() {
@@ -170,12 +177,18 @@ mod tests {
         let matcher_for_old = NewerMatcher::new(&old_file.path().to_string_lossy()).unwrap();
         let deps = FakeDependencies::new();
 
-        assert!(!matcher_for_new.matches(&old_file, &mut deps.new_matcher_io()),
-                "old_file shouldn't be newer than new_dir");
-        assert!(matcher_for_old.matches(&new_file, &mut deps.new_matcher_io()),
-                "new_file should be newer than old_dir");
-        assert!(!matcher_for_old.matches(&old_file, &mut deps.new_matcher_io()),
-                "old_file shouldn't be newer than itself");
+        assert!(
+            !matcher_for_new.matches(&old_file, &mut deps.new_matcher_io()),
+            "old_file shouldn't be newer than new_dir"
+        );
+        assert!(
+            matcher_for_old.matches(&new_file, &mut deps.new_matcher_io()),
+            "new_file should be newer than old_dir"
+        );
+        assert!(
+            !matcher_for_old.matches(&old_file, &mut deps.new_matcher_io()),
+            "old_file shouldn't be newer than itself"
+        );
     }
 
     #[test]
@@ -185,67 +198,96 @@ mod tests {
 
         let files_mtime = file.metadata().unwrap().modified().unwrap();
 
-        let exactly_one_day_matcher = FileTimeMatcher::new(FileTimeType::Modified,
-                                                           ComparableValue::EqualTo(1));
-        let more_than_one_day_matcher = FileTimeMatcher::new(FileTimeType::Modified,
-                                                             ComparableValue::MoreThan(1));
-        let less_than_one_day_matcher = FileTimeMatcher::new(FileTimeType::Modified,
-                                                             ComparableValue::LessThan(1));
-        let zero_day_matcher = FileTimeMatcher::new(FileTimeType::Modified,
-                                                    ComparableValue::EqualTo(0));
+        let exactly_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1));
+        let more_than_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+        let less_than_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1));
+        let zero_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0));
 
         // set "now" to 2 days after the file was modified.
         let mut deps = FakeDependencies::new();
         deps.set_time(files_mtime + Duration::new(2 * super::SECONDS_PER_DAY as u64, 0));
-        assert!(!exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "2 day old file shouldn't match exactly 1 day old");
-        assert!(more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "2 day old file should match more than 1 day old");
-        assert!(!less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "2 day old file shouldn't match less than 1 day old");
-        assert!(!zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "2 day old file shouldn't match exactly 0 days old");
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file should match more than 1 day old"
+        );
+        assert!(
+            !less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file shouldn't match less than 1 day old"
+        );
+        assert!(
+            !zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file shouldn't match exactly 0 days old"
+        );
 
         // set "now" to 1 day after the file was modified.
         deps.set_time(files_mtime + Duration::new((3 * super::SECONDS_PER_DAY / 2) as u64, 0));
-        assert!(exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "1 day old file should match exactly 1 day old");
-        assert!(!more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "1 day old file shouldn't match more than 1 day old");
-        assert!(!less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "1 day old file shouldn't match less than 1 day old");
-        assert!(!zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "1 day old file shouldn't match exactly 0 days old");
+        assert!(
+            exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file should match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file shouldn't match more than 1 day old"
+        );
+        assert!(
+            !less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file shouldn't match less than 1 day old"
+        );
+        assert!(
+            !zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file shouldn't match exactly 0 days old"
+        );
 
         // set "now" to exactly the same time file was modified.
         deps.set_time(files_mtime);
-        assert!(!exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "0 day old file shouldn't match exactly 1 day old");
-        assert!(!more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "0 day old file shouldn't match more than 1 day old");
-        assert!(less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "0 day old file should match less than 1 day old");
-        assert!(zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "0 day old file should match exactly 0 days old");
-
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file shouldn't match more than 1 day old"
+        );
+        assert!(
+            less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file should match less than 1 day old"
+        );
+        assert!(
+            zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file should match exactly 0 days old"
+        );
 
         // set "now" to a second before the file was modified (e.g. the file was
         // modified after find started running
         deps.set_time(files_mtime - Duration::new(1 as u64, 0));
-        assert!(!exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "future-modified file shouldn'1 match exactly 1 day old");
-        assert!(!more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "future-modified file shouldn't match more than 1 day old");
-        assert!(less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "future-modified file should match less than 1 day old");
-        assert!(!zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-                "future-modified file shouldn't match exactly 0 days old");
-
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn'1 match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn't match more than 1 day old"
+        );
+        assert!(
+            less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file should match less than 1 day old"
+        );
+        assert!(
+            !zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn't match exactly 0 days old"
+        );
     }
 
     #[test]
     fn file_time_matcher_modified_created_accessed() {
-
         let temp_dir = TempDir::new("file_time_matcher_modified_created_accessed").unwrap();
 
         // No easy way to independently set file times. So create it - setting creation time
@@ -266,11 +308,13 @@ mod tests {
         // write to the file - changing the modifiation and potentially the accessed time
         let mut buffer = [0; 10];
         {
-            let mut f =
-                OpenOptions::new().read(true).write(true).open(&foo_path).expect("open temp file");
+            let mut f = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&foo_path)
+                .expect("open temp file");
             let _ = f.write(&mut buffer);
         }
-
 
         thread::sleep(Duration::from_secs(2));
         // read the file agaion - potentially changing accessed time
@@ -302,22 +346,28 @@ mod tests {
     }
 
     /// helper function for file_time_matcher_modified_created_accessed
-    fn test_matcher_for_file_time_type(file_info: &DirEntry,
-                                       file_time: SystemTime,
-                                       file_time_type: FileTimeType) {
+    fn test_matcher_for_file_time_type(
+        file_info: &DirEntry,
+        file_time: SystemTime,
+        file_time_type: FileTimeType,
+    ) {
         {
             let matcher = FileTimeMatcher::new(file_time_type, ComparableValue::EqualTo(0));
 
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time);
-            assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()),
-                    "{:?} time matcher should match",
-                    file_time_type);
+            assert!(
+                matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                "{:?} time matcher should match",
+                file_time_type
+            );
 
             deps.set_time(file_time - Duration::from_secs(1));
-            assert!(!matcher.matches(&file_info, &mut deps.new_matcher_io()),
-                    "{:?} time matcher shouldn't match a second before",
-                    file_time_type);
+            assert!(
+                !matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                "{:?} time matcher shouldn't match a second before",
+                file_time_type
+            );
         }
     }
 }

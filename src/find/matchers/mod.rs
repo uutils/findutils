@@ -22,8 +22,6 @@ use walkdir::DirEntry;
 
 use super::{Config, Dependencies};
 
-
-
 /// Struct holding references to outputs and any inputs that can't be derived
 /// from the file/directory info.
 pub struct MatcherIO<'a> {
@@ -89,8 +87,8 @@ impl ComparableValue {
     fn matches(&self, value: u64) -> bool {
         match *self {
             ComparableValue::MoreThan(limit) => value > limit,
-            ComparableValue::EqualTo(limit) => value == limit, 
-            ComparableValue::LessThan(limit) => value < limit, 
+            ComparableValue::EqualTo(limit) => value == limit,
+            ComparableValue::LessThan(limit) => value < limit,
         }
     }
 
@@ -98,18 +96,18 @@ impl ComparableValue {
     fn imatches(&self, value: i64) -> bool {
         match *self {
             ComparableValue::MoreThan(limit) => value >= 0 && (value as u64) > limit,
-            ComparableValue::EqualTo(limit) => value >= 0 && (value as u64) == limit, 
-            ComparableValue::LessThan(limit) => value < 0 || (value as u64) < limit, 
+            ComparableValue::EqualTo(limit) => value >= 0 && (value as u64) == limit,
+            ComparableValue::LessThan(limit) => value < 0 || (value as u64) < limit,
         }
     }
 }
 
-
 /// Builds a single `AndMatcher` containing the Matcher objects corresponding
 /// to the passed in predicate arguments.
-pub fn build_top_level_matcher(args: &[&str],
-                               config: &mut Config)
-                               -> Result<Box<Matcher>, Box<Error>> {
+pub fn build_top_level_matcher(
+    args: &[&str],
+    config: &mut Config,
+) -> Result<Box<Matcher>, Box<Error>> {
     let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, false))?;
 
     // if the matcher doesn't have any side-effects, then we default to printing
@@ -130,18 +128,18 @@ fn are_more_expressions(args: &[&str], index: usize) -> bool {
 fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usize, Box<Error>> {
     match value_as_string.parse::<usize>() {
         Ok(val) => Ok(val),
-        _ => {
-            Err(From::from(format!("Expected a positive decimal integer argument to {}, but got \
-                                    `{}'",
-                                   option_name,
-                                   value_as_string)))
-        }
+        _ => Err(From::from(format!(
+            "Expected a positive decimal integer argument to {}, but got \
+             `{}'",
+            option_name, value_as_string
+        ))),
     }
 }
 
-fn convert_arg_to_comparable_value(option_name: &str,
-                                   value_as_string: &str)
-                                   -> Result<ComparableValue, Box<Error>> {
+fn convert_arg_to_comparable_value(
+    option_name: &str,
+    value_as_string: &str,
+) -> Result<ComparableValue, Box<Error>> {
     let re = Regex::new(r"([+-]?)(\d+)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
@@ -152,42 +150,47 @@ fn convert_arg_to_comparable_value(option_name: &str,
             });
         }
     }
-    Err(From::from(format!("Expected a decimal integer (with optional + or - prefix) argument \
-                            to {}, but got `{}'",
-                           option_name,
-                           value_as_string)))
+    Err(From::from(format!(
+        "Expected a decimal integer (with optional + or - prefix) argument \
+         to {}, but got `{}'",
+        option_name, value_as_string
+    )))
 }
 
-fn convert_arg_to_comparable_value_and_suffix(option_name: &str,
-                                              value_as_string: &str)
-                                              -> Result<(ComparableValue, String), Box<Error>> {
+fn convert_arg_to_comparable_value_and_suffix(
+    option_name: &str,
+    value_as_string: &str,
+) -> Result<(ComparableValue, String), Box<Error>> {
     let re = Regex::new(r"([+-]?)(\d+)(.*)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
-            return Ok((match &groups[1] {
-                           "+" => ComparableValue::MoreThan(val),
-                           "-" => ComparableValue::LessThan(val),
-                           _ => ComparableValue::EqualTo(val),
-                       },
-                       groups[3].to_string()));
+            return Ok((
+                match &groups[1] {
+                    "+" => ComparableValue::MoreThan(val),
+                    "-" => ComparableValue::LessThan(val),
+                    _ => ComparableValue::EqualTo(val),
+                },
+                groups[3].to_string(),
+            ));
         }
     }
-    Err(From::from(format!("Expected a decimal integer (with optional + or - prefix) and \
-                            (optional suffix) argument to {}, but got `{}'",
-                           option_name,
-                           value_as_string)))
+    Err(From::from(format!(
+        "Expected a decimal integer (with optional + or - prefix) and \
+         (optional suffix) argument to {}, but got `{}'",
+        option_name, value_as_string
+    )))
 }
-
 
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consits of a tuple containing the new index into the args array to use (if
 /// called recursively) and the resulting matcher.
-fn build_matcher_tree(args: &[&str],
-                      config: &mut Config,
-                      arg_index: usize,
-                      expecting_bracket: bool)
-                      -> Result<(usize, Box<Matcher>), Box<Error>> {
+fn build_matcher_tree(
+    args: &[&str],
+    config: &mut Config,
+    arg_index: usize,
+    expecting_bracket: bool,
+) -> Result<(usize, Box<Matcher>), Box<Error>> {
     let mut top_level_matcher = logical_matchers::ListMatcherBuilder::new();
 
     // can't use getopts for a variety or reasons:
@@ -249,8 +252,8 @@ fn build_matcher_tree(args: &[&str],
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                let (size, unit) = convert_arg_to_comparable_value_and_suffix(args[i],
-                                                                              args[i + 1])?;
+                let (size, unit) =
+                    convert_arg_to_comparable_value_and_suffix(args[i], args[i + 1])?;
                 i += 1;
                 Some(size::SizeMatcher::new_box(size, &unit)?)
             }
@@ -259,10 +262,11 @@ fn build_matcher_tree(args: &[&str],
                 while arg_index < args.len() && args[arg_index] != ";" {
                     if args[arg_index] == "+" {
                         // MultiExecMatcher isn't written yet
-                        return Err(From::from(format!("{} [args...] + isn't supported yet. \
-                                                       Only {} [args...] ;",
-                                                      args[i],
-                                                      args[i])));
+                        return Err(From::from(format!(
+                            "{} [args...] + isn't supported yet. \
+                             Only {} [args...] ;",
+                            args[i], args[i]
+                        )));
                     }
                     arg_index += 1;
                 }
@@ -274,9 +278,11 @@ fn build_matcher_tree(args: &[&str],
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
-                Some(exec::SingleExecMatcher::new_box(executable,
-                                                      exec_args,
-                                                      expression == "-execdir")?)
+                Some(exec::SingleExecMatcher::new_box(
+                    executable,
+                    exec_args,
+                    expression == "-execdir",
+                )?)
             }
             "-perm" => {
                 if i >= args.len() - 1 {
@@ -288,28 +294,40 @@ fn build_matcher_tree(args: &[&str],
             "-prune" => Some(prune::PruneMatcher::new_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                    return Err(From::from(format!(
+                        "expected an expression after {}",
+                        args[i]
+                    )));
                 }
                 invert_next_matcher = !invert_next_matcher;
                 None
             }
             "-a" => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                    return Err(From::from(format!(
+                        "expected an expression after {}",
+                        args[i]
+                    )));
                 }
                 top_level_matcher.check_new_and_condition()?;
                 None
             }
             "-or" | "-o" => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                    return Err(From::from(format!(
+                        "expected an expression after {}",
+                        args[i]
+                    )));
                 }
                 top_level_matcher.new_or_condition(args[i])?;
                 None
             }
             "," => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!("expected an expression after {}", args[i])));
+                    return Err(From::from(format!(
+                        "expected an expression after {}",
+                        args[i]
+                    )));
                 }
                 top_level_matcher.new_list_condition()?;
                 None
@@ -360,7 +378,8 @@ fn build_matcher_tree(args: &[&str],
         };
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
-                top_level_matcher.new_and_condition(logical_matchers::NotMatcher::new_box(submatcher));
+                top_level_matcher
+                    .new_and_condition(logical_matchers::NotMatcher::new_box(submatcher));
                 invert_next_matcher = false;
             } else {
                 top_level_matcher.new_and_condition(submatcher);
@@ -369,21 +388,21 @@ fn build_matcher_tree(args: &[&str],
         i += 1;
     }
     if expecting_bracket {
-        return Err(From::from("invalid expression; I was expecting to find a ')' somewhere but \
-                               did not see one."));
+        return Err(From::from(
+            "invalid expression; I was expecting to find a ')' somewhere but \
+             did not see one.",
+        ));
     }
     Ok((i, top_level_matcher.build()))
 }
 
 #[cfg(test)]
 mod tests {
-    use walkdir::{DirEntry, WalkDir};
-    use crate::find::Config;
+    use super::*;
     use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
-    use super::*;
-
-
+    use crate::find::Config;
+    use walkdir::{DirEntry, WalkDir};
 
     /// Helper function for tests to get a DirEntry object. directory should
     /// probably be a string starting with "test_data/" (cargo's tests run with
@@ -409,8 +428,10 @@ mod tests {
 
         assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
         assert!(!matcher.matches(&abbbc_upper, &mut deps.new_matcher_io()));
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/simple/abbbc\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/simple/abbbc\n")
+        );
     }
 
     #[test]
@@ -424,8 +445,10 @@ mod tests {
 
         assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&abbbc_upper, &mut deps.new_matcher_io()));
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n")
+        );
     }
 
     #[test]
@@ -435,12 +458,14 @@ mod tests {
             let mut config = Config::default();
             let deps = FakeDependencies::new();
 
-            let matcher = build_top_level_matcher(&[arg, "-name", "doesntexist"], &mut config)
-                .unwrap();
+            let matcher =
+                build_top_level_matcher(&[arg, "-name", "doesntexist"], &mut config).unwrap();
 
             assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
-            assert_eq!(deps.get_output_as_string(),
-                       fix_up_slashes("./test_data/simple/abbbc\n"));
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/abbbc\n")
+            );
         }
     }
 
@@ -464,16 +489,18 @@ mod tests {
             let mut config = Config::default();
             let deps = FakeDependencies::new();
 
-            let matcher = build_top_level_matcher(&[arg, arg, "-name", "abbbc"], &mut config)
-                .unwrap();
+            let matcher =
+                build_top_level_matcher(&[arg, arg, "-name", "abbbc"], &mut config).unwrap();
 
             assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
-            assert_eq!(deps.get_output_as_string(),
-                       fix_up_slashes("./test_data/simple/abbbc\n"));
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/abbbc\n")
+            );
 
             config = Config::default();
-            let matcher = build_top_level_matcher(&[arg, arg, "-name", "doesntexist"], &mut config)
-                .unwrap();
+            let matcher =
+                build_top_level_matcher(&[arg, arg, "-name", "doesntexist"], &mut config).unwrap();
 
             assert!(!matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
         }
@@ -550,24 +577,30 @@ mod tests {
         // build a matcher using an explicit -a argument
         let matcher = build_top_level_matcher(&["-true", "-a", "-true"], &mut config).unwrap();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/simple/abbbc\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/simple/abbbc\n")
+        );
     }
 
     #[test]
     fn build_top_level_matcher_or_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
-        for args in &[["-true", "-o", "-false"],
-                      ["-false", "-o", "-true"],
-                      ["-true", "-o", "-true"]] {
+        for args in &[
+            ["-true", "-o", "-false"],
+            ["-false", "-o", "-true"],
+            ["-true", "-o", "-true"],
+        ] {
             let mut config = Config::default();
             let deps = FakeDependencies::new();
 
             let matcher = build_top_level_matcher(args, &mut config).unwrap();
 
             assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-            assert_eq!(deps.get_output_as_string(),
-                       fix_up_slashes("./test_data/simple/abbbc\n"));
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/abbbc\n")
+            );
         }
 
         let mut config = Config::default();
@@ -582,7 +615,11 @@ mod tests {
     #[test]
     fn build_top_level_matcher_and_works() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
-        for args in &[["-true", "-false"], ["-false", "-true"], ["-false", "-false"]] {
+        for args in &[
+            ["-true", "-false"],
+            ["-false", "-true"],
+            ["-false", "-false"],
+        ] {
             let mut config = Config::default();
             let deps = FakeDependencies::new();
 
@@ -598,8 +635,10 @@ mod tests {
         let matcher = build_top_level_matcher(&["-true", "-true"], &mut config).unwrap();
 
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/simple/abbbc\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/simple/abbbc\n")
+        );
     }
 
     #[test]
@@ -614,8 +653,10 @@ mod tests {
         // final matcher returns false, so list matcher should too
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         // two print matchers means doubled output
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/simple/abbbc\n./test_data/simple/abbbc\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/simple/abbbc\n./test_data/simple/abbbc\n")
+        );
     }
 
     #[test]
@@ -719,78 +760,138 @@ mod tests {
 
     #[test]
     fn comparable_value_matches() {
+        assert!(
+            !ComparableValue::LessThan(0).matches(0),
+            "0 should not be less than 0"
+        );
+        assert!(
+            ComparableValue::LessThan(u64::max_value()).matches(0),
+            "0 should be less than max_value"
+        );
+        assert!(
+            !ComparableValue::LessThan(0).matches(u64::max_value()),
+            "max_value should not be less than 0"
+        );
+        assert!(
+            !ComparableValue::LessThan(u64::max_value()).matches(u64::max_value()),
+            "max_value should not be less than max_value"
+        );
 
-        assert!(!ComparableValue::LessThan(0).matches(0),
-                "0 should not be less than 0");
-        assert!(ComparableValue::LessThan(u64::max_value()).matches(0),
-                "0 should be less than max_value");
-        assert!(!ComparableValue::LessThan(0).matches(u64::max_value()),
-                "max_value should not be less than 0");
-        assert!(!ComparableValue::LessThan(u64::max_value()).matches(u64::max_value()),
-                "max_value should not be less than max_value");
+        assert!(
+            ComparableValue::EqualTo(0).matches(0),
+            "0 should be equal to 0"
+        );
+        assert!(
+            !ComparableValue::EqualTo(u64::max_value()).matches(0),
+            "0 should not be equal to max_value"
+        );
+        assert!(
+            !ComparableValue::EqualTo(0).matches(u64::max_value()),
+            "max_value should not be equal to 0"
+        );
+        assert!(
+            ComparableValue::EqualTo(u64::max_value()).matches(u64::max_value()),
+            "max_value should be equal to max_value"
+        );
 
-        assert!(ComparableValue::EqualTo(0).matches(0),
-                "0 should be equal to 0");
-        assert!(!ComparableValue::EqualTo(u64::max_value()).matches(0),
-                "0 should not be equal to max_value");
-        assert!(!ComparableValue::EqualTo(0).matches(u64::max_value()),
-                "max_value should not be equal to 0");
-        assert!(ComparableValue::EqualTo(u64::max_value()).matches(u64::max_value()),
-                "max_value should be equal to max_value");
-
-        assert!(!ComparableValue::MoreThan(0).matches(0),
-                "0 should not be more than 0");
-        assert!(!ComparableValue::MoreThan(u64::max_value()).matches(0),
-                "0 should not be more than max_value");
-        assert!(ComparableValue::MoreThan(0).matches(u64::max_value()),
-                "max_value should be more than 0");
-        assert!(!ComparableValue::MoreThan(u64::max_value()).matches(u64::max_value()),
-                "max_value should not be more than max_value");
+        assert!(
+            !ComparableValue::MoreThan(0).matches(0),
+            "0 should not be more than 0"
+        );
+        assert!(
+            !ComparableValue::MoreThan(u64::max_value()).matches(0),
+            "0 should not be more than max_value"
+        );
+        assert!(
+            ComparableValue::MoreThan(0).matches(u64::max_value()),
+            "max_value should be more than 0"
+        );
+        assert!(
+            !ComparableValue::MoreThan(u64::max_value()).matches(u64::max_value()),
+            "max_value should not be more than max_value"
+        );
     }
 
     #[test]
     fn comparable_value_imatches() {
+        assert!(
+            !ComparableValue::LessThan(0).imatches(0),
+            "0 should not be less than 0"
+        );
+        assert!(
+            ComparableValue::LessThan(u64::max_value()).imatches(0),
+            "0 should be less than max_value"
+        );
+        assert!(
+            !ComparableValue::LessThan(0).imatches(i64::max_value()),
+            "max_value should not be less than 0"
+        );
+        assert!(
+            ComparableValue::LessThan(u64::max_value()).imatches(i64::max_value()),
+            "max_value should be less than max_value"
+        );
+        assert!(
+            ComparableValue::LessThan(0).imatches(i64::min_value()),
+            "min_value should be less than 0"
+        );
+        assert!(
+            ComparableValue::LessThan(u64::max_value()).imatches(i64::min_value()),
+            "min_value should be less than max_value"
+        );
 
-        assert!(!ComparableValue::LessThan(0).imatches(0),
-                "0 should not be less than 0");
-        assert!(ComparableValue::LessThan(u64::max_value()).imatches(0),
-                "0 should be less than max_value");
-        assert!(!ComparableValue::LessThan(0).imatches(i64::max_value()),
-                "max_value should not be less than 0");
-        assert!(ComparableValue::LessThan(u64::max_value()).imatches(i64::max_value()),
-                "max_value should be less than max_value");
-        assert!(ComparableValue::LessThan(0).imatches(i64::min_value()),
-                "min_value should be less than 0");
-        assert!(ComparableValue::LessThan(u64::max_value()).imatches(i64::min_value()),
-                "min_value should be less than max_value");
+        assert!(
+            ComparableValue::EqualTo(0).imatches(0),
+            "0 should be equal to 0"
+        );
+        assert!(
+            !ComparableValue::EqualTo(u64::max_value()).imatches(0),
+            "0 should not be equal to max_value"
+        );
+        assert!(
+            !ComparableValue::EqualTo(0).imatches(i64::max_value()),
+            "max_value should not be equal to 0"
+        );
+        assert!(
+            !ComparableValue::EqualTo(u64::max_value()).imatches(i64::max_value()),
+            "max_value should not be equal to i64::max_value"
+        );
+        assert!(
+            ComparableValue::EqualTo(i64::max_value() as u64).imatches(i64::max_value()),
+            "i64::max_value should be equal to i64::max_value"
+        );
+        assert!(
+            !ComparableValue::EqualTo(0).imatches(i64::min_value()),
+            "min_value should not be equal to 0"
+        );
+        assert!(
+            !ComparableValue::EqualTo(u64::max_value()).imatches(i64::min_value()),
+            "min_value should not be equal to max_value"
+        );
 
-        assert!(ComparableValue::EqualTo(0).imatches(0),
-                "0 should be equal to 0");
-        assert!(!ComparableValue::EqualTo(u64::max_value()).imatches(0),
-                "0 should not be equal to max_value");
-        assert!(!ComparableValue::EqualTo(0).imatches(i64::max_value()),
-                "max_value should not be equal to 0");
-        assert!(!ComparableValue::EqualTo(u64::max_value()).imatches(i64::max_value()),
-                "max_value should not be equal to i64::max_value");
-        assert!(ComparableValue::EqualTo(i64::max_value() as u64).imatches(i64::max_value()),
-                "i64::max_value should be equal to i64::max_value");
-        assert!(!ComparableValue::EqualTo(0).imatches(i64::min_value()),
-                "min_value should not be equal to 0");
-        assert!(!ComparableValue::EqualTo(u64::max_value()).imatches(i64::min_value()),
-                "min_value should not be equal to max_value");
-
-        assert!(!ComparableValue::MoreThan(0).imatches(0),
-                "0 should not be more than 0");
-        assert!(!ComparableValue::MoreThan(u64::max_value()).imatches(0),
-                "0 should not be more than max_value");
-        assert!(ComparableValue::MoreThan(0).imatches(i64::max_value()),
-                "max_value should be more than 0");
-        assert!(!ComparableValue::MoreThan(u64::max_value()).imatches(i64::max_value()),
-                "max_value should not be more than max_value");
-        assert!(!ComparableValue::MoreThan(0).imatches(i64::min_value()),
-                "min_value should not be more than 0");
-        assert!(!ComparableValue::MoreThan(u64::max_value()).imatches(i64::min_value()),
-                "min_value should not be more than max_value");
+        assert!(
+            !ComparableValue::MoreThan(0).imatches(0),
+            "0 should not be more than 0"
+        );
+        assert!(
+            !ComparableValue::MoreThan(u64::max_value()).imatches(0),
+            "0 should not be more than max_value"
+        );
+        assert!(
+            ComparableValue::MoreThan(0).imatches(i64::max_value()),
+            "max_value should be more than 0"
+        );
+        assert!(
+            !ComparableValue::MoreThan(u64::max_value()).imatches(i64::max_value()),
+            "max_value should not be more than max_value"
+        );
+        assert!(
+            !ComparableValue::MoreThan(0).imatches(i64::min_value()),
+            "min_value should not be more than 0"
+        );
+        assert!(
+            !ComparableValue::MoreThan(u64::max_value()).imatches(i64::min_value()),
+            "min_value should not be more than max_value"
+        );
     }
 
     #[test]
@@ -798,9 +899,11 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-ctime", "-123."], &mut config) {
-            assert!(e.description().contains("Expected a decimal integer"),
-                    "bad description: {}",
-                    e);
+            assert!(
+                e.description().contains("Expected a decimal integer"),
+                "bad description: {}",
+                e
+            );
         } else {
             panic!("parsing a bad ctime value should fail");
         }

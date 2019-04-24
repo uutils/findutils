@@ -26,17 +26,20 @@ pub struct AndMatcher {
 
 impl AndMatcher {
     pub fn new(submatchers: Vec<Box<Matcher>>) -> AndMatcher {
-        AndMatcher { submatchers: submatchers }
+        AndMatcher {
+            submatchers: submatchers,
+        }
     }
 }
-
 
 impl Matcher for AndMatcher {
     /// Returns true if all sub-matchers return true. Short-circuiting does take
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        self.submatchers.iter().all(|x| x.matches(dir_entry, matcher_io))
+        self.submatchers
+            .iter()
+            .all(|x| x.matches(dir_entry, matcher_io))
     }
 
     fn has_side_effects(&self) -> bool {
@@ -62,7 +65,9 @@ pub struct AndMatcherBuilder {
 
 impl AndMatcherBuilder {
     pub fn new() -> AndMatcherBuilder {
-        AndMatcherBuilder { submatchers: Vec::new() }
+        AndMatcherBuilder {
+            submatchers: Vec::new(),
+        }
     }
 
     pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
@@ -82,8 +87,6 @@ impl AndMatcherBuilder {
     }
 }
 
-
-
 /// This matcher contains a collection of other matchers. A file matches
 /// if it matches any of the contained sub-matchers. For sub-matchers that have
 /// side effects, the side effects occur in the same order as the sub-matchers
@@ -94,17 +97,20 @@ pub struct OrMatcher {
 
 impl OrMatcher {
     pub fn new(submatchers: Vec<Box<Matcher>>) -> OrMatcher {
-        OrMatcher { submatchers: submatchers }
+        OrMatcher {
+            submatchers: submatchers,
+        }
     }
 }
-
 
 impl Matcher for OrMatcher {
     /// Returns true if any sub-matcher returns true. Short-circuiting does take
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        self.submatchers.iter().any(|x| x.matches(dir_entry, matcher_io))
+        self.submatchers
+            .iter()
+            .any(|x| x.matches(dir_entry, matcher_io))
     }
 
     fn has_side_effects(&self) -> bool {
@@ -131,21 +137,28 @@ pub struct OrMatcherBuilder {
 impl OrMatcherBuilder {
     pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
         // safe to unwrap. submatchers always has at least one member
-        self.submatchers.last_mut().unwrap().new_and_condition(matcher);
+        self.submatchers
+            .last_mut()
+            .unwrap()
+            .new_and_condition(matcher);
     }
 
     pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
         if self.submatchers.last().unwrap().submatchers.is_empty() {
-            return Err(From::from(format!("invalid expression; you have used a binary operator \
-                                           '{}' with nothing before it.",
-                                          arg)));
+            return Err(From::from(format!(
+                "invalid expression; you have used a binary operator \
+                 '{}' with nothing before it.",
+                arg
+            )));
         }
         self.submatchers.push(AndMatcherBuilder::new());
         Ok(())
     }
 
     pub fn new() -> OrMatcherBuilder {
-        let mut o = OrMatcherBuilder { submatchers: Vec::new() };
+        let mut o = OrMatcherBuilder {
+            submatchers: Vec::new(),
+        };
         o.submatchers.push(AndMatcherBuilder::new());
         o
     }
@@ -165,7 +178,6 @@ impl OrMatcherBuilder {
     }
 }
 
-
 /// This matcher contains a collection of other matchers. In contrast to
 /// `OrMatcher` and `AndMatcher`, all the submatcher objects are called
 /// regardless of the results of previous submatchers. This is primarily used
@@ -177,10 +189,11 @@ pub struct ListMatcher {
 
 impl ListMatcher {
     pub fn new(submatchers: Vec<Box<Matcher>>) -> ListMatcher {
-        ListMatcher { submatchers: submatchers }
+        ListMatcher {
+            submatchers: submatchers,
+        }
     }
 }
-
 
 impl Matcher for ListMatcher {
     /// Calls matches on all submatcher objects, with no short-circuiting.
@@ -217,7 +230,10 @@ pub struct ListMatcherBuilder {
 impl ListMatcherBuilder {
     pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
         // safe to unwrap. submatchers always has at least one member
-        self.submatchers.last_mut().unwrap().new_and_condition(matcher);
+        self.submatchers
+            .last_mut()
+            .unwrap()
+            .new_and_condition(matcher);
     }
 
     pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
@@ -230,8 +246,10 @@ impl ListMatcherBuilder {
             let grandchild_and_matcher = &child_or_matcher.submatchers.last().unwrap();
 
             if grandchild_and_matcher.submatchers.is_empty() {
-                return Err(From::from("invalid expression; you have used a binary operator '-a' \
-                                       with nothing before it."));
+                return Err(From::from(
+                    "invalid expression; you have used a binary operator '-a' \
+                     with nothing before it.",
+                ));
             }
         }
         Ok(())
@@ -243,8 +261,10 @@ impl ListMatcherBuilder {
             let grandchild_and_matcher = &child_or_matcher.submatchers.last().unwrap();
 
             if grandchild_and_matcher.submatchers.is_empty() {
-                return Err(From::from("invalid expression; you have used a binary operator ',' \
-                                       with nothing before it."));
+                return Err(From::from(
+                    "invalid expression; you have used a binary operator ',' \
+                     with nothing before it.",
+                ));
             }
         }
         self.submatchers.push(OrMatcherBuilder::new());
@@ -252,7 +272,9 @@ impl ListMatcherBuilder {
     }
 
     pub fn new() -> ListMatcherBuilder {
-        let mut o = ListMatcherBuilder { submatchers: Vec::new() };
+        let mut o = ListMatcherBuilder {
+            submatchers: Vec::new(),
+        };
         o.submatchers.push(OrMatcherBuilder::new());
         o
     }
@@ -271,7 +293,6 @@ impl ListMatcherBuilder {
         Box::new(ListMatcher::new(submatchers))
     }
 }
-
 
 /// A simple matcher that always matches.
 pub struct TrueMatcher;
@@ -303,7 +324,6 @@ impl FalseMatcher {
     }
 }
 
-
 /// Matcher that wraps another matcher and inverts matching criteria.
 pub struct NotMatcher {
     submatcher: Box<Matcher>,
@@ -311,7 +331,9 @@ pub struct NotMatcher {
 
 impl NotMatcher {
     pub fn new(submatcher: Box<Matcher>) -> NotMatcher {
-        NotMatcher { submatcher: submatcher }
+        NotMatcher {
+            submatcher: submatcher,
+        }
     }
 
     pub fn new_box(submatcher: Box<Matcher>) -> Box<NotMatcher> {
@@ -340,11 +362,11 @@ impl Matcher for NotMatcher {
 #[cfg(test)]
 
 mod tests {
-    use walkdir::DirEntry;
-    use crate::find::matchers::tests::get_dir_entry_for;
     use super::*;
+    use crate::find::matchers::tests::get_dir_entry_for;
     use crate::find::matchers::{Matcher, MatcherIO};
     use crate::find::tests::FakeDependencies;
+    use walkdir::DirEntry;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects {}
@@ -364,8 +386,6 @@ mod tests {
             Box::new(HasSideEffects {})
         }
     }
-
-
 
     #[test]
     fn and_matches_works() {

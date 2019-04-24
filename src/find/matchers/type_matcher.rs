@@ -21,11 +21,21 @@ impl TypeMatcher {
             "f" => FileType::is_file,
             "d" => FileType::is_dir,
             "b" | "c" | "p" | "l" | "s" | "D" => {
-                return Err(From::from(format!("Type argument {} not supported yet", type_string)))
+                return Err(From::from(format!(
+                    "Type argument {} not supported yet",
+                    type_string
+                )))
             }
-            _ => return Err(From::from(format!("Unrecognised type argument {}", type_string))),
+            _ => {
+                return Err(From::from(format!(
+                    "Unrecognised type argument {}",
+                    type_string
+                )))
+            }
         };
-        Ok(TypeMatcher { file_type_fn: function })
+        Ok(TypeMatcher {
+            file_type_fn: function,
+        })
     }
 
     pub fn new_box(type_string: &str) -> Result<Box<Matcher>, Box<Error>> {
@@ -41,10 +51,10 @@ impl Matcher for TypeMatcher {
 #[cfg(test)]
 
 mod tests {
-    use crate::find::matchers::Matcher;
-    use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::tests::FakeDependencies;
     use super::*;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::Matcher;
+    use crate::find::tests::FakeDependencies;
 
     #[test]
     fn file_type_matcher() {

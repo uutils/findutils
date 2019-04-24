@@ -23,10 +23,12 @@ impl Printer {
 
 impl Matcher for Printer {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        writeln!(matcher_io.deps.get_output().borrow_mut(),
-                 "{}",
-                 file_info.path().to_string_lossy())
-            .unwrap();
+        writeln!(
+            matcher_io.deps.get_output().borrow_mut(),
+            "{}",
+            file_info.path().to_string_lossy()
+        )
+        .unwrap();
         true
     }
 
@@ -38,11 +40,11 @@ impl Matcher for Printer {
 #[cfg(test)]
 
 mod tests {
+    use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
     use crate::find::matchers::Matcher;
-    use crate::find::tests::FakeDependencies;
     use crate::find::tests::fix_up_slashes;
-    use super::*;
+    use crate::find::tests::FakeDependencies;
 
     #[test]
     fn prints() {
@@ -51,7 +53,9 @@ mod tests {
         let matcher = Printer::new();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-        assert_eq!(fix_up_slashes("./test_data/simple/abbbc\n"),
-                   deps.get_output_as_string());
+        assert_eq!(
+            fix_up_slashes("./test_data/simple/abbbc\n"),
+            deps.get_output_as_string()
+        );
     }
 }
