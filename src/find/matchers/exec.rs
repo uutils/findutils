@@ -6,12 +6,12 @@
 
 use std::error::Error;
 use std::ffi::OsString;
-use std::io::{Write, stderr};
+use std::io::{stderr, Write};
 use std::path::Path;
 use std::process::Command;
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 enum Arg {
     Filename,
@@ -25,12 +25,13 @@ pub struct SingleExecMatcher {
 }
 
 impl SingleExecMatcher {
-    pub fn new(executable: &str,
-               args: &[&str],
-               exec_in_parent_dir: bool)
-               -> Result<SingleExecMatcher, Box<Error>> {
-
-        let transformed_args = args.iter()
+    pub fn new(
+        executable: &str,
+        args: &[&str],
+        exec_in_parent_dir: bool,
+    ) -> Result<SingleExecMatcher, Box<Error>> {
+        let transformed_args = args
+            .iter()
             .map(|&a| match a {
                 "{}" => Arg::Filename,
                 _ => Arg::LiteralArg(OsString::from(a)),
@@ -44,11 +45,16 @@ impl SingleExecMatcher {
         })
     }
 
-    pub fn new_box(executable: &str,
-                   args: &[&str],
-                   exec_in_parent_dir: bool)
-                   -> Result<Box<Matcher>, Box<Error>> {
-        Ok(Box::new(SingleExecMatcher::new(executable, args, exec_in_parent_dir)?))
+    pub fn new_box(
+        executable: &str,
+        args: &[&str],
+        exec_in_parent_dir: bool,
+    ) -> Result<Box<Matcher>, Box<Error>> {
+        Ok(Box::new(SingleExecMatcher::new(
+            executable,
+            args,
+            exec_in_parent_dir,
+        )?))
     }
 }
 
@@ -72,7 +78,6 @@ impl Matcher for SingleExecMatcher {
             });
         }
         if self.exec_in_parent_dir {
-
             if file_info.path() == Path::new(".") {
                 command.current_dir(file_info.path());
             } else if let Some(parent) = file_info.path().parent() {
@@ -92,7 +97,6 @@ impl Matcher for SingleExecMatcher {
         return true;
     }
 }
-
 
 #[cfg(test)]
 /// No tests here, because we need to call out to an external executable. See

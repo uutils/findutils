@@ -14,8 +14,7 @@ use std::io::{stderr, Write};
 use std::str::FromStr;
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
-
+use super::{Matcher, MatcherIO};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg(unix)]
@@ -38,9 +37,11 @@ impl FromStr for ComparisonType {
             "-" => ComparisonType::AtLeast,
             "/" => ComparisonType::AnyOf,
             _ => {
-                return Err(From::from(format!("Invalid prefix {} for -perm. Only allowed \
-                                               values are <nothing>, /, or -",
-                                              s)));
+                return Err(From::from(format!(
+                    "Invalid prefix {} for -perm. Only allowed \
+                     values are <nothing>, /, or -",
+                    s
+                )));
             }
         })
     }
@@ -59,9 +60,9 @@ impl ComparisonType {
 
 #[cfg(unix)]
 mod parsing {
+    use super::*;
     use regex::Regex;
     use std::error::Error;
-    use super::*;
 
     // We need to be able to parse strings like /u+rw,g+w,o=w. Specifically
     // we have a prefix, as per ComparisonType. then combinations of (u, g or o
@@ -69,8 +70,8 @@ mod parsing {
     // commas. Writing a hard-coded parser is easier to understand - and probably
     // shorter :-) -  than the abomination required to do this as a regex
     enum ParserState {
-        Beginning, // we're at the start, now waiting for /, -, a, u, g or o
-        GatheringCategories, // expecting u, g or o to set categories, or =/+ to switch to...
+        Beginning,            // we're at the start, now waiting for /, -, a, u, g or o
+        GatheringCategories,  // expecting u, g or o to set categories, or =/+ to switch to...
         GatheringPermissions, // expecting r, w, or x
     }
 
@@ -81,7 +82,6 @@ mod parsing {
         string_pattern: &'a str,
         category_bit_pattern: u32,
     }
-
 
     impl<'a> Parser<'a> {
         fn new(string_pattern: &'a str) -> Parser<'a> {
@@ -95,12 +95,14 @@ mod parsing {
         }
 
         fn error(&self) -> Result<(), Box<Error>> {
-            Err(From::from(format!("invalid mode '{}'", self.string_pattern)))
+            Err(From::from(format!(
+                "invalid mode '{}'",
+                self.string_pattern
+            )))
         }
 
         fn handle_char(&mut self, char: &char) -> Result<(), Box<Error>> {
             if let ParserState::Beginning = self.state {};
-
 
             match *char {
                 '-' => {
@@ -121,8 +123,7 @@ mod parsing {
                 }
                 'a' => {
                     match self.state {
-                        ParserState::Beginning |
-                        ParserState::GatheringCategories => {
+                        ParserState::Beginning | ParserState::GatheringCategories => {
                             self.state = ParserState::GatheringCategories;
                             self.category_bit_pattern = 0o111;
                         }
@@ -133,8 +134,7 @@ mod parsing {
                 }
                 'g' => {
                     match self.state {
-                        ParserState::Beginning |
-                        ParserState::GatheringCategories => {
+                        ParserState::Beginning | ParserState::GatheringCategories => {
                             self.state = ParserState::GatheringCategories;
                             self.category_bit_pattern |= 0o010;
                         }
@@ -145,8 +145,7 @@ mod parsing {
                 }
                 'u' => {
                     match self.state {
-                        ParserState::Beginning |
-                        ParserState::GatheringCategories => {
+                        ParserState::Beginning | ParserState::GatheringCategories => {
                             self.state = ParserState::GatheringCategories;
                             self.category_bit_pattern |= 0o100;
                         }
@@ -157,8 +156,7 @@ mod parsing {
                 }
                 'o' => {
                     match self.state {
-                        ParserState::Beginning |
-                        ParserState::GatheringCategories => {
+                        ParserState::Beginning | ParserState::GatheringCategories => {
                             self.state = ParserState::GatheringCategories;
                             self.category_bit_pattern |= 0o001;
                         }
@@ -244,12 +242,13 @@ mod parsing {
                     return Ok((val, m.get(1).unwrap().as_str().parse().unwrap()));
                 }
                 Err(e) => {
-                    return Err(From::from(format!("Failed to parse -perm argument {}: {}",
-                                                  m.get(2).unwrap().as_str(),
-                                                  e)));
+                    return Err(From::from(format!(
+                        "Failed to parse -perm argument {}: {}",
+                        m.get(2).unwrap().as_str(),
+                        e
+                    )));
                 }
             }
-
         }
         // no: so we've got a /u=rw,g=r form instead (or an invalid string).
         let mut p = Parser::new(string_value);
@@ -281,7 +280,9 @@ impl PermMatcher {
 
     #[cfg(not(unix))]
     pub fn new(_dummy_pattern: &str) -> Result<PermMatcher, Box<Error>> {
-        Err(From::from("Permission matching is not available on this platform"))
+        Err(From::from(
+            "Permission matching is not available on this platform",
+        ))
     }
 
     pub fn new_box(pattern: &str) -> Result<Box<Matcher>, Box<Error>> {
@@ -294,15 +295,17 @@ impl Matcher for PermMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         use std::os::unix::fs::PermissionsExt;
         match file_info.metadata() {
-            Ok(metadata) => {
-                self.comparison_type.mode_bits_match(self.pattern, metadata.permissions().mode())
-            }
+            Ok(metadata) => self
+                .comparison_type
+                .mode_bits_match(self.pattern, metadata.permissions().mode()),
             Err(e) => {
-                writeln!(&mut stderr(),
-                         "Error getting permissions for {}: {}",
-                         file_info.path().to_string_lossy(),
-                         e)
-                    .unwrap();
+                writeln!(
+                    &mut stderr(),
+                    "Error getting permissions for {}: {}",
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
                 false
             }
         }
@@ -310,180 +313,290 @@ impl Matcher for PermMatcher {
 
     #[cfg(not(unix))]
     fn matches(&self, _dummy_file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        writeln!(&mut stderr(),
-                 "Permission matching not available on this platform!")
-            .unwrap();
+        writeln!(
+            &mut stderr(),
+            "Permission matching not available on this platform!"
+        )
+        .unwrap();
         return false;
     }
 }
 
-
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
-    use find::matchers::Matcher;
-    use find::matchers::tests::get_dir_entry_for;
-    use find::tests::FakeDependencies;
-    use super::*;
     use super::parsing;
+    use super::*;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::Matcher;
+    use crate::find::tests::FakeDependencies;
 
     #[test]
     fn parsing_prefix() {
-        assert_eq!(parsing::parse("u=rwx").unwrap(),
-                   (0o700, ComparisonType::Exact));
-        assert_eq!(parsing::parse("-u=rwx").unwrap(),
-                   (0o700, ComparisonType::AtLeast));
-        assert_eq!(parsing::parse("/u=rwx").unwrap(),
-                   (0o700, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("700").unwrap(),
-                   (0o700, ComparisonType::Exact));
-        assert_eq!(parsing::parse("-700").unwrap(),
-                   (0o700, ComparisonType::AtLeast));
-        assert_eq!(parsing::parse("/700").unwrap(),
-                   (0o700, ComparisonType::AnyOf));
+        assert_eq!(
+            parsing::parse("u=rwx").unwrap(),
+            (0o700, ComparisonType::Exact)
+        );
+        assert_eq!(
+            parsing::parse("-u=rwx").unwrap(),
+            (0o700, ComparisonType::AtLeast)
+        );
+        assert_eq!(
+            parsing::parse("/u=rwx").unwrap(),
+            (0o700, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("700").unwrap(),
+            (0o700, ComparisonType::Exact)
+        );
+        assert_eq!(
+            parsing::parse("-700").unwrap(),
+            (0o700, ComparisonType::AtLeast)
+        );
+        assert_eq!(
+            parsing::parse("/700").unwrap(),
+            (0o700, ComparisonType::AnyOf)
+        );
     }
 
     #[test]
     fn parsing_octal() {
         assert_eq!(parsing::parse("/1").unwrap(), (0o1, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/7777").unwrap(),
-                   (0o7777, ComparisonType::AnyOf));
+        assert_eq!(
+            parsing::parse("/7777").unwrap(),
+            (0o7777, ComparisonType::AnyOf)
+        );
     }
 
     #[test]
     fn parsing_human_readable_individual_bits() {
         assert_eq!(parsing::parse("/").unwrap(), (0o0, ComparisonType::AnyOf));
 
-        assert_eq!(parsing::parse("/u=r").unwrap(),
-                   (0o400, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/u=w").unwrap(),
-                   (0o200, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/u=x").unwrap(),
-                   (0o100, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/g=r").unwrap(),
-                   (0o40, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/g=w").unwrap(),
-                   (0o20, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/g=x").unwrap(),
-                   (0o10, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/o+r").unwrap(),
-                   (0o4, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/o+w").unwrap(),
-                   (0o2, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/o+x").unwrap(),
-                   (0o1, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/a+r").unwrap(),
-                   (0o444, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/a+w").unwrap(),
-                   (0o222, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/a+x").unwrap(),
-                   (0o111, ComparisonType::AnyOf));
+        assert_eq!(
+            parsing::parse("/u=r").unwrap(),
+            (0o400, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/u=w").unwrap(),
+            (0o200, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/u=x").unwrap(),
+            (0o100, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/g=r").unwrap(),
+            (0o40, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/g=w").unwrap(),
+            (0o20, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/g=x").unwrap(),
+            (0o10, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/o+r").unwrap(),
+            (0o4, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/o+w").unwrap(),
+            (0o2, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/o+x").unwrap(),
+            (0o1, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/a+r").unwrap(),
+            (0o444, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/a+w").unwrap(),
+            (0o222, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/a+x").unwrap(),
+            (0o111, ComparisonType::AnyOf)
+        );
     }
 
     #[test]
     fn parsing_human_readable_multiple_bits() {
-        assert_eq!(parsing::parse("/u=rwx").unwrap(),
-                   (0o700, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/a=rwx").unwrap(),
-                   (0o777, ComparisonType::AnyOf));
+        assert_eq!(
+            parsing::parse("/u=rwx").unwrap(),
+            (0o700, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/a=rwx").unwrap(),
+            (0o777, ComparisonType::AnyOf)
+        );
     }
 
     #[test]
     fn parsing_human_readable_multiple_categories() {
-        assert_eq!(parsing::parse("/u=rwx,g=rx,o+r").unwrap(),
-                   (0o754, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/u=rwx,g=rx,o+r,a+w").unwrap(),
-                   (0o776, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/ug=rwx,o+r").unwrap(),
-                   (0o774, ComparisonType::AnyOf));
+        assert_eq!(
+            parsing::parse("/u=rwx,g=rx,o+r").unwrap(),
+            (0o754, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/u=rwx,g=rx,o+r,a+w").unwrap(),
+            (0o776, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/ug=rwx,o+r").unwrap(),
+            (0o774, ComparisonType::AnyOf)
+        );
     }
 
     #[test]
     fn parsing_human_readable_set_id_bits() {
-        assert_eq!(parsing::parse("/u=s").unwrap(),
-                   (0o4000, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/g=s").unwrap(),
-                   (0o2000, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/ug=s").unwrap(),
-                   (0o6000, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/o=s").unwrap(),
-                   (0o0000, ComparisonType::AnyOf));
+        assert_eq!(
+            parsing::parse("/u=s").unwrap(),
+            (0o4000, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/g=s").unwrap(),
+            (0o2000, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/ug=s").unwrap(),
+            (0o6000, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/o=s").unwrap(),
+            (0o0000, ComparisonType::AnyOf)
+        );
     }
 
     #[test]
     fn parsing_human_readable_sticky_bit() {
-        assert_eq!(parsing::parse("/u=t").unwrap(),
-                   (0o1000, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/g=t").unwrap(),
-                   (0o1000, ComparisonType::AnyOf));
-        assert_eq!(parsing::parse("/o=t").unwrap(),
-                   (0o1000, ComparisonType::AnyOf));
+        assert_eq!(
+            parsing::parse("/u=t").unwrap(),
+            (0o1000, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/g=t").unwrap(),
+            (0o1000, ComparisonType::AnyOf)
+        );
+        assert_eq!(
+            parsing::parse("/o=t").unwrap(),
+            (0o1000, ComparisonType::AnyOf)
+        );
     }
-
 
     #[test]
     fn parsing_fails() {
-        assert!(parsing::parse("+u=rwx,g=rx,o+r").is_err(),
-                "invalid prefix should fail");
-        assert!(parsing::parse("urwx,g=rx,o+r").is_err(),
-                "missing equals should fail");
-        assert!(parsing::parse("d=rwx,g=rx,o+r").is_err(),
-                "invalid category should fail");
-        assert!(parsing::parse("u=dwx,g=rx,o+r").is_err(),
-                "invalid permission bit should fail");
-        assert!(parsing::parse("u=rwxg=rx,o+r").is_err(),
-                "missing comma should fail");
-        assert!(parsing::parse("u_rwx,g=rx,o+r").is_err(),
-                "invalid category/permissoin spearator should fail");
-        assert!(parsing::parse("77777777777777").is_err(),
-                "overflowing octal value should fail");
+        assert!(
+            parsing::parse("+u=rwx,g=rx,o+r").is_err(),
+            "invalid prefix should fail"
+        );
+        assert!(
+            parsing::parse("urwx,g=rx,o+r").is_err(),
+            "missing equals should fail"
+        );
+        assert!(
+            parsing::parse("d=rwx,g=rx,o+r").is_err(),
+            "invalid category should fail"
+        );
+        assert!(
+            parsing::parse("u=dwx,g=rx,o+r").is_err(),
+            "invalid permission bit should fail"
+        );
+        assert!(
+            parsing::parse("u=rwxg=rx,o+r").is_err(),
+            "missing comma should fail"
+        );
+        assert!(
+            parsing::parse("u_rwx,g=rx,o+r").is_err(),
+            "invalid category/permissoin spearator should fail"
+        );
+        assert!(
+            parsing::parse("77777777777777").is_err(),
+            "overflowing octal value should fail"
+        );
     }
 
     #[test]
     fn comparison_type_matching() {
         let c = ComparisonType::Exact;
-        assert!(c.mode_bits_match(0, 0),
-                "Exact: only 0 should match if pattern is 0");
-        assert!(!c.mode_bits_match(0, 0o444),
-                "Exact: only 0 should match if pattern is 0");
-        assert!(c.mode_bits_match(0o444, 0o444),
-                "Exact: identical bits should match");
-        assert!(!c.mode_bits_match(0o444, 0o777),
-                "Exact: non-identical bits should fail");
-        assert!(c.mode_bits_match(0o444, 0o70444),
-                "Exact:high-end bits should be ignored");
-
-
+        assert!(
+            c.mode_bits_match(0, 0),
+            "Exact: only 0 should match if pattern is 0"
+        );
+        assert!(
+            !c.mode_bits_match(0, 0o444),
+            "Exact: only 0 should match if pattern is 0"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o444),
+            "Exact: identical bits should match"
+        );
+        assert!(
+            !c.mode_bits_match(0o444, 0o777),
+            "Exact: non-identical bits should fail"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o70444),
+            "Exact:high-end bits should be ignored"
+        );
 
         let c = ComparisonType::AtLeast;
-        assert!(c.mode_bits_match(0, 0),
-                "AtLeast: anything should match if pattern is 0");
-        assert!(c.mode_bits_match(0, 0o444),
-                "AtLeast: anything should match if pattern is 0");
-        assert!(c.mode_bits_match(0o444, 0o777),
-                "AtLeast: identical bits should match");
-        assert!(c.mode_bits_match(0o444, 0o777),
-                "AtLeast: extra bits should match");
-        assert!(!c.mode_bits_match(0o444, 0o700),
-                "AtLeast: missing bits should fail");
-        assert!(c.mode_bits_match(0o444, 0o70444),
-                "AtLeast: high-end bits should be ignored");
+        assert!(
+            c.mode_bits_match(0, 0),
+            "AtLeast: anything should match if pattern is 0"
+        );
+        assert!(
+            c.mode_bits_match(0, 0o444),
+            "AtLeast: anything should match if pattern is 0"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o777),
+            "AtLeast: identical bits should match"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o777),
+            "AtLeast: extra bits should match"
+        );
+        assert!(
+            !c.mode_bits_match(0o444, 0o700),
+            "AtLeast: missing bits should fail"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o70444),
+            "AtLeast: high-end bits should be ignored"
+        );
 
         let c = ComparisonType::AnyOf;
-        assert!(c.mode_bits_match(0, 0),
-                "AnyOf: anything should match if pattern is 0");
-        assert!(c.mode_bits_match(0, 0o444),
-                "AnyOf: anything should match if pattern is 0");
-        assert!(c.mode_bits_match(0o444, 0o777),
-                "AnyOf: identical bits should match");
-        assert!(c.mode_bits_match(0o444, 0o777),
-                "AnyOf: extra bits should match");
-        assert!(c.mode_bits_match(0o777, 0o001),
-                "AnyOf: anything should match as long as it has one bit in common");
-        assert!(!c.mode_bits_match(0o010, 0o001),
-                "AnyOf: no matching bits shouldn't match");
-        assert!(c.mode_bits_match(0o444, 0o70444),
-                "AnyOf: high-end bits should be ignored");
+        assert!(
+            c.mode_bits_match(0, 0),
+            "AnyOf: anything should match if pattern is 0"
+        );
+        assert!(
+            c.mode_bits_match(0, 0o444),
+            "AnyOf: anything should match if pattern is 0"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o777),
+            "AnyOf: identical bits should match"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o777),
+            "AnyOf: extra bits should match"
+        );
+        assert!(
+            c.mode_bits_match(0o777, 0o001),
+            "AnyOf: anything should match as long as it has one bit in common"
+        );
+        assert!(
+            !c.mode_bits_match(0o010, 0o001),
+            "AnyOf: no matching bits shouldn't match"
+        );
+        assert!(
+            c.mode_bits_match(0o444, 0o70444),
+            "AnyOf: high-end bits should be ignored"
+        );
     }
 
     #[test]
@@ -492,11 +605,15 @@ mod tests {
         let deps = FakeDependencies::new();
 
         let matcher = PermMatcher::new("-u+r").unwrap();
-        assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()),
-                "user-readable pattern should match file");
+        assert!(
+            matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "user-readable pattern should match file"
+        );
 
         let matcher = PermMatcher::new("-u+x").unwrap();
-        assert!(!matcher.matches(&file_info, &mut deps.new_matcher_io()),
-                "user-executable pattern should not match file");
+        assert!(
+            !matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "user-executable pattern should not match file"
+        );
     }
 }

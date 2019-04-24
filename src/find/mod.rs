@@ -8,7 +8,7 @@ pub mod matchers;
 
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{Write, stderr, stdout};
+use std::io::{stderr, stdout, Write};
 use std::rc::Rc;
 use std::time::SystemTime;
 use walkdir::WalkDir;
@@ -32,7 +32,6 @@ impl Default for Config {
         }
     }
 }
-
 
 /// Trait that encapsulates various dependencies (output, clocks, etc.) that we
 /// might want to fake out for unit tests.
@@ -79,8 +78,11 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     let mut i = 0;
     let mut config = Config::default();
 
-    while i < args.len() && (args[i] == "-" || !args[i].starts_with('-')) && args[i] != "!" &&
-          args[i] != "(" {
+    while i < args.len()
+        && (args[i] == "-" || !args[i].starts_with('-'))
+        && args[i] != "!"
+        && args[i] != "("
+    {
         paths.push(args[i].to_string());
         i += 1;
     }
@@ -95,12 +97,12 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
     })
 }
 
-fn process_dir<'a>(dir: &str,
-                   config: &Config,
-                   deps: &'a Dependencies<'a>,
-                   matcher: &Box<matchers::Matcher>)
-                   -> Result<u64, Box<Error>> {
-
+fn process_dir<'a>(
+    dir: &str,
+    config: &Config,
+    deps: &'a Dependencies<'a>,
+    matcher: &Box<matchers::Matcher>,
+) -> Result<u64, Box<Error>> {
     let mut found_count: u64 = 0;
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
@@ -133,7 +135,6 @@ fn process_dir<'a>(dir: &str,
     Ok(found_count)
 }
 
-
 fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<u64, Box<Error>> {
     let paths_and_matcher = parse_args(args)?;
     if paths_and_matcher.config.help_requested {
@@ -142,16 +143,19 @@ fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<u64, Box<Err
     }
     let mut found_count: u64 = 0;
     for path in paths_and_matcher.paths {
-        found_count += process_dir(&path,
-                                   &paths_and_matcher.config,
-                                   deps,
-                                   &paths_and_matcher.matcher)?;
+        found_count += process_dir(
+            &path,
+            &paths_and_matcher.config,
+            deps,
+            &paths_and_matcher.matcher,
+        )?;
     }
     Ok(found_count)
 }
 
 fn print_help() {
-    println!(r"Usage: find [path...] [expression]
+    println!(
+        r"Usage: find [path...] [expression]
 
 If no path is supplied then the current working directory is used by default.
 
@@ -182,7 +186,8 @@ Early alpha implementation. Currently the only expressions supported are
  -sorted 
     a non-standard extension that sorts directory contents by name before 
     processing them. Less efficient, but allows for deterministic output.
-");
+"
+    );
 }
 
 /// Does all the work for find.
@@ -191,7 +196,6 @@ Early alpha implementation. Currently the only expressions supported are
 /// with the exit code. Note that the first string in args is expected to be
 /// the name of the executable.
 pub fn find_main<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> i32 {
-
     match do_find(&args[1..], deps) {
         Ok(_) => 0,
         Err(e) => {
@@ -204,7 +208,6 @@ pub fn find_main<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> i32 {
 #[cfg(test)]
 mod tests {
 
-
     use std::cell::RefCell;
     use std::fs;
     use std::io::{Cursor, Read, Write};
@@ -212,7 +215,7 @@ mod tests {
     use std::vec::Vec;
     use tempdir::TempDir;
 
-    use find::matchers::MatcherIO;
+    use crate::find::matchers::MatcherIO;
 
     use super::*;
 
@@ -288,151 +291,229 @@ mod tests {
         }
     }
 
-
     #[test]
     fn find_main_not_depth_first() {
         let deps = FakeDependencies::new();
 
-
-        let rc = find_main(&["find", &fix_up_slashes("./test_data/simple"), "-sorted"],
-                           &deps);
+        let rc = find_main(
+            &["find", &fix_up_slashes("./test_data/simple"), "-sorted"],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/simple\n\
-                   ./test_data/simple/abbbc\n\
-                   ./test_data/simple/subdir\n\
-                   ./test_data/simple/subdir/ABBBC\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/simple\n\
+                 ./test_data/simple/abbbc\n\
+                 ./test_data/simple/subdir\n\
+                 ./test_data/simple/subdir/ABBBC\n"
+            )
+        );
     }
 
     #[test]
     fn find_main_depth_first() {
         let deps = FakeDependencies::new();
 
-
-        let rc = find_main(&["find", &fix_up_slashes("./test_data/simple"), "-sorted", "-depth"],
-                           &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/simple"),
+                "-sorted",
+                "-depth",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/simple/abbbc\n\
-                   ./test_data/simple/subdir/ABBBC\n\
-                   ./test_data/simple/subdir\n\
-                   ./test_data/simple\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/simple/abbbc\n\
+                 ./test_data/simple/subdir/ABBBC\n\
+                 ./test_data/simple/subdir\n\
+                 ./test_data/simple\n"
+            )
+        );
     }
 
     #[test]
     fn find_maxdepth() {
         let deps = FakeDependencies::new();
 
-        let rc =
-            find_main(&["find", &fix_up_slashes("./test_data/depth"), "-sorted", "-maxdepth", "2"],
-                      &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-maxdepth",
+                "2",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/depth\n\
-                   ./test_data/depth/1\n\
-                   ./test_data/depth/1/2\n\
-                   ./test_data/depth/1/f1\n\
-                   ./test_data/depth/f0\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/depth\n\
+                 ./test_data/depth/1\n\
+                 ./test_data/depth/1/2\n\
+                 ./test_data/depth/1/f1\n\
+                 ./test_data/depth/f0\n"
+            )
+        );
     }
 
     #[test]
     fn find_maxdepth_depth_first() {
         let deps = FakeDependencies::new();
 
-        let rc = find_main(&["find",
-                             &fix_up_slashes("./test_data/depth"),
-                             "-sorted",
-                             "-maxdepth",
-                             "2",
-                             "-depth"],
-                           &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-maxdepth",
+                "2",
+                "-depth",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/depth/1/2\n\
-                   ./test_data/depth/1/f1\n\
-                   ./test_data/depth/1\n\
-                   ./test_data/depth/f0\n\
-                   ./test_data/depth\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/depth/1/2\n\
+                 ./test_data/depth/1/f1\n\
+                 ./test_data/depth/1\n\
+                 ./test_data/depth/f0\n\
+                 ./test_data/depth\n"
+            )
+        );
     }
 
     #[test]
     fn find_prune() {
         let deps = FakeDependencies::new();
 
-        let rc = find_main(&["find",
-                             &fix_up_slashes("./test_data/depth"),
-                             "-sorted",
-                             "-print",
-                             ",",
-                             "-name",
-                             "1",
-                             "-prune"],
-                           &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-print",
+                ",",
+                "-name",
+                "1",
+                "-prune",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/depth\n\
-                   ./test_data/depth/1\n\
-                   ./test_data/depth/f0\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/depth\n\
+                 ./test_data/depth/1\n\
+                 ./test_data/depth/f0\n"
+            )
+        );
     }
 
     #[test]
     fn find_zero_maxdepth() {
         let deps = FakeDependencies::new();
-        let rc = find_main(&["find", &fix_up_slashes("./test_data/depth"), "-maxdepth", "0"],
-                           &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-maxdepth",
+                "0",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/depth\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/depth\n")
+        );
     }
 
     #[test]
     fn find_zero_maxdepth_depth_first() {
         let deps = FakeDependencies::new();
-        let rc =
-            find_main(&["find", &fix_up_slashes("./test_data/depth"), "-maxdepth", "0", "-depth"],
-                      &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-maxdepth",
+                "0",
+                "-depth",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/depth\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/depth\n")
+        );
     }
 
     #[test]
     fn find_mindepth() {
         let deps = FakeDependencies::new();
-        let rc =
-            find_main(&["find", &fix_up_slashes("./test_data/depth"), "-sorted", "-mindepth", "3"],
-                      &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-mindepth",
+                "3",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/depth/1/2/3\n\
-                   ./test_data/depth/1/2/3/f3\n\
-                   ./test_data/depth/1/2/f2\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/depth/1/2/3\n\
+                 ./test_data/depth/1/2/3/f3\n\
+                 ./test_data/depth/1/2/f2\n"
+            )
+        );
     }
 
     #[test]
     fn find_mindepth_depth_first() {
         let deps = FakeDependencies::new();
-        let rc = find_main(&["find",
-                             &fix_up_slashes("./test_data/depth"),
-                             "-sorted",
-                             "-mindepth",
-                             "3",
-                             "-depth"],
-                           &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-mindepth",
+                "3",
+                "-depth",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/depth/1/2/3/f3\n\
-                   ./test_data/depth/1/2/3\n\
-                   ./test_data/depth/1/2/f2\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/depth/1/2/3/f3\n\
+                 ./test_data/depth/1/2/3\n\
+                 ./test_data/depth/1/2/f2\n"
+            )
+        );
     }
 
     #[test]
@@ -443,24 +524,33 @@ mod tests {
 
         let deps = FakeDependencies::new();
 
-
-        let rc = find_main(&["find",
-                             &new_dir.path().to_string_lossy(),
-                             "-newer",
-                             &fix_up_slashes("./test_data/simple/abbbc")],
-                           &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &new_dir.path().to_string_lossy(),
+                "-newer",
+                &fix_up_slashes("./test_data/simple/abbbc"),
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   (&new_dir).path().to_string_lossy().to_string() + "\n");
+        assert_eq!(
+            deps.get_output_as_string(),
+            (&new_dir).path().to_string_lossy().to_string() + "\n"
+        );
 
         // now do it the other way around, and nothing should be output
         let deps = FakeDependencies::new();
-        let rc = find_main(&["find",
-                             &fix_up_slashes("./test_data/simple/abbbc"),
-                             "-newer",
-                             &new_dir.path().to_string_lossy()],
-                           &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/simple/abbbc"),
+                "-newer",
+                &new_dir.path().to_string_lossy(),
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(), "");
@@ -506,17 +596,23 @@ mod tests {
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time);
 
-            let rc = find_main(&["find",
-                                 &fix_up_slashes("./test_data/simple/subdir"),
-                                 "-type",
-                                 "f",
-                                 arg,
-                                 "0"],
-                               &deps);
+            let rc = find_main(
+                &[
+                    "find",
+                    &fix_up_slashes("./test_data/simple/subdir"),
+                    "-type",
+                    "f",
+                    arg,
+                    "0",
+                ],
+                &deps,
+            );
 
             assert_eq!(rc, 0);
-            assert_eq!(deps.get_output_as_string(),
-                       fix_up_slashes("./test_data/simple/subdir/ABBBC\n"));
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/subdir/ABBBC\n")
+            );
         }
 
         // now Check file time doesn't match a file that's too new
@@ -524,8 +620,10 @@ mod tests {
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time - Duration::from_secs(1));
 
-            let rc = find_main(&["find", "./test_data/simple/subdir", "-type", "f", arg, "0"],
-                               &deps);
+            let rc = find_main(
+                &["find", "./test_data/simple/subdir", "-type", "f", arg, "0"],
+                &deps,
+            );
 
             assert_eq!(rc, 0);
             assert_eq!(deps.get_output_as_string(), "");
@@ -537,20 +635,31 @@ mod tests {
         let deps = FakeDependencies::new();
         // only look at files because the "size" of a directory is a system (and filesystem)
         // dependent thing and we want these tests to be universal.
-        let rc =
-            find_main(&["find", &fix_up_slashes("./test_data/size"), "-type", "f", "-size", "1b"],
-                      &deps);
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/size"),
+                "-type",
+                "f",
+                "-size",
+                "1b",
+            ],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(),
-                   fix_up_slashes("./test_data/size/512bytes\n"));
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/size/512bytes\n")
+        );
 
         let deps = FakeDependencies::new();
-        let rc = find_main(&["find", "./test_data/size", "-type", "f", "-size", "+1b"],
-                           &deps);
+        let rc = find_main(
+            &["find", "./test_data/size", "-type", "f", "-size", "+1b"],
+            &deps,
+        );
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(), "");
-
     }
 }

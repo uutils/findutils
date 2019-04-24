@@ -6,7 +6,7 @@
 
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 /// This matcher checks the type of the file.
 pub struct PruneMatcher;
@@ -30,10 +30,10 @@ impl Matcher for PruneMatcher {
 #[cfg(test)]
 
 mod tests {
-    use find::matchers::Matcher;
-    use find::matchers::tests::get_dir_entry_for;
-    use find::tests::FakeDependencies;
     use super::*;
+    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::Matcher;
+    use crate::find::tests::FakeDependencies;
 
     #[test]
     fn file_type_matcher() {
