@@ -5,8 +5,3 @@
 [![codecov](https://codecov.io/gh/uutils/findutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/findutils)
 
 Rust implementation of [GNU findutils](https://www.gnu.org/software/findutils/).
-
-### Disclaimer
-
-This is not an official Google product (experimental or otherwise), it is just
-code that happens to be owned by Google.
