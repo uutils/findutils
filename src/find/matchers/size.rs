@@ -22,8 +22,8 @@ enum Unit {
 }
 
 impl FromStr for Unit {
-    type Err = Box<Error>;
-    fn from_str(s: &str) -> Result<Unit, Box<Error>> {
+    type Err = Box<dyn Error>;
+    fn from_str(s: &str) -> Result<Unit, Box<dyn Error>> {
         Ok(match s {
             "c" => Unit::Byte,
             "w" => Unit::TwoByteWord,
@@ -75,7 +75,7 @@ impl SizeMatcher {
     pub fn new(
         value_to_match: ComparableValue,
         suffix_string: &str,
-    ) -> Result<SizeMatcher, Box<Error>> {
+    ) -> Result<SizeMatcher, Box<dyn Error>> {
         Ok(SizeMatcher {
             unit: suffix_string.parse()?,
             value_to_match: value_to_match,
@@ -85,7 +85,7 @@ impl SizeMatcher {
     pub fn new_box(
         value_to_match: ComparableValue,
         suffix_string: &str,
-    ) -> Result<Box<Matcher>, Box<Error>> {
+    ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
         Ok(Box::new(SizeMatcher::new(value_to_match, suffix_string)?))
     }
 }

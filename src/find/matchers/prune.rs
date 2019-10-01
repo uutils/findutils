@@ -16,7 +16,7 @@ impl PruneMatcher {
         PruneMatcher {}
     }
 
-    pub fn new_box() -> Box<Matcher> {
+    pub fn new_box() -> Box<dyn Matcher> {
         Box::new(PruneMatcher::new())
     }
 }

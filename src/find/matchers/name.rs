@@ -23,7 +23,7 @@ impl NameMatcher {
         Ok(NameMatcher { pattern: p })
     }
 
-    pub fn new_box(pattern_string: &str) -> Result<Box<Matcher>, PatternError> {
+    pub fn new_box(pattern_string: &str) -> Result<Box<dyn Matcher>, PatternError> {
         Ok(Box::new(NameMatcher::new(pattern_string)?))
     }
 }
@@ -48,7 +48,7 @@ impl CaselessNameMatcher {
         Ok(CaselessNameMatcher { pattern: p })
     }
 
-    pub fn new_box(pattern_string: &str) -> Result<Box<Matcher>, PatternError> {
+    pub fn new_box(pattern_string: &str) -> Result<Box<dyn Matcher>, PatternError> {
         Ok(Box::new(CaselessNameMatcher::new(pattern_string)?))
     }
 }

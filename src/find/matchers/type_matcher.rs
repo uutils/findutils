@@ -16,7 +16,7 @@ pub struct TypeMatcher {
 }
 
 impl TypeMatcher {
-    pub fn new(type_string: &str) -> Result<TypeMatcher, Box<Error>> {
+    pub fn new(type_string: &str) -> Result<TypeMatcher, Box<dyn Error>> {
         let function = match type_string {
             "f" => FileType::is_file,
             "d" => FileType::is_dir,
@@ -38,7 +38,7 @@ impl TypeMatcher {
         })
     }
 
-    pub fn new_box(type_string: &str) -> Result<Box<Matcher>, Box<Error>> {
+    pub fn new_box(type_string: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
         Ok(Box::new(TypeMatcher::new(type_string)?))
     }
 }

@@ -21,11 +21,11 @@ use super::{Matcher, MatcherIO};
 /// side effects, the side effects occur in the same order as the sub-matchers
 /// were pushed into the collection.
 pub struct AndMatcher {
-    submatchers: Vec<Box<Matcher>>,
+    submatchers: Vec<Box<dyn Matcher>>,
 }
 
 impl AndMatcher {
-    pub fn new(submatchers: Vec<Box<Matcher>>) -> AndMatcher {
+    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> AndMatcher {
         AndMatcher {
             submatchers: submatchers,
         }
@@ -60,7 +60,7 @@ impl Matcher for AndMatcher {
 }
 
 pub struct AndMatcherBuilder {
-    submatchers: Vec<Box<Matcher>>,
+    submatchers: Vec<Box<dyn Matcher>>,
 }
 
 impl AndMatcherBuilder {
@@ -70,12 +70,12 @@ impl AndMatcherBuilder {
         }
     }
 
-    pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: Box<dyn Matcher>) {
         self.submatchers.push(matcher);
     }
 
     /// Builds a Matcher: consuming the builder in the process.
-    pub fn build(mut self) -> Box<Matcher> {
+    pub fn build(mut self) -> Box<dyn Matcher> {
         // special case. If there's only one submatcher, just return that directly
         if self.submatchers.len() == 1 {
             // safe to unwrap: we've just checked the size
@@ -92,11 +92,11 @@ impl AndMatcherBuilder {
 /// side effects, the side effects occur in the same order as the sub-matchers
 /// were pushed into the collection.
 pub struct OrMatcher {
-    submatchers: Vec<Box<Matcher>>,
+    submatchers: Vec<Box<dyn Matcher>>,
 }
 
 impl OrMatcher {
-    pub fn new(submatchers: Vec<Box<Matcher>>) -> OrMatcher {
+    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> OrMatcher {
         OrMatcher {
             submatchers: submatchers,
         }
@@ -135,7 +135,7 @@ pub struct OrMatcherBuilder {
 }
 
 impl OrMatcherBuilder {
-    pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: Box<dyn Matcher>) {
         // safe to unwrap. submatchers always has at least one member
         self.submatchers
             .last_mut()
@@ -143,7 +143,7 @@ impl OrMatcherBuilder {
             .new_and_condition(matcher);
     }
 
-    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
+    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<dyn Error>> {
         if self.submatchers.last().unwrap().submatchers.is_empty() {
             return Err(From::from(format!(
                 "invalid expression; you have used a binary operator \
@@ -164,7 +164,7 @@ impl OrMatcherBuilder {
     }
 
     /// Builds a Matcher: consuming the builder in the process.
-    pub fn build(mut self) -> Box<Matcher> {
+    pub fn build(mut self) -> Box<dyn Matcher> {
         // Special case: if there's only one submatcher, just return that directly
         if self.submatchers.len() == 1 {
             // safe to unwrap: we've just checked the size
@@ -184,11 +184,11 @@ impl OrMatcherBuilder {
 /// for submatchers with side-effects. For such sub-matchers the side effects
 /// occur in the same order as the sub-matchers were pushed into the collection.
 pub struct ListMatcher {
-    submatchers: Vec<Box<Matcher>>,
+    submatchers: Vec<Box<dyn Matcher>>,
 }
 
 impl ListMatcher {
-    pub fn new(submatchers: Vec<Box<Matcher>>) -> ListMatcher {
+    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> ListMatcher {
         ListMatcher {
             submatchers: submatchers,
         }
@@ -228,7 +228,7 @@ pub struct ListMatcherBuilder {
 }
 
 impl ListMatcherBuilder {
-    pub fn new_and_condition(&mut self, matcher: Box<Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: Box<dyn Matcher>) {
         // safe to unwrap. submatchers always has at least one member
         self.submatchers
             .last_mut()
@@ -236,11 +236,11 @@ impl ListMatcherBuilder {
             .new_and_condition(matcher);
     }
 
-    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<Error>> {
+    pub fn new_or_condition(&mut self, arg: &str) -> Result<(), Box<dyn Error>> {
         self.submatchers.last_mut().unwrap().new_or_condition(arg)
     }
 
-    pub fn check_new_and_condition(&mut self) -> Result<(), Box<Error>> {
+    pub fn check_new_and_condition(&mut self) -> Result<(), Box<dyn Error>> {
         {
             let child_or_matcher = &self.submatchers.last().unwrap();
             let grandchild_and_matcher = &child_or_matcher.submatchers.last().unwrap();
@@ -255,7 +255,7 @@ impl ListMatcherBuilder {
         Ok(())
     }
 
-    pub fn new_list_condition(&mut self) -> Result<(), Box<Error>> {
+    pub fn new_list_condition(&mut self) -> Result<(), Box<dyn Error>> {
         {
             let child_or_matcher = &self.submatchers.last().unwrap();
             let grandchild_and_matcher = &child_or_matcher.submatchers.last().unwrap();
@@ -280,7 +280,7 @@ impl ListMatcherBuilder {
     }
 
     /// Builds a Matcher: consuming the builder in the process.
-    pub fn build(mut self) -> Box<Matcher> {
+    pub fn build(mut self) -> Box<dyn Matcher> {
         // Special case: if there's only one submatcher, just return that directly
         if self.submatchers.len() == 1 {
             // safe to unwrap: we've just checked the size
@@ -298,7 +298,7 @@ impl ListMatcherBuilder {
 pub struct TrueMatcher;
 
 impl TrueMatcher {
-    pub fn new_box() -> Box<Matcher> {
+    pub fn new_box() -> Box<dyn Matcher> {
         Box::new(TrueMatcher {})
     }
 }
@@ -319,24 +319,24 @@ impl Matcher for FalseMatcher {
 }
 
 impl FalseMatcher {
-    pub fn new_box() -> Box<Matcher> {
+    pub fn new_box() -> Box<dyn Matcher> {
         Box::new(FalseMatcher {})
     }
 }
 
 /// Matcher that wraps another matcher and inverts matching criteria.
 pub struct NotMatcher {
-    submatcher: Box<Matcher>,
+    submatcher: Box<dyn Matcher>,
 }
 
 impl NotMatcher {
-    pub fn new(submatcher: Box<Matcher>) -> NotMatcher {
+    pub fn new(submatcher: Box<dyn Matcher>) -> NotMatcher {
         NotMatcher {
             submatcher: submatcher,
         }
     }
 
-    pub fn new_box(submatcher: Box<Matcher>) -> Box<NotMatcher> {
+    pub fn new_box(submatcher: Box<dyn Matcher>) -> Box<NotMatcher> {
         Box::new(NotMatcher::new(submatcher))
     }
 }
@@ -382,7 +382,7 @@ mod tests {
     }
 
     impl HasSideEffects {
-        pub fn new_box() -> Box<Matcher> {
+        pub fn new_box() -> Box<dyn Matcher> {
             Box::new(HasSideEffects {})
         }
     }
