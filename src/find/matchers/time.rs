@@ -21,20 +21,20 @@ pub struct NewerMatcher {
 }
 
 impl NewerMatcher {
-    pub fn new(path_to_file: &str) -> Result<NewerMatcher, Box<Error>> {
+    pub fn new(path_to_file: &str) -> Result<NewerMatcher, Box<dyn Error>> {
         let metadata = fs::metadata(path_to_file)?;
         Ok(NewerMatcher {
             given_modification_time: metadata.modified()?,
         })
     }
 
-    pub fn new_box(path_to_file: &str) -> Result<Box<Matcher>, Box<Error>> {
+    pub fn new_box(path_to_file: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
         Ok(Box::new(NewerMatcher::new(path_to_file)?))
     }
 
     /// Impementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
-    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<Error>> {
+    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = file_info.metadata()?.modified()?;
         // duration_since returns an Ok duration if this_time <= given_modification_time
         // and returns an Err (with a duration) otherwise. So if this_time >
@@ -111,7 +111,7 @@ impl Matcher for FileTimeMatcher {
 impl FileTimeMatcher {
     /// Impementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
-    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<Error>> {
+    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
         let mut is_negative = false;
         // durations can't be negative. So duration_since returns a duration
@@ -140,7 +140,7 @@ impl FileTimeMatcher {
         }
     }
 
-    pub fn new_box(file_time_type: FileTimeType, days: ComparableValue) -> Box<Matcher> {
+    pub fn new_box(file_time_type: FileTimeType, days: ComparableValue) -> Box<dyn Matcher> {
         Box::new(FileTimeMatcher::new(file_time_type, days))
     }
 }

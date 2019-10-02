@@ -26,11 +26,11 @@ use super::{Config, Dependencies};
 /// from the file/directory info.
 pub struct MatcherIO<'a> {
     should_skip_dir: bool,
-    deps: &'a Dependencies<'a>,
+    deps: &'a dyn Dependencies<'a>,
 }
 
 impl<'a> MatcherIO<'a> {
-    pub fn new(deps: &'a Dependencies<'a>) -> MatcherIO<'a> {
+    pub fn new(deps: &'a dyn Dependencies<'a>) -> MatcherIO<'a> {
         MatcherIO {
             deps: deps,
             should_skip_dir: false,
@@ -107,7 +107,7 @@ impl ComparableValue {
 pub fn build_top_level_matcher(
     args: &[&str],
     config: &mut Config,
-) -> Result<Box<Matcher>, Box<Error>> {
+) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
     let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, false))?;
 
     // if the matcher doesn't have any side-effects, then we default to printing
@@ -125,7 +125,7 @@ fn are_more_expressions(args: &[&str], index: usize) -> bool {
     (index < args.len() - 1) && args[index + 1] != ")"
 }
 
-fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usize, Box<Error>> {
+fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usize, Box<dyn Error>> {
     match value_as_string.parse::<usize>() {
         Ok(val) => Ok(val),
         _ => Err(From::from(format!(
@@ -139,7 +139,7 @@ fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usi
 fn convert_arg_to_comparable_value(
     option_name: &str,
     value_as_string: &str,
-) -> Result<ComparableValue, Box<Error>> {
+) -> Result<ComparableValue, Box<dyn Error>> {
     let re = Regex::new(r"([+-]?)(\d+)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
@@ -160,7 +160,7 @@ fn convert_arg_to_comparable_value(
 fn convert_arg_to_comparable_value_and_suffix(
     option_name: &str,
     value_as_string: &str,
-) -> Result<(ComparableValue, String), Box<Error>> {
+) -> Result<(ComparableValue, String), Box<dyn Error>> {
     let re = Regex::new(r"([+-]?)(\d+)(.*)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
@@ -190,7 +190,7 @@ fn build_matcher_tree(
     config: &mut Config,
     arg_index: usize,
     expecting_bracket: bool,
-) -> Result<(usize, Box<Matcher>), Box<Error>> {
+) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
     let mut top_level_matcher = logical_matchers::ListMatcherBuilder::new();
 
     // can't use getopts for a variety or reasons:

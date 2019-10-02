@@ -36,13 +36,13 @@ impl Default for Config {
 /// Trait that encapsulates various dependencies (output, clocks, etc.) that we
 /// might want to fake out for unit tests.
 pub trait Dependencies<'a> {
-    fn get_output(&'a self) -> &'a RefCell<Write>;
+    fn get_output(&'a self) -> &'a RefCell<dyn Write>;
     fn now(&'a self) -> SystemTime;
 }
 
 /// Struct that holds the dependencies we use when run as the real executable.
 pub struct StandardDependencies {
-    output: Rc<RefCell<Write>>,
+    output: Rc<RefCell<dyn Write>>,
     now: SystemTime,
 }
 
@@ -56,7 +56,7 @@ impl StandardDependencies {
 }
 
 impl<'a> Dependencies<'a> for StandardDependencies {
-    fn get_output(&'a self) -> &'a RefCell<Write> {
+    fn get_output(&'a self) -> &'a RefCell<dyn Write> {
         self.output.as_ref()
     }
 
@@ -67,13 +67,13 @@ impl<'a> Dependencies<'a> for StandardDependencies {
 
 /// The result of parsing the command-line arguments into useful forms.
 struct ParsedInfo {
-    matcher: Box<self::matchers::Matcher>,
+    matcher: Box<dyn self::matchers::Matcher>,
     paths: Vec<String>,
     config: Config,
 }
 
 /// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
-fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
+fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut paths = vec![];
     let mut i = 0;
     let mut config = Config::default();
@@ -100,9 +100,9 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<Error>> {
 fn process_dir<'a>(
     dir: &str,
     config: &Config,
-    deps: &'a Dependencies<'a>,
-    matcher: &Box<matchers::Matcher>,
-) -> Result<u64, Box<Error>> {
+    deps: &'a dyn Dependencies<'a>,
+    matcher: &Box<dyn matchers::Matcher>,
+) -> Result<u64, Box<dyn Error>> {
     let mut found_count: u64 = 0;
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
@@ -135,7 +135,7 @@ fn process_dir<'a>(
     Ok(found_count)
 }
 
-fn do_find<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> Result<u64, Box<Error>> {
+fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
     if paths_and_matcher.config.help_requested {
         print_help();
@@ -195,7 +195,7 @@ Early alpha implementation. Currently the only expressions supported are
 /// All main has to do is pass in the command-line args and exit the process
 /// with the exit code. Note that the first string in args is expected to be
 /// the name of the executable.
-pub fn find_main<'a>(args: &[&str], deps: &'a Dependencies<'a>) -> i32 {
+pub fn find_main<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> i32 {
     match do_find(&args[1..], deps) {
         Ok(_) => 0,
         Err(e) => {

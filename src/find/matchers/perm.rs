@@ -30,8 +30,8 @@ pub enum ComparisonType {
 
 #[cfg(unix)]
 impl FromStr for ComparisonType {
-    type Err = Box<Error>;
-    fn from_str(s: &str) -> Result<ComparisonType, Box<Error>> {
+    type Err = Box<dyn Error>;
+    fn from_str(s: &str) -> Result<ComparisonType, Box<dyn Error>> {
         Ok(match s {
             "" => ComparisonType::Exact,
             "-" => ComparisonType::AtLeast,
@@ -94,14 +94,14 @@ mod parsing {
             }
         }
 
-        fn error(&self) -> Result<(), Box<Error>> {
+        fn error(&self) -> Result<(), Box<dyn Error>> {
             Err(From::from(format!(
                 "invalid mode '{}'",
                 self.string_pattern
             )))
         }
 
-        fn handle_char(&mut self, char: &char) -> Result<(), Box<Error>> {
+        fn handle_char(&mut self, char: &char) -> Result<(), Box<dyn Error>> {
             if let ParserState::Beginning = self.state {};
 
             match *char {
@@ -230,7 +230,7 @@ mod parsing {
         }
     }
 
-    pub fn parse(string_value: &str) -> Result<(u32, ComparisonType), Box<Error>> {
+    pub fn parse(string_value: &str) -> Result<(u32, ComparisonType), Box<dyn Error>> {
         // safe to unwrap as the regex is a compile-time constant.
         let re = Regex::new("^([/-]?)([0-7]+)$").unwrap();
 
@@ -270,7 +270,7 @@ pub struct PermMatcher {}
 
 impl PermMatcher {
     #[cfg(unix)]
-    pub fn new(pattern: &str) -> Result<PermMatcher, Box<Error>> {
+    pub fn new(pattern: &str) -> Result<PermMatcher, Box<dyn Error>> {
         let (bit_pattern, comparison_type) = parsing::parse(pattern)?;
         Ok(PermMatcher {
             pattern: bit_pattern,
@@ -279,13 +279,13 @@ impl PermMatcher {
     }
 
     #[cfg(not(unix))]
-    pub fn new(_dummy_pattern: &str) -> Result<PermMatcher, Box<Error>> {
+    pub fn new(_dummy_pattern: &str) -> Result<PermMatcher, Box<dyn Error>> {
         Err(From::from(
             "Permission matching is not available on this platform",
         ))
     }
 
-    pub fn new_box(pattern: &str) -> Result<Box<Matcher>, Box<Error>> {
+    pub fn new_box(pattern: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
         Ok(Box::new(PermMatcher::new(pattern)?))
     }
 }
