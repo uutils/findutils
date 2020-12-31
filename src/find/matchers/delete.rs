@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use walkdir::DirEntry;
 
-use find::matchers::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO};
 
 pub struct DeleteMatcher {
     current_dir: PathBuf,
