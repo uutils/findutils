@@ -44,7 +44,7 @@ impl<'a> FakeDependencies {
 }
 
 impl<'a> Dependencies<'a> for FakeDependencies {
-    fn get_output(&'a self) -> &'a RefCell<Write> {
+    fn get_output(&'a self) -> &'a RefCell<dyn Write> {
         &self.output
     }
 

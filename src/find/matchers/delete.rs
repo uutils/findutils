@@ -27,7 +27,7 @@ impl DeleteMatcher {
         })
     }
 
-    pub fn new_box() -> io::Result<Box<Matcher>> {
+    pub fn new_box() -> io::Result<Box<dyn Matcher>> {
         Ok(Box::new(DeleteMatcher::new()?))
     }
 

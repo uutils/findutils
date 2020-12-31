@@ -157,7 +157,7 @@ mod tests {
     fn size_matcher_bad_unit() {
         if let Err(e) = SizeMatcher::new(ComparableValue::EqualTo(2), "xyz") {
             assert!(
-                e.description().contains("Invalid suffix") && e.description().contains("xyz"),
+                e.to_string().contains("Invalid suffix") && e.to_string().contains("xyz"),
                 "bad description: {}",
                 e
             );

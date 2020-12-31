@@ -118,9 +118,7 @@ fn process_dir<'a>(
     loop {
         match it.next() {
             None => break,
-            Some(Err(err)) => {
-                writeln!(&mut stderr(), "Error: {}: {}", dir, err.description()).unwrap()
-            }
+            Some(Err(err)) => writeln!(&mut stderr(), "Error: {}: {}", dir, err).unwrap(),
             Some(Ok(entry)) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
                 if matcher.matches(&entry, &mut matcher_io) {
@@ -265,7 +263,7 @@ mod tests {
     }
 
     impl<'a> Dependencies<'a> for FakeDependencies {
-        fn get_output(&'a self) -> &'a RefCell<Write> {
+        fn get_output(&'a self) -> &'a RefCell<dyn Write> {
             &self.output
         }
 
@@ -286,7 +284,7 @@ mod tests {
         //
         let result = super::parse_args(&["-asdadsafsfsadcs"]);
         if let Err(e) = result {
-            assert_eq!(e.description(), "Unrecognized flag: '-asdadsafsfsadcs'");
+            assert_eq!(e.to_string(), "Unrecognized flag: '-asdadsafsfsadcs'");
         } else {
             panic!("parse_args should have returned an error");
         }
