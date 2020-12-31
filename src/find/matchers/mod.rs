@@ -126,7 +126,10 @@ fn are_more_expressions(args: &[&str], index: usize) -> bool {
     (index < args.len() - 1) && args[index + 1] != ")"
 }
 
-fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usize, Box<dyn Error>> {
+fn convert_arg_to_number(
+    option_name: &str,
+    value_as_string: &str,
+) -> Result<usize, Box<dyn Error>> {
     match value_as_string.parse::<usize>() {
         Ok(val) => Ok(val),
         _ => Err(From::from(format!(

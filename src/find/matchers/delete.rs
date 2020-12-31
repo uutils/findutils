@@ -8,8 +8,8 @@
  */
 
 use std::env;
-use std::io::{self, stderr, Write};
 use std::fs::{self, FileType};
+use std::io::{self, stderr, Write};
 use std::path::{Path, PathBuf};
 
 use walkdir::DirEntry;
@@ -17,13 +17,13 @@ use walkdir::DirEntry;
 use find::matchers::{Matcher, MatcherIO};
 
 pub struct DeleteMatcher {
-    current_dir: PathBuf
+    current_dir: PathBuf,
 }
 
 impl DeleteMatcher {
     pub fn new() -> io::Result<DeleteMatcher> {
         Ok(DeleteMatcher {
-            current_dir: env::current_dir()?
+            current_dir: env::current_dir()?,
         })
     }
 
@@ -50,10 +50,13 @@ impl Matcher for DeleteMatcher {
         match self.delete(path, file_info.file_type()) {
             Ok(_) => true,
             Err(f) => {
-                writeln!(&mut stderr(),
-                         "Failed to delete {}: {}",
-                         file_info.path().to_string_lossy(),
-                         f).unwrap();
+                writeln!(
+                    &mut stderr(),
+                    "Failed to delete {}: {}",
+                    file_info.path().to_string_lossy(),
+                    f
+                )
+                .unwrap();
                 false
             }
         }
@@ -65,6 +68,4 @@ impl Matcher for DeleteMatcher {
 }
 
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

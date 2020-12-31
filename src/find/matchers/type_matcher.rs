@@ -83,5 +83,4 @@ mod tests {
         let result = TypeMatcher::new(&"xxx".to_string());
         assert!(result.is_err());
     }
-
 }

@@ -534,5 +534,4 @@ mod tests {
         assert!(has_fx.has_side_effects());
         assert!(!hasnt_fx.has_side_effects());
     }
-
 }
