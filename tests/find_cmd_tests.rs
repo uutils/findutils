@@ -1,4 +1,4 @@
-// Copyright 2021 Chad Williamson
+// Copyright 2021 Chad Williamson <chad@dahc.us>
 //
 // Use of this source code is governed by an MIT-syle license that can be
 // found in the LICENSE file or at https://opensource.org/licenses/MIT.
