@@ -44,7 +44,7 @@ impl Matcher for DeleteMatcher {
         // POSIX rmdir() not accepting "." (EINVAL). std::fs::remove_dir()
         // inherits the same behavior, so no reason to buck tradition.
         if path_str == "." {
-            return false;
+            return true;
         }
 
         match self.delete(path, file_info.file_type()) {

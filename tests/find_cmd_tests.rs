@@ -100,13 +100,14 @@ fn delete_on_dot_dir() {
     let original_dir = env::current_dir().unwrap();
     env::set_current_dir(&temp_dir.path()).expect("working dir changed");
 
+    // "." should be matched (confirmed by the print), but not deleted.
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[".", "-delete"])
+        .args(&[".", "-delete", "-print"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::is_empty());
+        .stdout(predicate::str::similar(".\n"));
 
     env::set_current_dir(original_dir).expect("restored original working dir");
 
