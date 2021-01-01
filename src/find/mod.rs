@@ -55,6 +55,12 @@ impl StandardDependencies {
     }
 }
 
+impl Default for StandardDependencies {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Dependencies<'a> for StandardDependencies {
     fn get_output(&'a self) -> &'a RefCell<dyn Write> {
         self.output.as_ref()
@@ -91,12 +97,13 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     }
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
     Ok(ParsedInfo {
-        matcher: matcher,
-        paths: paths,
-        config: config,
+        matcher,
+        paths,
+        config,
     })
 }
 
+#[allow(clippy::borrowed_box)] // FIXME?
 fn process_dir<'a>(
     dir: &str,
     config: &Config,

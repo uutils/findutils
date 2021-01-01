@@ -33,7 +33,7 @@ pub struct MatcherIO<'a> {
 impl<'a> MatcherIO<'a> {
     pub fn new(deps: &'a dyn Dependencies<'a>) -> MatcherIO<'a> {
         MatcherIO {
-            deps: deps,
+            deps,
             should_skip_dir: false,
         }
     }
@@ -66,7 +66,7 @@ pub trait Matcher {
     /// collection of sub-Matchers.
     fn has_side_effects(&self) -> bool {
         // most matchers don't have side-effects, so supply a default implementation.
-        return false;
+        false
     }
 
     /// Notification that find has finished processing a given directory.
@@ -213,7 +213,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(name::NameMatcher::new_box(args[i].as_ref())?)
+                Some(name::NameMatcher::new_box(args[i])?)
             }
             "-iname" => {
                 if i >= args.len() - 1 {

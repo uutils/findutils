@@ -78,7 +78,7 @@ impl SizeMatcher {
     ) -> Result<SizeMatcher, Box<dyn Error>> {
         Ok(SizeMatcher {
             unit: suffix_string.parse()?,
-            value_to_match: value_to_match,
+            value_to_match,
         })
     }
 

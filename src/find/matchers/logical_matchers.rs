@@ -26,9 +26,7 @@ pub struct AndMatcher {
 
 impl AndMatcher {
     pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> AndMatcher {
-        AndMatcher {
-            submatchers: submatchers,
-        }
+        AndMatcher { submatchers }
     }
 }
 
@@ -97,9 +95,7 @@ pub struct OrMatcher {
 
 impl OrMatcher {
     pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> OrMatcher {
-        OrMatcher {
-            submatchers: submatchers,
-        }
+        OrMatcher { submatchers }
     }
 }
 
@@ -189,9 +185,7 @@ pub struct ListMatcher {
 
 impl ListMatcher {
     pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> ListMatcher {
-        ListMatcher {
-            submatchers: submatchers,
-        }
+        ListMatcher { submatchers }
     }
 }
 
@@ -331,9 +325,7 @@ pub struct NotMatcher {
 
 impl NotMatcher {
     pub fn new(submatcher: Box<dyn Matcher>) -> NotMatcher {
-        NotMatcher {
-            submatcher: submatcher,
-        }
+        NotMatcher { submatcher }
     }
 
     pub fn new_box(submatcher: Box<dyn Matcher>) -> Box<NotMatcher> {

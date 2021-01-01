@@ -4,7 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std;
 use std::error::Error;
 use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
@@ -135,8 +134,8 @@ impl FileTimeMatcher {
 
     pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> FileTimeMatcher {
         FileTimeMatcher {
-            file_time_type: file_time_type,
-            days: days,
+            file_time_type,
+            days,
         }
     }
 
