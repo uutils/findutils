@@ -23,7 +23,7 @@ fn no_args() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::contains("\n./test_data\n"));
+        .stdout(predicate::str::contains("test_data"));
 }
 
 #[serial(working_dir)]
@@ -35,7 +35,7 @@ fn two_matchers_both_match() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::similar("./test_data\n"));
+        .stdout(predicate::str::contains("test_data"));
 }
 
 #[serial(working_dir)]
