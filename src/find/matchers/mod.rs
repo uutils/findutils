@@ -53,7 +53,7 @@ impl<'a> MatcherIO<'a> {
 
 /// A basic interface that can be used to determine whether a directory entry
 /// is what's being searched for. To a first order approximation, find consists
-/// of building a chain of Matcher objets, and then walking a directory tree,
+/// of building a chain of Matcher objects, and then walking a directory tree,
 /// passing each entry to the chain of Matchers.
 pub trait Matcher {
     /// Returns whether the given file matches the object's predicate.
@@ -187,7 +187,7 @@ fn convert_arg_to_comparable_value_and_suffix(
 
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
-/// consits of a tuple containing the new index into the args array to use (if
+/// consists of a tuple containing the new index into the args array to use (if
 /// called recursively) and the resulting matcher.
 fn build_matcher_tree(
     args: &[&str],
@@ -486,7 +486,7 @@ mod tests {
             if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
                 assert!(e.to_string().contains("expected an expression"));
             } else {
-                panic!("parsing arugment lists that end in -not should fail");
+                panic!("parsing argument lists that end in -not should fail");
             }
         }
     }
@@ -524,7 +524,7 @@ mod tests {
                 assert!(e.to_string().contains("missing argument to"));
                 assert!(e.to_string().contains(arg));
             } else {
-                panic!("parsing arugment lists that end in -not should fail");
+                panic!("parsing argument lists that end in -not should fail");
             }
         }
     }
@@ -537,7 +537,7 @@ mod tests {
             if let Err(e) = build_top_level_matcher(&[arg, "-true"], &mut config) {
                 assert!(e.to_string().contains("you have used a binary operator"));
             } else {
-                panic!("parsing arugment list that begins with -or should fail");
+                panic!("parsing argument list that begins with -or should fail");
             }
         }
     }
@@ -550,7 +550,7 @@ mod tests {
             if let Err(e) = build_top_level_matcher(&["-true", arg], &mut config) {
                 assert!(e.to_string().contains("expected an expression"));
             } else {
-                panic!("parsing arugment list that ends with -or should fail");
+                panic!("parsing argument list that ends with -or should fail");
             }
         }
     }
@@ -562,7 +562,7 @@ mod tests {
         if let Err(e) = build_top_level_matcher(&["-a", "-true"], &mut config) {
             assert!(e.to_string().contains("you have used a binary operator"));
         } else {
-            panic!("parsing arugment list that begins with -a should fail");
+            panic!("parsing argument list that begins with -a should fail");
         }
     }
 
@@ -573,7 +573,7 @@ mod tests {
         if let Err(e) = build_top_level_matcher(&["-true", "-a"], &mut config) {
             assert!(e.to_string().contains("expected an expression"));
         } else {
-            panic!("parsing arugment list that ends with -or should fail");
+            panic!("parsing argument list that ends with -or should fail");
         }
     }
 
@@ -675,13 +675,13 @@ mod tests {
         if let Err(e) = build_top_level_matcher(&[",", "-true"], &mut config) {
             assert!(e.to_string().contains("you have used a binary operator"));
         } else {
-            panic!("parsing arugment list that begins with , should fail");
+            panic!("parsing argument list that begins with , should fail");
         }
 
         if let Err(e) = build_top_level_matcher(&["-true", "-o", ",", "-true"], &mut config) {
             assert!(e.to_string().contains("you have used a binary operator"));
         } else {
-            panic!("parsing arugment list that contains '-o  ,' should fail");
+            panic!("parsing argument list that contains '-o  ,' should fail");
         }
     }
 
@@ -692,7 +692,7 @@ mod tests {
         if let Err(e) = build_top_level_matcher(&["-true", ","], &mut config) {
             assert!(e.to_string().contains("expected an expression"));
         } else {
-            panic!("parsing arugment list that ends with , should fail");
+            panic!("parsing argument list that ends with , should fail");
         }
     }
 
@@ -703,7 +703,7 @@ mod tests {
         if let Err(e) = build_top_level_matcher(&["-true", "("], &mut config) {
             assert!(e.to_string().contains("I was expecting to find a ')'"));
         } else {
-            panic!("parsing arugment list with not enough closing brackets should fail");
+            panic!("parsing argument list with not enough closing brackets should fail");
         }
     }
 
@@ -714,7 +714,7 @@ mod tests {
         if let Err(e) = build_top_level_matcher(&["-true", "(", ")", ")"], &mut config) {
             assert!(e.to_string().contains("too many ')'"));
         } else {
-            panic!("parsing arugment list with too many closing brackets should fail");
+            panic!("parsing argument list with too many closing brackets should fail");
         }
     }
 

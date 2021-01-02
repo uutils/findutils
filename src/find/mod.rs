@@ -119,7 +119,7 @@ fn process_dir<'a>(
         walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }
 
-    // Slighly yucky loop handling here :-(. See docs for
+    // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
     loop {

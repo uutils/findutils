@@ -510,7 +510,7 @@ mod tests {
         );
         assert!(
             parsing::parse("u_rwx,g=rx,o+r").is_err(),
-            "invalid category/permissoin spearator should fail"
+            "invalid category/permissoin separator should fail"
         );
         assert!(
             parsing::parse("77777777777777").is_err(),

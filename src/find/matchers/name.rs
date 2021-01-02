@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn not_matching_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = NameMatcher::new(&"should't match".to_string()).unwrap();
+        let matcher = NameMatcher::new(&"shouldn't match".to_string()).unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn caseless_not_matching_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = CaselessNameMatcher::new(&"should't match".to_string()).unwrap();
+        let matcher = CaselessNameMatcher::new(&"shouldn't match".to_string()).unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }

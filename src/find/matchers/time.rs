@@ -31,7 +31,7 @@ impl NewerMatcher {
         Ok(Box::new(NewerMatcher::new(path_to_file)?))
     }
 
-    /// Impementation of matches that returns a result, allowing use to use try!
+    /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = file_info.metadata()?.modified()?;
@@ -108,7 +108,7 @@ impl Matcher for FileTimeMatcher {
 }
 
 impl FileTimeMatcher {
-    /// Impementation of matches that returns a result, allowing use to use try!
+    /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
     fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
@@ -304,7 +304,7 @@ mod tests {
         }
 
         thread::sleep(Duration::from_secs(2));
-        // write to the file - changing the modifiation and potentially the accessed time
+        // write to the file - changing the modification and potentially the accessed time
         let mut buffer = [0; 10];
         {
             let mut f = OpenOptions::new()
