@@ -41,7 +41,7 @@ impl SingleExecMatcher {
         Ok(SingleExecMatcher {
             executable: executable.to_string(),
             args: transformed_args,
-            exec_in_parent_dir: exec_in_parent_dir,
+            exec_in_parent_dir,
         })
     }
 
@@ -72,9 +72,9 @@ impl Matcher for SingleExecMatcher {
         };
 
         for arg in &self.args {
-            command.arg(match arg {
-                &Arg::LiteralArg(ref a) => a.as_os_str(),
-                &Arg::Filename => path_to_file.as_os_str(),
+            command.arg(match *arg {
+                Arg::LiteralArg(ref a) => a.as_os_str(),
+                Arg::Filename => path_to_file.as_os_str(),
             });
         }
         if self.exec_in_parent_dir {
@@ -85,16 +85,16 @@ impl Matcher for SingleExecMatcher {
             }
         }
         match command.status() {
-            Ok(status) => return status.success(),
+            Ok(status) => status.success(),
             Err(e) => {
                 writeln!(&mut stderr(), "Failed to run {}: {}", self.executable, e).unwrap();
-                return false;
+                false
             }
         }
     }
 
     fn has_side_effects(&self) -> bool {
-        return true;
+        true
     }
 }
 

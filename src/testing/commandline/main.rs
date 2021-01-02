@@ -44,8 +44,10 @@ fn main() {
     if args.len() < 2 || args[1] == "-h" || args[1] == "--help" {
         usage();
     }
-    let mut config = Config::default();
-    config.destination_dir = args[1].clone();
+    let mut config = Config {
+        destination_dir: args[1].clone(),
+        ..Default::default()
+    };
     for arg in &args[2..] {
         if arg.starts_with("--") {
             match arg.as_ref() {

@@ -55,6 +55,12 @@ impl StandardDependencies {
     }
 }
 
+impl Default for StandardDependencies {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Dependencies<'a> for StandardDependencies {
     fn get_output(&'a self) -> &'a RefCell<dyn Write> {
         self.output.as_ref()
@@ -91,12 +97,13 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     }
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
     Ok(ParsedInfo {
-        matcher: matcher,
-        paths: paths,
-        config: config,
+        matcher,
+        paths,
+        config,
     })
 }
 
+#[allow(clippy::borrowed_box)] // FIXME?
 fn process_dir<'a>(
     dir: &str,
     config: &Config,
@@ -118,9 +125,7 @@ fn process_dir<'a>(
     loop {
         match it.next() {
             None => break,
-            Some(Err(err)) => {
-                writeln!(&mut stderr(), "Error: {}: {}", dir, err.description()).unwrap()
-            }
+            Some(Err(err)) => writeln!(&mut stderr(), "Error: {}: {}", dir, err).unwrap(),
             Some(Ok(entry)) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
                 if matcher.matches(&entry, &mut matcher_io) {
@@ -164,8 +169,9 @@ Early alpha implementation. Currently the only expressions supported are
  -name case-sensitive_filename_pattern
  -iname case-insensitive_filename_pattern
  -type type_char
-    currently type_char can only be f (for file) or d (for directory) 
+    currently type_char can only be f (for file) or d (for directory)
  -size [+-]N[bcwkMG]
+ -delete
  -prune
  -not
  -a
@@ -183,8 +189,8 @@ Early alpha implementation. Currently the only expressions supported are
  -perm [-/]{{octal|u=rwx,go=w}}
  -newer path_to_file
  -exec[dir] executable [args] [{{}}] [more args] ;
- -sorted 
-    a non-standard extension that sorts directory contents by name before 
+ -sorted
+    a non-standard extension that sorts directory contents by name before
     processing them. Less efficient, but allows for deterministic output.
 "
     );
@@ -264,7 +270,7 @@ mod tests {
     }
 
     impl<'a> Dependencies<'a> for FakeDependencies {
-        fn get_output(&'a self) -> &'a RefCell<Write> {
+        fn get_output(&'a self) -> &'a RefCell<dyn Write> {
             &self.output
         }
 
@@ -285,7 +291,7 @@ mod tests {
         //
         let result = super::parse_args(&["-asdadsafsfsadcs"]);
         if let Err(e) = result {
-            assert_eq!(e.description(), "Unrecognized flag: '-asdadsafsfsadcs'");
+            assert_eq!(e.to_string(), "Unrecognized flag: '-asdadsafsfsadcs'");
         } else {
             panic!("parse_args should have returned an error");
         }

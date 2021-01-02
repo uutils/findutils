@@ -78,7 +78,7 @@ impl SizeMatcher {
     ) -> Result<SizeMatcher, Box<dyn Error>> {
         Ok(SizeMatcher {
             unit: suffix_string.parse()?,
-            value_to_match: value_to_match,
+            value_to_match,
         })
     }
 
@@ -157,7 +157,7 @@ mod tests {
     fn size_matcher_bad_unit() {
         if let Err(e) = SizeMatcher::new(ComparableValue::EqualTo(2), "xyz") {
             assert!(
-                e.description().contains("Invalid suffix") && e.description().contains("xyz"),
+                e.to_string().contains("Invalid suffix") && e.to_string().contains("xyz"),
                 "bad description: {}",
                 e
             );

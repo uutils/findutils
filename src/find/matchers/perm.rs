@@ -49,8 +49,8 @@ impl FromStr for ComparisonType {
 
 #[cfg(unix)]
 impl ComparisonType {
-    fn mode_bits_match(&self, pattern: u32, value: u32) -> bool {
-        match *self {
+    fn mode_bits_match(self, pattern: u32, value: u32) -> bool {
+        match self {
             ComparisonType::Exact => (0o7777 & value) == pattern,
             ComparisonType::AtLeast => (value & pattern) == pattern,
             ComparisonType::AnyOf => pattern == 0 || (value & pattern) > 0,
@@ -89,7 +89,7 @@ mod parsing {
                 state: ParserState::Beginning,
                 bit_pattern: 0,
                 comparison_type: ComparisonType::Exact,
-                string_pattern: string_pattern,
+                string_pattern,
                 category_bit_pattern: 0,
             }
         }
@@ -101,10 +101,10 @@ mod parsing {
             )))
         }
 
-        fn handle_char(&mut self, char: &char) -> Result<(), Box<dyn Error>> {
+        fn handle_char(&mut self, char: char) -> Result<(), Box<dyn Error>> {
             if let ParserState::Beginning = self.state {};
 
-            match *char {
+            match char {
                 '-' => {
                     if let ParserState::Beginning = self.state {
                         self.comparison_type = ComparisonType::AtLeast;
@@ -253,7 +253,7 @@ mod parsing {
         // no: so we've got a /u=rw,g=r form instead (or an invalid string).
         let mut p = Parser::new(string_value);
         for c in string_value.chars() {
-            p.handle_char(&c)?;
+            p.handle_char(c)?;
         }
         Ok((p.bit_pattern, p.comparison_type))
     }
@@ -274,7 +274,7 @@ impl PermMatcher {
         let (bit_pattern, comparison_type) = parsing::parse(pattern)?;
         Ok(PermMatcher {
             pattern: bit_pattern,
-            comparison_type: comparison_type,
+            comparison_type,
         })
     }
 

@@ -10,6 +10,11 @@ walkdir = "2.3"
 tempdir = "0.3"
 regex = "1.4"
 
+[dev-dependencies]
+assert_cmd = "1"
+predicates = "1"
+serial_test = "0.5"
+
 [[bin]]
 name = "find"
 path = "src/find/main.rs"

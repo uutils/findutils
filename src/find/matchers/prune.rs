@@ -46,5 +46,4 @@ mod tests {
         assert!(matcher.matches(&dir, &mut matcher_io));
         assert!(matcher_io.should_skip_current_dir());
     }
-
 }

@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+mod delete;
 pub mod exec;
 mod logical_matchers;
 mod name;
@@ -32,7 +33,7 @@ pub struct MatcherIO<'a> {
 impl<'a> MatcherIO<'a> {
     pub fn new(deps: &'a dyn Dependencies<'a>) -> MatcherIO<'a> {
         MatcherIO {
-            deps: deps,
+            deps,
             should_skip_dir: false,
         }
     }
@@ -65,7 +66,7 @@ pub trait Matcher {
     /// collection of sub-Matchers.
     fn has_side_effects(&self) -> bool {
         // most matchers don't have side-effects, so supply a default implementation.
-        return false;
+        false
     }
 
     /// Notification that find has finished processing a given directory.
@@ -125,7 +126,10 @@ fn are_more_expressions(args: &[&str], index: usize) -> bool {
     (index < args.len() - 1) && args[index + 1] != ")"
 }
 
-fn convert_arg_to_number(option_name: &str, value_as_string: &str) -> Result<usize, Box<dyn Error>> {
+fn convert_arg_to_number(
+    option_name: &str,
+    value_as_string: &str,
+) -> Result<usize, Box<dyn Error>> {
     match value_as_string.parse::<usize>() {
         Ok(val) => Ok(val),
         _ => Err(From::from(format!(
@@ -209,7 +213,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(name::NameMatcher::new_box(args[i].as_ref())?)
+                Some(name::NameMatcher::new_box(args[i])?)
             }
             "-iname" => {
                 if i >= args.len() - 1 {
@@ -224,6 +228,11 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(type_matcher::TypeMatcher::new_box(args[i])?)
+            }
+            "-delete" => {
+                // -delete implicitly requires -depth
+                config.depth_first = true;
+                Some(delete::DeleteMatcher::new_box()?)
             }
             "-newer" => {
                 if i >= args.len() - 1 {
@@ -414,7 +423,7 @@ mod tests {
                 return dir_entry;
             }
         }
-        panic!("Couldn't find {} in {}", directory, filename);
+        panic!("Couldn't find {} in {}", filename, directory);
     }
 
     #[test]
@@ -475,7 +484,7 @@ mod tests {
             let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
-                assert!(e.description().contains("expected an expression"));
+                assert!(e.to_string().contains("expected an expression"));
             } else {
                 panic!("parsing arugment lists that end in -not should fail");
             }
@@ -512,8 +521,8 @@ mod tests {
             let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
-                assert!(e.description().contains("missing argument to"));
-                assert!(e.description().contains(arg));
+                assert!(e.to_string().contains("missing argument to"));
+                assert!(e.to_string().contains(arg));
             } else {
                 panic!("parsing arugment lists that end in -not should fail");
             }
@@ -526,7 +535,7 @@ mod tests {
             let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&[arg, "-true"], &mut config) {
-                assert!(e.description().contains("you have used a binary operator"));
+                assert!(e.to_string().contains("you have used a binary operator"));
             } else {
                 panic!("parsing arugment list that begins with -or should fail");
             }
@@ -539,7 +548,7 @@ mod tests {
             let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&["-true", arg], &mut config) {
-                assert!(e.description().contains("expected an expression"));
+                assert!(e.to_string().contains("expected an expression"));
             } else {
                 panic!("parsing arugment list that ends with -or should fail");
             }
@@ -551,7 +560,7 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-a", "-true"], &mut config) {
-            assert!(e.description().contains("you have used a binary operator"));
+            assert!(e.to_string().contains("you have used a binary operator"));
         } else {
             panic!("parsing arugment list that begins with -a should fail");
         }
@@ -562,7 +571,7 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", "-a"], &mut config) {
-            assert!(e.description().contains("expected an expression"));
+            assert!(e.to_string().contains("expected an expression"));
         } else {
             panic!("parsing arugment list that ends with -or should fail");
         }
@@ -664,13 +673,13 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&[",", "-true"], &mut config) {
-            assert!(e.description().contains("you have used a binary operator"));
+            assert!(e.to_string().contains("you have used a binary operator"));
         } else {
             panic!("parsing arugment list that begins with , should fail");
         }
 
         if let Err(e) = build_top_level_matcher(&["-true", "-o", ",", "-true"], &mut config) {
-            assert!(e.description().contains("you have used a binary operator"));
+            assert!(e.to_string().contains("you have used a binary operator"));
         } else {
             panic!("parsing arugment list that contains '-o  ,' should fail");
         }
@@ -681,7 +690,7 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", ","], &mut config) {
-            assert!(e.description().contains("expected an expression"));
+            assert!(e.to_string().contains("expected an expression"));
         } else {
             panic!("parsing arugment list that ends with , should fail");
         }
@@ -692,7 +701,7 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", "("], &mut config) {
-            assert!(e.description().contains("I was expecting to find a ')'"));
+            assert!(e.to_string().contains("I was expecting to find a ')'"));
         } else {
             panic!("parsing arugment list with not enough closing brackets should fail");
         }
@@ -703,7 +712,7 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-true", "(", ")", ")"], &mut config) {
-            assert!(e.description().contains("too many ')'"));
+            assert!(e.to_string().contains("too many ')'"));
         } else {
             panic!("parsing arugment list with too many closing brackets should fail");
         }
@@ -900,7 +909,7 @@ mod tests {
 
         if let Err(e) = build_top_level_matcher(&["-ctime", "-123."], &mut config) {
             assert!(
-                e.description().contains("Expected a decimal integer"),
+                e.to_string().contains("Expected a decimal integer"),
                 "bad description: {}",
                 e
             );
@@ -914,19 +923,19 @@ mod tests {
         let mut config = Config::default();
 
         if let Err(e) = build_top_level_matcher(&["-exec"], &mut config) {
-            assert!(e.description().contains("missing argument"));
+            assert!(e.to_string().contains("missing argument"));
         } else {
             panic!("parsing argument list with exec and no executable or semi-colon should fail");
         }
 
         if let Err(e) = build_top_level_matcher(&["-exec", ";"], &mut config) {
-            assert!(e.description().contains("missing argument"));
+            assert!(e.to_string().contains("missing argument"));
         } else {
             panic!("parsing argument list with exec and no executable should fail");
         }
 
         if let Err(e) = build_top_level_matcher(&["-exec", "foo"], &mut config) {
-            assert!(e.description().contains("missing argument"));
+            assert!(e.to_string().contains("missing argument"));
         } else {
             panic!("parsing argument list with exec and no executable should fail");
         }
@@ -964,13 +973,13 @@ mod tests {
     fn build_top_level_matcher_perm_bad() {
         let mut config = Config::default();
         if let Err(e) = build_top_level_matcher(&["-perm", "foo"], &mut config) {
-            assert!(e.description().contains("invalid mode"));
+            assert!(e.to_string().contains("invalid mode"));
         } else {
             panic!("-perm with bad mode pattern should fail");
         }
 
         if let Err(e) = build_top_level_matcher(&["-perm"], &mut config) {
-            assert!(e.description().contains("missing argument"));
+            assert!(e.to_string().contains("missing argument"));
         } else {
             panic!("-perm with no mode pattern should fail");
         }
@@ -981,13 +990,13 @@ mod tests {
     fn build_top_level_matcher_perm_not_unix() {
         let mut config = Config::default();
         if let Err(e) = build_top_level_matcher(&["-perm", "444"], &mut config) {
-            assert!(e.description().contains("not available"));
+            assert!(e.to_string().contains("not available"));
         } else {
             panic!("-perm on non-unix systems shouldn't be available");
         }
 
         if let Err(e) = build_top_level_matcher(&["-perm"], &mut config) {
-            assert!(e.description().contains("missing argument"));
+            assert!(e.to_string().contains("missing argument"));
         } else {
             panic!("-perm with no mode pattern should fail");
         }
