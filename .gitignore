@@ -3,3 +3,5 @@ target
 .project
 .cargo
 .settings
+test_data/links/link-f
+test_data/links/link-d
