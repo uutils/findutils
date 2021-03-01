@@ -103,13 +103,12 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     })
 }
 
-#[allow(clippy::borrowed_box)] // FIXME?
 fn process_dir<'a>(
     dir: &str,
     config: &Config,
     deps: &'a dyn Dependencies<'a>,
-    matcher: &Box<dyn matchers::Matcher>,
-) -> Result<u64, Box<dyn Error>> {
+    matcher: &dyn matchers::Matcher,
+) -> u64 {
     let mut found_count: u64 = 0;
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
@@ -137,7 +136,7 @@ fn process_dir<'a>(
             }
         }
     }
-    Ok(found_count)
+    found_count
 }
 
 fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box<dyn Error>> {
@@ -152,8 +151,8 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
             &path,
             &paths_and_matcher.config,
             deps,
-            &paths_and_matcher.matcher,
-        )?;
+            &*paths_and_matcher.matcher,
+        );
     }
     Ok(found_count)
 }
