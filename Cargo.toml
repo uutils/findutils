@@ -1,8 +1,13 @@
 [package]
 name = "findutils"
 version = "0.1.0"
-authors = ["mcharsley <mcharsley@google.com>"]
+homepage = "https://github.com/uutils/findutils"
+repository = "https://github.com/uutils/findutils"
 edition = "2018"
+license = "MIT"
+readme = "README.md"
+description = "Rust implementation of GNU findutils"
+authors = ["uutils developers"]
 
 [dependencies]
 glob = "0.3"
