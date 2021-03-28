@@ -269,7 +269,7 @@ fn build_matcher_tree(
             "-exec" | "-execdir" => {
                 let mut arg_index = i + 1;
                 while arg_index < args.len() && args[arg_index] != ";" {
-                    if args[arg_index] == "+" {
+                    if args[arg_index - 1] == "{}" && args[arg_index] == "+" {
                         // MultiExecMatcher isn't written yet
                         return Err(From::from(format!(
                             "{} [args...] + isn't supported yet. \
@@ -946,6 +946,13 @@ mod tests {
         let mut config = Config::default();
         build_top_level_matcher(&["-exec", "foo", "-o", "(", ";"], &mut config)
             .expect("parsing argument list with exec that takes brackets and -os should work");
+    }
+
+    #[test]
+    fn build_top_level_exec_plus_semicolon() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+", ";"], &mut config)
+            .expect("only {} + should be considered a multi-exec");
     }
 
     #[test]
