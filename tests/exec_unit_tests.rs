@@ -115,6 +115,46 @@ fn execdir_in_current_directory() {
 }
 
 #[test]
+/// Regression test for "find / -execdir whatever \;"
+fn execdir_in_root_directory() {
+    let temp_dir = TempDir::new("execdir_in_root_directory").unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    let cwd = env::current_dir().expect("no current directory");
+    let root_dir = cwd
+        .ancestors()
+        .last()
+        .expect("current directory has no root");
+    let root_dir_entry = WalkDir::new(root_dir)
+        .into_iter()
+        .next()
+        .expect("iterator was empty")
+        .expect("result wasn't OK");
+
+    let matcher = SingleExecMatcher::new(
+        &path_to_testing_commandline(),
+        &vec![temp_dir_path.as_ref(), "abc", "{}", "xyz"],
+        true,
+    )
+    .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&root_dir_entry, &mut deps.new_matcher_io()));
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\nabc\n{}\nxyz\n",
+            root_dir.to_string_lossy(),
+            root_dir.to_string_lossy(),
+        ))
+    );
+}
+
+#[test]
 fn matching_fails_if_executable_fails() {
     let temp_dir = TempDir::new("matching_fails_if_executable_fails").unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();

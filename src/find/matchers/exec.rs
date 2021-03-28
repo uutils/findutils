@@ -78,10 +78,17 @@ impl Matcher for SingleExecMatcher {
             });
         }
         if self.exec_in_parent_dir {
-            if file_info.path() == Path::new(".") {
-                command.current_dir(file_info.path());
-            } else if let Some(parent) = file_info.path().parent() {
-                command.current_dir(parent);
+            match file_info.path().parent() {
+                None => {
+                    // Root paths like "/" have no parent.  Run them from the root to match GNU find.
+                    command.current_dir(file_info.path());
+                }
+                Some(parent) if parent == Path::new("") => {
+                    // Paths like "foo" have a parent of "".  Avoid chdir("").
+                }
+                Some(parent) => {
+                    command.current_dir(parent);
+                }
             }
         }
         match command.status() {
