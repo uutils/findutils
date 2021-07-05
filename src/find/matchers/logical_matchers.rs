@@ -11,7 +11,7 @@
 //! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
 use std::error::Error;
 use std::iter::Iterator;
-use std::path::PathBuf;
+use std::path::Path;
 use walkdir::DirEntry;
 
 use super::{Matcher, MatcherIO};
@@ -44,7 +44,7 @@ impl Matcher for AndMatcher {
         self.submatchers.iter().any(|x| x.has_side_effects())
     }
 
-    fn finished_dir(&self, dir: &PathBuf) {
+    fn finished_dir(&self, dir: &Path) {
         for m in &self.submatchers {
             m.finished_dir(dir);
         }
@@ -113,7 +113,7 @@ impl Matcher for OrMatcher {
         self.submatchers.iter().any(|x| x.has_side_effects())
     }
 
-    fn finished_dir(&self, dir: &PathBuf) {
+    fn finished_dir(&self, dir: &Path) {
         for m in &self.submatchers {
             m.finished_dir(dir);
         }
@@ -204,7 +204,7 @@ impl Matcher for ListMatcher {
         self.submatchers.iter().any(|x| x.has_side_effects())
     }
 
-    fn finished_dir(&self, dir: &PathBuf) {
+    fn finished_dir(&self, dir: &Path) {
         for m in &self.submatchers {
             m.finished_dir(dir);
         }
@@ -342,7 +342,7 @@ impl Matcher for NotMatcher {
         self.submatcher.has_side_effects()
     }
 
-    fn finished_dir(&self, dir: &PathBuf) {
+    fn finished_dir(&self, dir: &Path) {
         self.submatcher.finished_dir(dir);
     }
 

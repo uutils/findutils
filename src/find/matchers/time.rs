@@ -134,8 +134,8 @@ impl FileTimeMatcher {
 
     pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> FileTimeMatcher {
         FileTimeMatcher {
-            file_time_type,
             days,
+            file_time_type,
         }
     }
 
