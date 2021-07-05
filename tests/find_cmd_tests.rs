@@ -107,7 +107,7 @@ fn delete_on_dot_dir() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::similar(".\n"));
+        .stdout(predicate::str::diff(".\n"));
 
     env::set_current_dir(original_dir).expect("restored original working dir");
 
