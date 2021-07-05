@@ -17,7 +17,7 @@ mod type_matcher;
 
 use regex::Regex;
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::SystemTime;
 use walkdir::DirEntry;
 
@@ -70,7 +70,7 @@ pub trait Matcher {
     }
 
     /// Notification that find has finished processing a given directory.
-    fn finished_dir(&self, _finished_directory: &PathBuf) {}
+    fn finished_dir(&self, _finished_directory: &Path) {}
 
     /// Notification that find has finished processing all directories -
     /// allowing for any cleanup that isn't suitable for destructors (e.g.
