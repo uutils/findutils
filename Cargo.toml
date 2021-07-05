@@ -17,7 +17,7 @@ regex = "1.5"
 
 [dev-dependencies]
 assert_cmd = "1"
-predicates = "1"
+predicates = "2"
 serial_test = "0.5"
 
 [[bin]]
