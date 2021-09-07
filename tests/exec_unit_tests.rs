@@ -9,13 +9,12 @@
 /// ! as integration tests so we can ensure that our testing-commandline binary
 /// ! has been built.
 extern crate findutils;
-extern crate tempdir;
 extern crate walkdir;
 
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use tempdir::TempDir;
+use tempfile::Builder;
 use walkdir::WalkDir;
 
 use common::test_helpers::*;
@@ -26,7 +25,10 @@ mod common;
 
 #[test]
 fn matching_executes_code() {
-    let temp_dir = TempDir::new("matching_executes_code").unwrap();
+    let temp_dir = Builder::new()
+        .prefix("matching_executes_code")
+        .tempdir()
+        .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
     let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
@@ -54,7 +56,10 @@ fn matching_executes_code() {
 
 #[test]
 fn matching_executes_code_in_files_directory() {
-    let temp_dir = TempDir::new("matching_executes_code_in_files_directory").unwrap();
+    let temp_dir = Builder::new()
+        .prefix("matching_executes_code_in_files_directory")
+        .tempdir()
+        .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
     let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
@@ -84,7 +89,10 @@ fn matching_executes_code_in_files_directory() {
 /// Running "find . -execdir whatever \;" failed with a No such file or directory error.
 /// It's now fixed, and this is a regression test to check that it stays fixed.
 fn execdir_in_current_directory() {
-    let temp_dir = TempDir::new("execdir_in_current_directory").unwrap();
+    let temp_dir = Builder::new()
+        .prefix("execdir_in_current_directory")
+        .tempdir()
+        .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
     let current_dir_entry = WalkDir::new(".")
@@ -117,7 +125,10 @@ fn execdir_in_current_directory() {
 #[test]
 /// Regression test for "find / -execdir whatever \;"
 fn execdir_in_root_directory() {
-    let temp_dir = TempDir::new("execdir_in_root_directory").unwrap();
+    let temp_dir = Builder::new()
+        .prefix("execdir_in_root_directory")
+        .tempdir()
+        .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
     let cwd = env::current_dir().expect("no current directory");
@@ -156,7 +167,10 @@ fn execdir_in_root_directory() {
 
 #[test]
 fn matching_fails_if_executable_fails() {
-    let temp_dir = TempDir::new("matching_fails_if_executable_fails").unwrap();
+    let temp_dir = Builder::new()
+        .prefix("matching_fails_if_executable_fails")
+        .tempdir()
+        .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
     let abbbc = get_dir_entry_for("test_data/simple", "abbbc");

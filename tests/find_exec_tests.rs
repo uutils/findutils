@@ -10,13 +10,13 @@
 /// ! as integration tests so we can ensure that our testing-commandline binary
 /// ! has been built.
 extern crate findutils;
-extern crate tempdir;
+extern crate tempfile;
 extern crate walkdir;
 
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use tempdir::TempDir;
+use tempfile::Builder;
 
 use common::test_helpers::*;
 use findutils::find::find_main;
@@ -24,7 +24,10 @@ use findutils::find::find_main;
 mod common;
 #[test]
 fn find_exec() {
-    let temp_dir = TempDir::new("find_exec").unwrap();
+    let temp_dir = tempfile::Builder::new()
+        .prefix("find_exec")
+        .tempdir()
+        .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
     let deps = FakeDependencies::new();
 
@@ -66,7 +69,7 @@ fn find_exec() {
 
 #[test]
 fn find_execdir() {
-    let temp_dir = TempDir::new("find_execdir").unwrap();
+    let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
     let deps = FakeDependencies::new();
     // only look at files because the "size" of a directory is a system (and filesystem)

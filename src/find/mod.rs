@@ -218,7 +218,7 @@ mod tests {
     use std::io::{Cursor, Read, Write};
     use std::time::{Duration, SystemTime};
     use std::vec::Vec;
-    use tempdir::TempDir;
+    use tempfile::Builder;
 
     use crate::find::matchers::MatcherIO;
 
@@ -525,7 +525,7 @@ mod tests {
     fn find_newer() {
         // create a temp directory and file that are newer than the static
         // files in the source tree.
-        let new_dir = TempDir::new("find_newer").unwrap();
+        let new_dir = Builder::new().prefix("find_newer").tempdir().unwrap();
 
         let deps = FakeDependencies::new();
 
