@@ -139,3 +139,32 @@ jobs:
           # file: ${{ steps.grcov.outputs.report }}
           file: lcov.info
           fail_ci_if_error: true
+
+  gnu:
+    name: GNU testsuite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        toolchain:
+          - nightly
+        cargo_flags:
+          - "--all-features"
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+
+      - name: Run the gnu testsuite
+        id: gnu
+        run: |
+          sudo apt install autopoint
+          git clone  https://git.savannah.gnu.org/git/findutils.git ../findutils.gnu
+          bash util/build-gnu.sh || true
