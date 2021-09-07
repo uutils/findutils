@@ -382,6 +382,10 @@ fn build_matcher_tree(
                 config.help_requested = true;
                 None
             }
+            "-version" | "--version" => {
+                config.version_requested = true;
+                None
+            }
 
             _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
         };

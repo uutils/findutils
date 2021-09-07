@@ -19,6 +19,7 @@ pub struct Config {
     max_depth: usize,
     sorted_output: bool,
     help_requested: bool,
+    version_requested: bool,
 }
 
 impl Default for Config {
@@ -29,6 +30,7 @@ impl Default for Config {
             max_depth: usize::max_value(),
             sorted_output: false,
             help_requested: false,
+            version_requested: false,
         }
     }
 }
@@ -145,6 +147,11 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
         print_help();
         return Ok(0);
     }
+    if paths_and_matcher.config.version_requested {
+        print_version();
+        return Ok(0);
+    }
+
     let mut found_count: u64 = 0;
     for path in paths_and_matcher.paths {
         found_count += process_dir(
@@ -193,6 +200,10 @@ Early alpha implementation. Currently the only expressions supported are
     processing them. Less efficient, but allows for deterministic output.
 "
     );
+}
+
+fn print_version() {
+    println!("find (Rust) {}", env!("CARGO_PKG_VERSION"));
 }
 
 /// Does all the work for find.
