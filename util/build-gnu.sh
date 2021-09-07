@@ -22,5 +22,10 @@ fi
 # overwrite the GNU version with the rust impl
 cp find.rust find/find
 
+if test -n "$1"; then
+    # if set, run only the test passed
+    export RUN_TEST="TESTS=$1"
+fi
+
 # Run the tests
-make check-TESTS
+make check-TESTS $RUN_TEST
