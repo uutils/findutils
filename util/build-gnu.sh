@@ -13,9 +13,11 @@ cp target/release/find ../findutils.gnu/find.rust
 
 # Clone and build upstream repo
 cd ../findutils.gnu
-./bootstrap
-./configure --quiet --disable-gcc-warnings
-make -j "$(nproc)"
+if test ! -f configure; then
+    ./bootstrap
+    ./configure --quiet --disable-gcc-warnings
+    make -j "$(nproc)"
+fi
 
 # overwrite the GNU version with the rust impl
 cp find.rust find/find
