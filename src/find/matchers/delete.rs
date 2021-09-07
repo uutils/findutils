@@ -64,7 +64,7 @@ impl Matcher for DeleteMatcher {
 #[cfg(test)]
 mod tests {
     use std::fs::File;
-    use tempdir::TempDir;
+    use tempfile::Builder;
 
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
@@ -75,7 +75,8 @@ mod tests {
         let matcher = DeleteMatcher::new();
         let deps = FakeDependencies::new();
 
-        let temp_dir = TempDir::new_in("test_data", "delete_matcher").expect("made temp dir");
+        let temp_dir = Builder::new().prefix("test_data").tempdir().unwrap();
+
         let temp_dir_path = temp_dir.path().to_string_lossy();
         File::create(temp_dir.path().join("test")).expect("created test file");
         let test_entry = get_dir_entry_for(&temp_dir_path, "test");
@@ -89,7 +90,7 @@ mod tests {
         );
 
         let temp_dir_name = temp_dir.path().file_name().unwrap().to_string_lossy();
-        let temp_dir_entry = get_dir_entry_for("test_data", &temp_dir_name);
+        let temp_dir_entry = get_dir_entry_for(&temp_dir_path, &temp_dir_name);
         assert!(
             matcher.matches(&temp_dir_entry, &mut deps.new_matcher_io()),
             "DeleteMatcher should match directories",

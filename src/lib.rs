@@ -9,6 +9,6 @@ extern crate regex;
 extern crate walkdir;
 
 #[cfg(test)]
-extern crate tempdir;
+extern crate tempfile;
 
 pub mod find;

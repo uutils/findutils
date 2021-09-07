@@ -150,7 +150,7 @@ mod tests {
     use std::io::{Read, Write};
     use std::thread;
     use std::time::{Duration, SystemTime};
-    use tempdir::TempDir;
+    use tempfile::Builder;
     use walkdir::DirEntry;
 
     use super::*;
@@ -163,7 +163,7 @@ mod tests {
         // this file should already exist
         let old_file = get_dir_entry_for("test_data", "simple");
 
-        let temp_dir = TempDir::new("newer_matcher").unwrap();
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
         let temp_dir_path = temp_dir.path().to_string_lossy();
         // this has just been created, so should be newer
         let new_file_name = "newFile";
@@ -287,7 +287,10 @@ mod tests {
 
     #[test]
     fn file_time_matcher_modified_created_accessed() {
-        let temp_dir = TempDir::new("file_time_matcher_modified_created_accessed").unwrap();
+        let temp_dir = Builder::new()
+            .prefix("file_time_matcher_modified_created_accessed")
+            .tempdir()
+            .unwrap();
 
         // No easy way to independently set file times. So create it - setting creation time
         let foo_path = temp_dir.path().join("foo");

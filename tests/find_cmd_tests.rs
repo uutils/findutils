@@ -13,7 +13,7 @@ use predicates::prelude::*;
 use serial_test::serial;
 use std::env;
 use std::fs::File;
-use tempdir::TempDir;
+use tempfile::Builder;
 
 #[serial(working_dir)]
 #[test]
@@ -52,7 +52,8 @@ fn two_matchers_one_matches() {
 
 #[test]
 fn matcher_with_side_effects_at_end() {
-    let temp_dir = TempDir::new("find_cmd_").expect("made temp dir");
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+
     let temp_dir_path = temp_dir.path().to_string_lossy();
     let test_file = temp_dir.path().join("test");
     File::create(&test_file).expect("created test file");
@@ -71,7 +72,8 @@ fn matcher_with_side_effects_at_end() {
 
 #[test]
 fn matcher_with_side_effects_in_front() {
-    let temp_dir = TempDir::new("find_cmd_").expect("made temp dir");
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+
     let temp_dir_path = temp_dir.path().to_string_lossy();
     let test_file = temp_dir.path().join("test");
     File::create(&test_file).expect("created test file");
@@ -96,7 +98,7 @@ fn matcher_with_side_effects_in_front() {
 #[serial(working_dir)]
 #[test]
 fn delete_on_dot_dir() {
-    let temp_dir = TempDir::new("find_cmd_").expect("made temp dir");
+    let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
     let original_dir = env::current_dir().unwrap();
     env::set_current_dir(&temp_dir.path()).expect("working dir changed");
 
