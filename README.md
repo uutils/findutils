@@ -5,3 +5,12 @@
 [![codecov](https://codecov.io/gh/uutils/findutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/findutils)
 
 Rust implementation of [GNU findutils](https://www.gnu.org/software/findutils/).
+
+## Run the GNU testsuite on rust/findutils:
+
+```
+bash util/build-gnu.sh
+
+# To run a specific test:
+bash util/build-gnu.sh tests/misc/help-version.sh
+```
