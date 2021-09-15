@@ -140,8 +140,8 @@ jobs:
           file: lcov.info
           fail_ci_if_error: true
 
-  gnu:
-    name: GNU testsuite
+  external:
+    name: External testsuites
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -168,3 +168,10 @@ jobs:
           sudo apt install autopoint
           git clone  https://git.savannah.gnu.org/git/findutils.git ../findutils.gnu
           bash util/build-gnu.sh || true
+
+      - name: Run the bfs testsuite
+        id: bfs
+        run: |
+          sudo apt install acl libacl1-dev attr libattr1-dev libcap2-bin libcap-dev
+          git clone https://github.com/tavianator/bfs.git ../bfs
+          bash util/build-bfs.sh || true
