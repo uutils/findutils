@@ -10,6 +10,7 @@ mod logical_matchers;
 mod name;
 mod perm;
 mod printer;
+mod printf;
 mod prune;
 mod size;
 mod time;
@@ -206,6 +207,13 @@ fn build_matcher_tree(
     while i < args.len() {
         let possible_submatcher = match args[i] {
             "-print" => Some(printer::Printer::new_box()),
+            "-printf" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(printf::Printf::new_box(args[i])?)
+            }
             "-true" => Some(logical_matchers::TrueMatcher::new_box()),
             "-false" => Some(logical_matchers::FalseMatcher::new_box()),
             "-name" => {
@@ -423,7 +431,13 @@ mod tests {
     pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
         for wrapped_dir_entry in WalkDir::new(fix_up_slashes(directory)) {
             let dir_entry = wrapped_dir_entry.unwrap();
-            if dir_entry.file_name().to_string_lossy() == filename {
+            if dir_entry
+                .path()
+                .strip_prefix(directory)
+                .unwrap()
+                .to_string_lossy()
+                == fix_up_slashes(filename)
+            {
                 return dir_entry;
             }
         }
