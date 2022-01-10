@@ -172,6 +172,7 @@ If no path is supplied then the current working directory is used by default.
 
 Early alpha implementation. Currently the only expressions supported are
  -print
+ -print0
  -printf
  -name case-sensitive_filename_pattern
  -iname case-insensitive_filename_pattern
