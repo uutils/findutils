@@ -63,7 +63,7 @@ impl Matcher for DeleteMatcher {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
+    use std::fs::{create_dir, File};
     use tempfile::Builder;
 
     use super::*;
@@ -79,6 +79,7 @@ mod tests {
 
         let temp_dir_path = temp_dir.path().to_string_lossy();
         File::create(temp_dir.path().join("test")).expect("created test file");
+        create_dir(temp_dir.path().join("test_dir")).expect("created test directory");
         let test_entry = get_dir_entry_for(&temp_dir_path, "test");
         assert!(
             matcher.matches(&test_entry, &mut deps.new_matcher_io()),
@@ -89,14 +90,13 @@ mod tests {
             "DeleteMatcher should actually delete files it matches",
         );
 
-        let temp_dir_name = temp_dir.path().file_name().unwrap().to_string_lossy();
-        let temp_dir_entry = get_dir_entry_for(&temp_dir_path, &temp_dir_name);
+        let temp_dir_entry = get_dir_entry_for(&temp_dir_path, "test_dir");
         assert!(
             matcher.matches(&temp_dir_entry, &mut deps.new_matcher_io()),
             "DeleteMatcher should match directories",
         );
         assert!(
-            !temp_dir.path().exists(),
+            !temp_dir.path().join("test_dir").exists(),
             "DeleteMatcher should actually delete (empty) directories it matches",
         );
     }

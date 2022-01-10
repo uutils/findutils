@@ -11,9 +11,19 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serial_test::serial;
-use std::env;
 use std::fs::File;
+use std::{env, io::ErrorKind};
 use tempfile::Builder;
+
+#[cfg(unix)]
+use std::os::unix::fs::symlink;
+
+#[cfg(windows)]
+use std::os::windows::fs::{symlink_dir, symlink_file};
+
+use common::test_helpers::*;
+
+mod common;
 
 #[serial(working_dir)]
 #[test]
@@ -114,4 +124,111 @@ fn delete_on_dot_dir() {
     env::set_current_dir(original_dir).expect("restored original working dir");
 
     assert!(temp_dir.path().exists(), "temp dir should still exist");
+}
+
+#[serial(working_dir)]
+#[test]
+fn find_printf() {
+    #[cfg(unix)]
+    {
+        if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        if let Err(e) = symlink("subdir", "test_data/links/link-d") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        if let Err(e) = symlink("missing", "test_data/links/link-missing") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        if let Err(e) = symlink("abbbc/x", "test_data/links/link-notdir") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        if let Err(e) = symlink("link-loop", "test_data/links/link-loop") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        if let Err(e) = symlink_dir("subdir", "test_data/links/link-d") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        if let Err(e) = symlink_file("missing", "test_data/links/link-missing") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        if let Err(e) = symlink_file("abbbc/x", "test_data/links/link-notdir") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+    }
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &fix_up_slashes("./test_data/simple"),
+            "-sorted",
+            "-printf",
+            "%f %d %h %H %p %P %y\n",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff(fix_up_slashes(
+            "simple 0 ./test_data ./test_data/simple \
+            ./test_data/simple  d\n\
+            abbbc 1 ./test_data/simple ./test_data/simple \
+            ./test_data/simple/abbbc abbbc f\n\
+            subdir 1 ./test_data/simple ./test_data/simple \
+            ./test_data/simple/subdir subdir d\n\
+            ABBBC 2 ./test_data/simple/subdir ./test_data/simple \
+            ./test_data/simple/subdir/ABBBC subdir/ABBBC f\n",
+        )));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &fix_up_slashes("./test_data/links"),
+            "-sorted",
+            "-type",
+            "l",
+            "-printf",
+            "%f %l %y %Y\n",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff(
+            [
+                "link-d subdir l d\n",
+                "link-f abbbc l f\n",
+                #[cfg(unix)]
+                "link-loop link-loop l L\n",
+                "link-missing missing l N\n",
+                // We can't detect ENOTDIR on non-unix platforms yet.
+                #[cfg(not(unix))]
+                "link-notdir abbbc/x l ?\n",
+                #[cfg(unix)]
+                "link-notdir abbbc/x l N\n",
+            ]
+            .join(""),
+        ));
 }
