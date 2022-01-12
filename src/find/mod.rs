@@ -175,6 +175,9 @@ Early alpha implementation. Currently the only expressions supported are
  -printf
  -name case-sensitive_filename_pattern
  -iname case-insensitive_filename_pattern
+ -regextype type
+ -regex pattern
+ -iregex pattern
  -type type_char
     currently type_char can only be f (for file) or d (for directory)
  -size [+-]N[bcwkMG]

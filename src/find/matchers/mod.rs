@@ -12,14 +12,15 @@ mod perm;
 mod printer;
 mod printf;
 mod prune;
+mod regex;
 mod size;
 mod time;
 mod type_matcher;
 
-use regex::Regex;
-use std::error::Error;
+use ::regex::Regex;
 use std::path::Path;
 use std::time::SystemTime;
+use std::{error::Error, str::FromStr};
 use walkdir::DirEntry;
 
 use super::{Config, Dependencies};
@@ -198,6 +199,8 @@ fn build_matcher_tree(
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
     let mut top_level_matcher = logical_matchers::ListMatcherBuilder::new();
 
+    let mut regex_type = regex::RegexType::default();
+
     // can't use getopts for a variety or reasons:
     // order of arguments is important
     // arguments can start with + as well as -
@@ -229,6 +232,28 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(name::CaselessNameMatcher::new_box(args[i])?)
+            }
+            "-regextype" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                regex_type = regex::RegexType::from_str(args[i])?;
+                None
+            }
+            "-regex" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(regex::RegexMatcher::new_box(regex_type, args[i], false)?)
+            }
+            "-iregex" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(regex::RegexMatcher::new_box(regex_type, args[i], true)?)
             }
             "-type" => {
                 if i >= args.len() - 1 {

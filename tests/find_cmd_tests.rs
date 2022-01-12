@@ -25,6 +25,18 @@ use common::test_helpers::*;
 
 mod common;
 
+// Variants of fix_up_slashes that properly escape the forward slashes for being
+// in a regex.
+#[cfg(windows)]
+fn fix_up_regex_slashes(re: &str) -> String {
+    re.replace("/", "\\\\")
+}
+
+#[cfg(not(windows))]
+fn fix_up_regex_slashes(re: &str) -> String {
+    re.to_owned()
+}
+
 #[serial(working_dir)]
 #[test]
 fn no_args() {
@@ -124,6 +136,59 @@ fn delete_on_dot_dir() {
     env::set_current_dir(original_dir).expect("restored original working dir");
 
     assert!(temp_dir.path().exists(), "temp dir should still exist");
+}
+
+#[test]
+fn regex_types() {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let test_file = temp_dir.path().join("teeest");
+    File::create(&test_file).expect("created test file");
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[&temp_dir_path, "-regex", &fix_up_regex_slashes(".*/tE+st")])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[&temp_dir_path, "-iregex", &fix_up_regex_slashes(".*/tE+st")])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("teeest"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &temp_dir_path,
+            "-regextype",
+            "posix-basic",
+            "-regex",
+            &fix_up_regex_slashes(r".*/te\{1,3\}st"),
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("teeest"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &temp_dir_path,
+            "-regextype",
+            "posix-extended",
+            "-regex",
+            &fix_up_regex_slashes(".*/te{1,3}st"),
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("teeest"));
 }
 
 #[serial(working_dir)]
