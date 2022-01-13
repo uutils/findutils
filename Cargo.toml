@@ -24,6 +24,9 @@ filetime = "0.2"
 predicates = "2"
 serial_test = "0.5"
 
+[patch.crates-io]
+walkdir = { git = "https://github.com/refi64/walkdir", branch = "symlinks" }
+
 [[bin]]
 name = "find"
 path = "src/find/main.rs"
