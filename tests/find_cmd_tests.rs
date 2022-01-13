@@ -11,15 +11,9 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serial_test::serial;
+use std::env;
 use std::fs::File;
-use std::{env, io::ErrorKind};
 use tempfile::Builder;
-
-#[cfg(unix)]
-use std::os::unix::fs::symlink;
-
-#[cfg(windows)]
-use std::os::windows::fs::{symlink_dir, symlink_file};
 
 use common::test_helpers::*;
 
@@ -193,58 +187,44 @@ fn regex_types() {
 
 #[serial(working_dir)]
 #[test]
+fn follow_links() {
+    create_testing_symlinks();
+
+    // By default, we should not follow the root if it's a link.
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &fix_up_slashes("./test_data/links/link-d"),
+            "-printf",
+            "%p %y\n",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff(fix_up_slashes(
+            "./test_data/links/link-d l\n",
+        )));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            "-L",
+            &fix_up_slashes("./test_data/links/link-d"),
+            "-printf",
+            "%p %y\n",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff(fix_up_slashes(
+            "./test_data/links/link-d d\n./test_data/links/link-d/test f\n",
+        )));
+}
+
+#[serial(working_dir)]
+#[test]
 fn find_printf() {
-    #[cfg(unix)]
-    {
-        if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-        if let Err(e) = symlink("subdir", "test_data/links/link-d") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-        if let Err(e) = symlink("missing", "test_data/links/link-missing") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-        if let Err(e) = symlink("abbbc/x", "test_data/links/link-notdir") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-        if let Err(e) = symlink("link-loop", "test_data/links/link-loop") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-    }
-    #[cfg(windows)]
-    {
-        if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-        if let Err(e) = symlink_dir("subdir", "test_data/links/link-d") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-        if let Err(e) = symlink_file("missing", "test_data/links/link-missing") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-        if let Err(e) = symlink_file("abbbc/x", "test_data/links/link-notdir") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
-        }
-    }
+    create_testing_symlinks();
 
     Command::cargo_bin("find")
         .expect("found binary")

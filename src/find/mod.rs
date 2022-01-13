@@ -14,6 +14,7 @@ use std::time::SystemTime;
 use walkdir::WalkDir;
 
 pub struct Config {
+    follow_links: bool,
     depth_first: bool,
     min_depth: usize,
     max_depth: usize,
@@ -25,6 +26,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
+            follow_links: false,
             depth_first: false,
             min_depth: 0,
             max_depth: usize::max_value(),
@@ -86,6 +88,16 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut i = 0;
     let mut config = Config::default();
 
+    while i < args.len() {
+        if args[i] == "-L" {
+            config.follow_links = true;
+        } else {
+            break;
+        }
+
+        i += 1;
+    }
+
     while i < args.len()
         && (args[i] == "-" || !args[i].starts_with('-'))
         && args[i] != "!"
@@ -115,7 +127,10 @@ fn process_dir<'a>(
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
-        .min_depth(config.min_depth);
+        .min_depth(config.min_depth)
+        .follow_links(config.follow_links)
+        .follow_root_link(config.follow_links)
+        .yield_link_on_error(true);
     if config.sorted_output {
         walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }
@@ -171,6 +186,7 @@ fn print_help() {
 If no path is supplied then the current working directory is used by default.
 
 Early alpha implementation. Currently the only expressions supported are
+ -L
  -print
  -print0
  -printf

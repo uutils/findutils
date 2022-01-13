@@ -766,8 +766,7 @@ dependencies = [
 [[package]]
 name = "walkdir"
 version = "2.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "808cf2735cd4b6866113f648b791c6adc5714537bc222d9347bb203386ffda56"
+source = "git+https://github.com/refi64/walkdir?branch=symlinks#f799a1c6c008ecd9810f124237470435707ea253"
 dependencies = [
  "same-file",
  "winapi",
