@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eo pipefail
 
 if ! test -d ../bfs; then
     echo "Could not find ../bfs"
@@ -20,4 +20,4 @@ if test "$#" -eq 0; then
     set -- --verbose --gnu
 fi
 
-./tests.sh --bfs="$FIND" "$@"
+./tests.sh --bfs="$FIND" "$@" | tee tests.log
