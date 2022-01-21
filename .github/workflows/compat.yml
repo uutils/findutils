@@ -74,6 +74,42 @@ jobs:
       with:
         name: gnu-result
         path: gnu-result.json
+    - name: Download the result
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: compat.yml
+        name: gnu-result
+        repo: uutils/findutils
+        branch: main
+        path: dl
+    - name: Download the log
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: compat.yml
+        name: gnu-test-report
+        repo: uutils/findutils
+        branch: main
+        path: dl
+    - name: Compare failing tests against master
+      shell: bash
+      run: |
+            OLD_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" dl/test-suite.log | sort)
+            NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" findutils.gnu/tests/test-suite.log | sort)
+            for LINE in $OLD_FAILING; do
+              if ! grep -Fxq $LINE<<<"$NEW_FAILING"; then
+                echo "::warning ::Congrats! The gnu test $LINE is now passing!"
+              fi
+            done
+            for LINE in $NEW_FAILING; do
+              if ! grep -Fxq $LINE<<<"$OLD_FAILING"; then
+                echo "::error ::gnu test failed: $LINE. $LINE is passing on 'main'. Maybe you have to rebase?"
+              fi
+            done
+    - name: Compare against main results
+      shell: bash
+      run: |
+        mv dl/gnu-result.json latest-gnu-result.json
+        python findutils/util/compare_gnu_result.py
 
   bfs-tests:
     name: Run BFS tests
@@ -139,3 +175,39 @@ jobs:
       with:
         name: bfs-result
         path: bfs-result.json
+    - name: Download the result
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: compat.yml
+        name: bfs-result
+        repo: uutils/findutils
+        branch: main
+        path: dl
+    - name: Download the log
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: compat.yml
+        name: bfs-test-report
+        repo: uutils/findutils
+        branch: main
+        path: dl
+    - name: Compare failing tests against main
+      shell: bash
+      run: |
+        OLD_FAILING=$(sed -n "s/^\([[:print:]]\+\) failed\!/\1/p" dl/tests.log | sort)
+        NEW_FAILING=$(sed -n "s/^\([[:print:]]\+\) failed\!/\1/p" bfs/tests.log | sort)
+        for LINE in $OLD_FAILING; do
+          if ! grep -Fxq $LINE<<<"$NEW_FAILING"; then
+            echo "::warning ::Congrats! The bfs test $LINE is now passing!"
+          fi
+        done
+        for LINE in $NEW_FAILING; do
+          if ! grep -Fxq $LINE<<<"$OLD_FAILING"; then
+            echo "::error ::bfs test failed: $LINE. $LINE is passing on 'main'. Maybe you have to rebase?"
+          fi
+        done
+    - name: Compare against main results
+      shell: bash
+      run: |
+        mv dl/bfs-result.json latest-bfs-result.json
+        python findutils/util/compare_bfs_result.py
