@@ -116,7 +116,8 @@ pub fn build_top_level_matcher(
     if !top_level_matcher.has_side_effects() {
         let mut new_and_matcher = logical_matchers::AndMatcherBuilder::new();
         new_and_matcher.new_and_condition(top_level_matcher);
-        new_and_matcher.new_and_condition(printer::Printer::new_box());
+        new_and_matcher
+            .new_and_condition(printer::Printer::new_box(printer::PrintDelimiter::Newline));
         return Ok(new_and_matcher.build());
     }
     Ok(top_level_matcher)
@@ -206,7 +207,8 @@ fn build_matcher_tree(
     let mut invert_next_matcher = false;
     while i < args.len() {
         let possible_submatcher = match args[i] {
-            "-print" => Some(printer::Printer::new_box()),
+            "-print" => Some(printer::Printer::new_box(printer::PrintDelimiter::Newline)),
+            "-print0" => Some(printer::Printer::new_box(printer::PrintDelimiter::Null)),
             "-printf" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
