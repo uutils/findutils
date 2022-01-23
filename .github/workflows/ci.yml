@@ -16,6 +16,16 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+
+      # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
+      - uses: KyleMayes/install-llvm-action@v1
+        if: matrix.os == 'windows-latest'
+        with:
+          version: "11.0"
+          directory: ${{ runner.temp }}/llvm
+      - run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
+        if: matrix.os == 'windows-latest'
+
       - uses: actions-rs/cargo@v1
         with:
           command: check
@@ -33,6 +43,16 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+
+      # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
+      - uses: KyleMayes/install-llvm-action@v1
+        if: matrix.os == 'windows-latest'
+        with:
+          version: "11.0"
+          directory: ${{ runner.temp }}/llvm
+      - run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
+        if: matrix.os == 'windows-latest'
+
       - uses: actions-rs/cargo@v1
         with:
           command: test
