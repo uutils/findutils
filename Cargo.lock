@@ -221,6 +221,7 @@ version = "0.2.0"
 dependencies = [
  "assert_cmd",
  "chrono",
+ "clap",
  "filetime",
  "glob",
  "once_cell",

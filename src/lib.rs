@@ -12,3 +12,4 @@ extern crate walkdir;
 extern crate tempfile;
 
 pub mod find;
+pub mod xargs;

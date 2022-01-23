@@ -10,6 +10,7 @@ fi
 # build the rust implementation
 cargo build --release
 cp target/release/find ../findutils.gnu/find.rust
+cp target/release/xargs ../findutils.gnu/xargs.rust
 
 # Clone and build upstream repo
 cd ../findutils.gnu
@@ -21,6 +22,7 @@ fi
 
 # overwrite the GNU version with the rust impl
 cp find.rust find/find
+cp xargs.rust xargs/xargs
 
 if test -n "$1"; then
     # if set, run only the test passed
