@@ -78,6 +78,7 @@ jobs:
       uses: dawidd6/action-download-artifact@v2
       with:
         workflow: compat.yml
+        workflow_conclusion: completed
         name: gnu-result
         repo: uutils/findutils
         branch: main
@@ -86,6 +87,7 @@ jobs:
       uses: dawidd6/action-download-artifact@v2
       with:
         workflow: compat.yml
+        workflow_conclusion: completed
         name: gnu-test-report
         repo: uutils/findutils
         branch: main
@@ -179,6 +181,7 @@ jobs:
       uses: dawidd6/action-download-artifact@v2
       with:
         workflow: compat.yml
+        workflow_conclusion: completed
         name: bfs-result
         repo: uutils/findutils
         branch: main
@@ -187,6 +190,7 @@ jobs:
       uses: dawidd6/action-download-artifact@v2
       with:
         workflow: compat.yml
+        workflow_conclusion: completed
         name: bfs-test-report
         repo: uutils/findutils
         branch: main
