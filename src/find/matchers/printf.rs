@@ -349,11 +349,13 @@ fn get_starting_point(file_info: &walkdir::DirEntry) -> &Path {
         .unwrap()
 }
 
-fn format_non_link_file_type(file_type: fs::FileType) -> char {
+fn format_file_type(file_type: fs::FileType) -> char {
     if file_type.is_file() {
         'f'
     } else if file_type.is_dir() {
         'd'
+    } else if file_type.is_symlink() {
+        'l'
     } else {
         #[cfg(unix)]
         if file_type.is_block_device() {
@@ -377,19 +379,7 @@ fn format_directive<'entry>(
     directive: &FormatDirective,
     meta_cell: &OnceCell<fs::Metadata>,
 ) -> Result<Cow<'entry, str>, Box<dyn Error>> {
-    let meta = || {
-        meta_cell.get_or_try_init(|| {
-            if file_info.path_is_symlink() && !file_info.file_type().is_symlink() {
-                // The file_info already followed the symlink, meaning that the
-                // metadata will be for the target file, which isn't the
-                // behavior we want, so manually re-compute the metadata for the
-                // symlink itself instead.
-                file_info.path().symlink_metadata()
-            } else {
-                file_info.metadata().map_err(|e| e.into())
-            }
-        })
-    };
+    let meta = || meta_cell.get_or_try_init(|| file_info.metadata());
 
     // NOTE ON QUOTING:
     // GNU find's man page claims that several directives that print names (like
@@ -542,7 +532,7 @@ fn format_directive<'entry>(
         FormatDirective::StartingPoint => get_starting_point(file_info).to_string_lossy(),
 
         FormatDirective::SymlinkTarget => {
-            if file_info.path_is_symlink() {
+            if meta()?.is_symlink() {
                 fs::read_link(file_info.path())?
                     .to_string_lossy()
                     .into_owned()
@@ -552,10 +542,10 @@ fn format_directive<'entry>(
             }
         }
 
-        FormatDirective::Type { follow_links } => if file_info.path_is_symlink() {
-            if *follow_links {
+        FormatDirective::Type { follow_links } => {
+            if file_info.file_type().is_symlink() && *follow_links {
                 match file_info.path().metadata() {
-                    Ok(meta) => format_non_link_file_type(meta.file_type()),
+                    Ok(meta) => format_file_type(meta.file_type()),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => 'N',
                     // The ErrorKinds corresponding to ELOOP and ENOTDIR are
                     // nightly-only:
@@ -568,13 +558,11 @@ fn format_directive<'entry>(
                     Err(_) => '?',
                 }
             } else {
-                'l'
+                format_file_type(file_info.file_type())
             }
-        } else {
-            format_non_link_file_type(file_info.file_type())
+            .to_string()
+            .into()
         }
-        .to_string()
-        .into(),
 
         #[cfg(not(unix))]
         FormatDirective::User { .. } => "0".into(),
