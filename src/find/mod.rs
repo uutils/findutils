@@ -14,6 +14,7 @@ use std::time::SystemTime;
 use walkdir::WalkDir;
 
 pub struct Config {
+    same_file_system: bool,
     depth_first: bool,
     min_depth: usize,
     max_depth: usize,
@@ -25,6 +26,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
+            same_file_system: false,
             depth_first: false,
             min_depth: 0,
             max_depth: usize::max_value(),
@@ -115,7 +117,8 @@ fn process_dir<'a>(
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
-        .min_depth(config.min_depth);
+        .min_depth(config.min_depth)
+        .same_file_system(config.same_file_system);
     if config.sorted_output {
         walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }
@@ -194,6 +197,7 @@ Early alpha implementation. Currently the only expressions supported are
  -maxdepth N
  -mindepth N
  -d[epth]
+ -xdev
  -ctime [+-]N
  -atime [+-]N
  -mtime [+-]N
