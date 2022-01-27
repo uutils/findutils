@@ -175,7 +175,9 @@ Early alpha implementation. Currently the only expressions supported are
  -print0
  -printf
  -name case-sensitive_filename_pattern
+ -lname case-sensitive_filename_pattern
  -iname case-insensitive_filename_pattern
+ -ilname case-insensitive_filename_pattern
  -regextype type
  -regex pattern
  -iregex pattern
@@ -231,10 +233,16 @@ mod tests {
 
     use std::cell::RefCell;
     use std::fs;
-    use std::io::{Cursor, Read, Write};
+    use std::io::{Cursor, ErrorKind, Read, Write};
     use std::time::{Duration, SystemTime};
     use std::vec::Vec;
     use tempfile::Builder;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
+
+    #[cfg(windows)]
+    use std::os::windows::fs::{symlink_dir, symlink_file};
 
     use crate::find::matchers::MatcherIO;
 
@@ -291,6 +299,21 @@ mod tests {
 
         fn now(&'a self) -> SystemTime {
             self.now
+        }
+    }
+
+    fn create_file_link() {
+        #[cfg(unix)]
+        if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
+        }
+        #[cfg(windows)]
+        if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
+            if e.kind() != ErrorKind::AlreadyExists {
+                panic!("Failed to create sym link: {:?}", e);
+            }
         }
     }
 
@@ -682,5 +705,72 @@ mod tests {
 
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
+    fn find_name_links() {
+        create_file_link();
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/links"),
+                "-name",
+                "abbbc",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/links/abbbc\n")
+        );
+    }
+
+    #[test]
+    fn find_lname_links() {
+        create_file_link();
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/links"),
+                "-lname",
+                "abbbc",
+                "-sorted",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/links/link-f\n")
+        );
+    }
+
+    #[test]
+    fn find_ilname_links() {
+        create_file_link();
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/links"),
+                "-ilname",
+                "abBbc",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/links/link-f\n")
+        );
     }
 }
