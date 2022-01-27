@@ -221,19 +221,25 @@ fn build_matcher_tree(
             }
             "-true" => Some(logical_matchers::TrueMatcher::new_box()),
             "-false" => Some(logical_matchers::FalseMatcher::new_box()),
-            "-name" => {
+            "-name" | "-lname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(name::NameMatcher::new_box(args[i])?)
+                Some(name::NameMatcher::new_box(
+                    args[i],
+                    args[i - 1].starts_with("-l"),
+                )?)
             }
-            "-iname" => {
+            "-iname" | "-ilname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(name::CaselessNameMatcher::new_box(args[i])?)
+                Some(name::CaselessNameMatcher::new_box(
+                    args[i],
+                    args[i - 1].starts_with("-il"),
+                )?)
             }
             "-regextype" => {
                 if i >= args.len() - 1 {
