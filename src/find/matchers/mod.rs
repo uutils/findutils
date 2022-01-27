@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 mod delete;
+mod empty;
 pub mod exec;
 mod logical_matchers;
 mod name;
@@ -301,6 +302,7 @@ fn build_matcher_tree(
                 i += 1;
                 Some(size::SizeMatcher::new_box(size, &unit)?)
             }
+            "-empty" => Some(empty::EmptyMatcher::new_box()),
             "-exec" | "-execdir" => {
                 let mut arg_index = i + 1;
                 while arg_index < args.len() && args[arg_index] != ";" {

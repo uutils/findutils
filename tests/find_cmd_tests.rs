@@ -12,6 +12,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use serial_test::serial;
 use std::fs::File;
+use std::io::Write;
 use std::{env, io::ErrorKind};
 use tempfile::Builder;
 
@@ -189,6 +190,63 @@ fn regex_types() {
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("teeest"));
+}
+
+#[test]
+fn empty_files() {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[&temp_dir_path, "-empty"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(fix_up_slashes(&format!("{}\n", temp_dir_path)));
+
+    let test_file_path = temp_dir.path().join("test");
+    let mut test_file = File::create(&test_file_path).unwrap();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[&temp_dir_path, "-empty"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(fix_up_slashes(&format!(
+            "{}\n",
+            test_file_path.to_string_lossy()
+        )));
+
+    let subdir_path = temp_dir.path().join("subdir");
+    std::fs::create_dir(&subdir_path).unwrap();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[&temp_dir_path, "-empty", "-sorted"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(fix_up_slashes(&format!(
+            "{}\n{}\n",
+            subdir_path.to_string_lossy(),
+            test_file_path.to_string_lossy()
+        )));
+
+    write!(test_file, "x").unwrap();
+    test_file.sync_all().unwrap();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[&temp_dir_path, "-empty", "-sorted"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(fix_up_slashes(&format!(
+            "{}\n",
+            subdir_path.to_string_lossy(),
+        )));
 }
 
 #[serial(working_dir)]
