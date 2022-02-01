@@ -605,10 +605,6 @@ impl Printf {
             format: FormatString::parse(format)?,
         })
     }
-
-    pub fn new_box(format: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(format)?))
-    }
 }
 
 impl Matcher for Printf {

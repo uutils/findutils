@@ -22,10 +22,6 @@ impl DeleteMatcher {
         DeleteMatcher
     }
 
-    pub fn new_box() -> io::Result<Box<dyn Matcher>> {
-        Ok(Box::new(Self::new()))
-    }
-
     fn delete(&self, file_path: &Path, file_type: FileType) -> io::Result<()> {
         if file_type.is_dir() {
             fs::remove_dir(file_path)

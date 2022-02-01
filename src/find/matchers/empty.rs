@@ -17,10 +17,6 @@ impl EmptyMatcher {
     pub fn new() -> EmptyMatcher {
         EmptyMatcher
     }
-
-    pub fn new_box() -> Box<dyn Matcher> {
-        Box::new(EmptyMatcher::new())
-    }
 }
 
 impl Matcher for EmptyMatcher {

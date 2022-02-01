@@ -44,14 +44,6 @@ impl SingleExecMatcher {
             exec_in_parent_dir,
         })
     }
-
-    pub fn new_box(
-        executable: &str,
-        args: &[&str],
-        exec_in_parent_dir: bool,
-    ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(executable, args, exec_in_parent_dir)?))
-    }
 }
 
 impl Matcher for SingleExecMatcher {

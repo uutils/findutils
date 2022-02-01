@@ -284,10 +284,6 @@ impl PermMatcher {
             "Permission matching is not available on this platform",
         ))
     }
-
-    pub fn new_box(pattern: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(pattern)?))
-    }
 }
 
 impl Matcher for PermMatcher {

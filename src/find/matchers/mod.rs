@@ -24,6 +24,22 @@ use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
 use walkdir::DirEntry;
 
+use self::delete::DeleteMatcher;
+use self::empty::EmptyMatcher;
+use self::exec::SingleExecMatcher;
+use self::logical_matchers::{
+    AndMatcherBuilder, FalseMatcher, ListMatcherBuilder, NotMatcher, TrueMatcher,
+};
+use self::name::{CaselessNameMatcher, NameMatcher};
+use self::perm::PermMatcher;
+use self::printer::{PrintDelimiter, Printer};
+use self::printf::Printf;
+use self::prune::PruneMatcher;
+use self::regex::RegexMatcher;
+use self::size::SizeMatcher;
+use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher};
+use self::type_matcher::TypeMatcher;
+
 use super::{Config, Dependencies};
 
 /// Struct holding references to outputs and any inputs that can't be derived
@@ -58,7 +74,15 @@ impl<'a> MatcherIO<'a> {
 /// is what's being searched for. To a first order approximation, find consists
 /// of building a chain of Matcher objects, and then walking a directory tree,
 /// passing each entry to the chain of Matchers.
-pub trait Matcher {
+pub trait Matcher: 'static {
+    /// Boxes this matcher as a trait object.
+    fn into_box(self) -> Box<dyn Matcher>
+    where
+        Self: Sized,
+    {
+        Box::new(self)
+    }
+
     /// Returns whether the given file matches the object's predicate.
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool;
 
@@ -79,6 +103,28 @@ pub trait Matcher {
     /// allowing for any cleanup that isn't suitable for destructors (e.g.
     /// blocking calls, I/O etc.)
     fn finished(&self) {}
+}
+
+impl Matcher for Box<dyn Matcher> {
+    fn into_box(self) -> Box<dyn Matcher> {
+        self
+    }
+
+    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+        (**self).matches(file_info, matcher_io)
+    }
+
+    fn has_side_effects(&self) -> bool {
+        (**self).has_side_effects()
+    }
+
+    fn finished_dir(&self, finished_directory: &Path) {
+        (**self).finished_dir(finished_directory)
+    }
+
+    fn finished(&self) {
+        (**self).finished()
+    }
 }
 
 pub enum ComparableValue {
@@ -116,10 +162,9 @@ pub fn build_top_level_matcher(
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
-        let mut new_and_matcher = logical_matchers::AndMatcherBuilder::new();
+        let mut new_and_matcher = AndMatcherBuilder::new();
         new_and_matcher.new_and_condition(top_level_matcher);
-        new_and_matcher
-            .new_and_condition(printer::Printer::new_box(printer::PrintDelimiter::Newline));
+        new_and_matcher.new_and_condition(Printer::new(PrintDelimiter::Newline));
         return Ok(new_and_matcher.build());
     }
     Ok(top_level_matcher)
@@ -199,7 +244,7 @@ fn build_matcher_tree(
     arg_index: usize,
     expecting_bracket: bool,
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
-    let mut top_level_matcher = logical_matchers::ListMatcherBuilder::new();
+    let mut top_level_matcher = ListMatcherBuilder::new();
 
     let mut regex_type = regex::RegexType::default();
 
@@ -211,36 +256,30 @@ fn build_matcher_tree(
     let mut invert_next_matcher = false;
     while i < args.len() {
         let possible_submatcher = match args[i] {
-            "-print" => Some(printer::Printer::new_box(printer::PrintDelimiter::Newline)),
-            "-print0" => Some(printer::Printer::new_box(printer::PrintDelimiter::Null)),
+            "-print" => Some(Printer::new(PrintDelimiter::Newline).into_box()),
+            "-print0" => Some(Printer::new(PrintDelimiter::Null).into_box()),
             "-printf" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(printf::Printf::new_box(args[i])?)
+                Some(Printf::new(args[i])?.into_box())
             }
-            "-true" => Some(logical_matchers::TrueMatcher::new_box()),
-            "-false" => Some(logical_matchers::FalseMatcher::new_box()),
+            "-true" => Some(TrueMatcher.into_box()),
+            "-false" => Some(FalseMatcher.into_box()),
             "-name" | "-lname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(name::NameMatcher::new_box(
-                    args[i],
-                    args[i - 1].starts_with("-l"),
-                )?)
+                Some(NameMatcher::new(args[i], args[i - 1].starts_with("-l"))?.into_box())
             }
             "-iname" | "-ilname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(name::CaselessNameMatcher::new_box(
-                    args[i],
-                    args[i - 1].starts_with("-il"),
-                )?)
+                Some(CaselessNameMatcher::new(args[i], args[i - 1].starts_with("-il"))?.into_box())
             }
             "-regextype" => {
                 if i >= args.len() - 1 {
@@ -255,49 +294,49 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(regex::RegexMatcher::new_box(regex_type, args[i], false)?)
+                Some(RegexMatcher::new(regex_type, args[i], false)?.into_box())
             }
             "-iregex" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(regex::RegexMatcher::new_box(regex_type, args[i], true)?)
+                Some(RegexMatcher::new(regex_type, args[i], true)?.into_box())
             }
             "-type" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(type_matcher::TypeMatcher::new_box(args[i])?)
+                Some(TypeMatcher::new(args[i])?.into_box())
             }
             "-delete" => {
                 // -delete implicitly requires -depth
                 config.depth_first = true;
-                Some(delete::DeleteMatcher::new_box()?)
+                Some(DeleteMatcher::new().into_box())
             }
             "-newer" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(time::NewerMatcher::new_box(args[i])?)
+                Some(NewerMatcher::new(args[i])?.into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let file_time_type = match args[i] {
-                    "-atime" => time::FileTimeType::Accessed,
-                    "-ctime" => time::FileTimeType::Created,
-                    "-mtime" => time::FileTimeType::Modified,
+                    "-atime" => FileTimeType::Accessed,
+                    "-ctime" => FileTimeType::Created,
+                    "-mtime" => FileTimeType::Modified,
                     // This shouldn't be possible. We've already checked the value
                     // is one of those three values.
                     _ => unreachable!("Encountered unexpected value {}", args[i]),
                 };
                 let days = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(time::FileTimeMatcher::new_box(file_time_type, days))
+                Some(FileTimeMatcher::new(file_time_type, days).into_box())
             }
             "-size" => {
                 if i >= args.len() - 1 {
@@ -306,9 +345,9 @@ fn build_matcher_tree(
                 let (size, unit) =
                     convert_arg_to_comparable_value_and_suffix(args[i], args[i + 1])?;
                 i += 1;
-                Some(size::SizeMatcher::new_box(size, &unit)?)
+                Some(SizeMatcher::new(size, &unit)?.into_box())
             }
-            "-empty" => Some(empty::EmptyMatcher::new_box()),
+            "-empty" => Some(EmptyMatcher::new().into_box()),
             "-exec" | "-execdir" => {
                 let mut arg_index = i + 1;
                 while arg_index < args.len() && args[arg_index] != ";" {
@@ -330,20 +369,19 @@ fn build_matcher_tree(
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
-                Some(exec::SingleExecMatcher::new_box(
-                    executable,
-                    exec_args,
-                    expression == "-execdir",
-                )?)
+                Some(
+                    SingleExecMatcher::new(executable, exec_args, expression == "-execdir")?
+                        .into_box(),
+                )
             }
             "-perm" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(perm::PermMatcher::new_box(args[i])?)
+                Some(PermMatcher::new(args[i])?.into_box())
             }
-            "-prune" => Some(prune::PruneMatcher::new_box()),
+            "-prune" => Some(PruneMatcher::new().into_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!(
@@ -439,8 +477,7 @@ fn build_matcher_tree(
         };
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
-                top_level_matcher
-                    .new_and_condition(logical_matchers::NotMatcher::new_box(submatcher));
+                top_level_matcher.new_and_condition(NotMatcher::new(submatcher));
                 invert_next_matcher = false;
             } else {
                 top_level_matcher.new_and_condition(submatcher);
