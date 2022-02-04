@@ -6,6 +6,7 @@
 
 pub mod matchers;
 
+use rayon::prelude::*;
 use std::cell::RefCell;
 use std::error::Error;
 use std::io::{stderr, stdout, Write};
@@ -39,7 +40,7 @@ impl Default for Config {
 
 /// Trait that encapsulates various dependencies (output, clocks, etc.) that we
 /// might want to fake out for unit tests.
-pub trait Dependencies<'a> {
+pub trait Dependencies<'a>: Sync {
     fn get_output(&'a self) -> &'a RefCell<dyn Write>;
     fn now(&'a self) -> SystemTime;
 }
@@ -49,6 +50,8 @@ pub struct StandardDependencies {
     output: Rc<RefCell<dyn Write>>,
     now: SystemTime,
 }
+
+unsafe impl Sync for StandardDependencies {}
 
 impl StandardDependencies {
     pub fn new() -> StandardDependencies {
@@ -155,15 +158,19 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
         return Ok(0);
     }
 
-    let mut found_count: u64 = 0;
-    for path in paths_and_matcher.paths {
-        found_count += process_dir(
-            &path,
-            &paths_and_matcher.config,
-            deps,
-            &*paths_and_matcher.matcher,
-        );
-    }
+    let found_count: u64 = paths_and_matcher
+        .paths
+        .par_iter()
+        .map(|path| {
+            process_dir(
+                path,
+                &paths_and_matcher.config,
+                deps,
+                &*paths_and_matcher.matcher,
+            )
+        })
+        .sum();
+
     Ok(found_count)
 }
 
@@ -270,6 +277,8 @@ mod tests {
         pub output: RefCell<Cursor<Vec<u8>>>,
         now: SystemTime,
     }
+
+    unsafe impl Sync for FakeDependencies {}
 
     impl<'a> FakeDependencies {
         pub fn new() -> FakeDependencies {

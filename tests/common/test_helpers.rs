@@ -22,6 +22,8 @@ pub struct FakeDependencies {
     now: SystemTime,
 }
 
+unsafe impl Sync for FakeDependencies {}
+
 impl<'a> FakeDependencies {
     pub fn new() -> FakeDependencies {
         FakeDependencies {
