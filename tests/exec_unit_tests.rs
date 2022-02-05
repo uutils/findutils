@@ -176,11 +176,13 @@ fn matching_fails_if_executable_fails() {
     let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),
-        &[temp_dir_path.as_ref(),
+        &[
+            temp_dir_path.as_ref(),
             "--exit_with_failure",
             "abc",
             "{}",
-            "xyz"],
+            "xyz",
+        ],
         true,
     )
     .expect("Failed to create matcher");

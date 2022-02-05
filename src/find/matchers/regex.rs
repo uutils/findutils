@@ -112,11 +112,7 @@ impl RegexMatcher {
         pattern: &str,
         ignore_case: bool,
     ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(
-            regex_type,
-            pattern,
-            ignore_case,
-        )?))
+        Ok(Box::new(Self::new(regex_type, pattern, ignore_case)?))
     }
 }
 

@@ -50,11 +50,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(
-            executable,
-            args,
-            exec_in_parent_dir,
-        )?))
+        Ok(Box::new(Self::new(executable, args, exec_in_parent_dir)?))
     }
 }
 
