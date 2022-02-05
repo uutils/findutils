@@ -12,12 +12,12 @@ use super::{Matcher, MatcherIO};
 pub struct PruneMatcher;
 
 impl PruneMatcher {
-    pub fn new() -> PruneMatcher {
-        PruneMatcher {}
+    pub fn new() -> Self {
+        Self {}
     }
 
     pub fn new_box() -> Box<dyn Matcher> {
-        Box::new(PruneMatcher::new())
+        Box::new(Self::new())
     }
 }
 

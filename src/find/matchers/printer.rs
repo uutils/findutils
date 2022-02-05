@@ -28,12 +28,12 @@ pub struct Printer {
 }
 
 impl Printer {
-    pub fn new(delimiter: PrintDelimiter) -> Printer {
-        Printer { delimiter }
+    pub fn new(delimiter: PrintDelimiter) -> Self {
+        Self { delimiter }
     }
 
     pub fn new_box(delimiter: PrintDelimiter) -> Box<dyn Matcher> {
-        Box::new(Printer::new(delimiter))
+        Box::new(Self::new(delimiter))
     }
 }
 

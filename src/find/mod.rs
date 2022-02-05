@@ -24,8 +24,8 @@ pub struct Config {
 }
 
 impl Default for Config {
-    fn default() -> Config {
-        Config {
+    fn default() -> Self {
+        Self {
             same_file_system: false,
             depth_first: false,
             min_depth: 0,
@@ -51,8 +51,8 @@ pub struct StandardDependencies {
 }
 
 impl StandardDependencies {
-    pub fn new() -> StandardDependencies {
-        StandardDependencies {
+    pub fn new() -> Self {
+        Self {
             output: Rc::new(RefCell::new(stdout())),
             now: SystemTime::now(),
         }
@@ -272,8 +272,8 @@ mod tests {
     }
 
     impl<'a> FakeDependencies {
-        pub fn new() -> FakeDependencies {
-            FakeDependencies {
+        pub fn new() -> Self {
+            Self {
                 output: RefCell::new(Cursor::new(Vec::<u8>::new())),
                 now: SystemTime::now(),
             }

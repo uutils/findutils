@@ -20,15 +20,15 @@ pub struct NewerMatcher {
 }
 
 impl NewerMatcher {
-    pub fn new(path_to_file: &str) -> Result<NewerMatcher, Box<dyn Error>> {
+    pub fn new(path_to_file: &str) -> Result<Self, Box<dyn Error>> {
         let metadata = fs::metadata(path_to_file)?;
-        Ok(NewerMatcher {
+        Ok(Self {
             given_modification_time: metadata.modified()?,
         })
     }
 
     pub fn new_box(path_to_file: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(NewerMatcher::new(path_to_file)?))
+        Ok(Box::new(Self::new(path_to_file)?))
     }
 
     /// Implementation of matches that returns a result, allowing use to use try!
@@ -132,15 +132,15 @@ impl FileTimeMatcher {
         Ok(self.days.imatches(age_in_days))
     }
 
-    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> FileTimeMatcher {
-        FileTimeMatcher {
+    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> Self {
+        Self {
             days,
             file_time_type,
         }
     }
 
     pub fn new_box(file_time_type: FileTimeType, days: ComparableValue) -> Box<dyn Matcher> {
-        Box::new(FileTimeMatcher::new(file_time_type, days))
+        Box::new(Self::new(file_time_type, days))
     }
 }
 

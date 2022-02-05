@@ -18,12 +18,12 @@ use super::{Matcher, MatcherIO};
 pub struct DeleteMatcher;
 
 impl DeleteMatcher {
-    pub fn new() -> DeleteMatcher {
+    pub fn new() -> Self {
         DeleteMatcher
     }
 
     pub fn new_box() -> io::Result<Box<dyn Matcher>> {
-        Ok(Box::new(DeleteMatcher::new()))
+        Ok(Box::new(Self::new()))
     }
 
     fn delete(&self, file_path: &Path, file_type: FileType) -> io::Result<()> {
