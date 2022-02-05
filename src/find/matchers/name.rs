@@ -185,7 +185,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = NameMatcher::new(&"link?f", false).unwrap();
+        let matcher = NameMatcher::new("link?f", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
@@ -195,7 +195,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = NameMatcher::new(&"ab?bc", true).unwrap();
+        let matcher = NameMatcher::new("ab?bc", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
@@ -235,7 +235,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = CaselessNameMatcher::new(&"linK?f", false).unwrap();
+        let matcher = CaselessNameMatcher::new("linK?f", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
@@ -245,7 +245,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = CaselessNameMatcher::new(&"AbB?c", true).unwrap();
+        let matcher = CaselessNameMatcher::new("AbB?c", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }

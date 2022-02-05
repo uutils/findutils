@@ -20,15 +20,15 @@ pub struct NewerMatcher {
 }
 
 impl NewerMatcher {
-    pub fn new(path_to_file: &str) -> Result<NewerMatcher, Box<dyn Error>> {
+    pub fn new(path_to_file: &str) -> Result<Self, Box<dyn Error>> {
         let metadata = fs::metadata(path_to_file)?;
-        Ok(NewerMatcher {
+        Ok(Self {
             given_modification_time: metadata.modified()?,
         })
     }
 
     pub fn new_box(path_to_file: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(NewerMatcher::new(path_to_file)?))
+        Ok(Box::new(Self::new(path_to_file)?))
     }
 
     /// Implementation of matches that returns a result, allowing use to use try!
@@ -132,15 +132,15 @@ impl FileTimeMatcher {
         Ok(self.days.imatches(age_in_days))
     }
 
-    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> FileTimeMatcher {
-        FileTimeMatcher {
+    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> Self {
+        Self {
             days,
             file_time_type,
         }
     }
 
     pub fn new_box(file_time_type: FileTimeType, days: ComparableValue) -> Box<dyn Matcher> {
-        Box::new(FileTimeMatcher::new(file_time_type, days))
+        Box::new(Self::new(file_time_type, days))
     }
 }
 
@@ -169,7 +169,7 @@ mod tests {
         let new_file_name = "newFile";
         File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
 
-        let new_file = get_dir_entry_for(&temp_dir_path, &new_file_name);
+        let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
 
         let matcher_for_new =
             NewerMatcher::new(&temp_dir.path().join(new_file_name).to_string_lossy()).unwrap();
@@ -266,7 +266,7 @@ mod tests {
 
         // set "now" to a second before the file was modified (e.g. the file was
         // modified after find started running
-        deps.set_time(files_mtime - Duration::new(1 as u64, 0));
+        deps.set_time(files_mtime - Duration::new(1_u64, 0));
         assert!(
             !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
             "future-modified file shouldn'1 match exactly 1 day old"
@@ -359,14 +359,14 @@ mod tests {
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time);
             assert!(
-                matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                matcher.matches(file_info, &mut deps.new_matcher_io()),
                 "{:?} time matcher should match",
                 file_time_type
             );
 
             deps.set_time(file_time - Duration::from_secs(1));
             assert!(
-                !matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                !matcher.matches(file_info, &mut deps.new_matcher_io()),
                 "{:?} time matcher shouldn't match a second before",
                 file_time_type
             );

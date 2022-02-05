@@ -25,8 +25,8 @@ pub struct AndMatcher {
 }
 
 impl AndMatcher {
-    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> AndMatcher {
-        AndMatcher { submatchers }
+    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> Self {
+        Self { submatchers }
     }
 }
 
@@ -62,8 +62,8 @@ pub struct AndMatcherBuilder {
 }
 
 impl AndMatcherBuilder {
-    pub fn new() -> AndMatcherBuilder {
-        AndMatcherBuilder {
+    pub fn new() -> Self {
+        Self {
             submatchers: Vec::new(),
         }
     }
@@ -94,8 +94,8 @@ pub struct OrMatcher {
 }
 
 impl OrMatcher {
-    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> OrMatcher {
-        OrMatcher { submatchers }
+    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> Self {
+        Self { submatchers }
     }
 }
 
@@ -151,8 +151,8 @@ impl OrMatcherBuilder {
         Ok(())
     }
 
-    pub fn new() -> OrMatcherBuilder {
-        let mut o = OrMatcherBuilder {
+    pub fn new() -> Self {
+        let mut o = Self {
             submatchers: Vec::new(),
         };
         o.submatchers.push(AndMatcherBuilder::new());
@@ -184,8 +184,8 @@ pub struct ListMatcher {
 }
 
 impl ListMatcher {
-    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> ListMatcher {
-        ListMatcher { submatchers }
+    pub fn new(submatchers: Vec<Box<dyn Matcher>>) -> Self {
+        Self { submatchers }
     }
 }
 
@@ -265,8 +265,8 @@ impl ListMatcherBuilder {
         Ok(())
     }
 
-    pub fn new() -> ListMatcherBuilder {
-        let mut o = ListMatcherBuilder {
+    pub fn new() -> Self {
+        let mut o = Self {
             submatchers: Vec::new(),
         };
         o.submatchers.push(OrMatcherBuilder::new());
@@ -293,7 +293,7 @@ pub struct TrueMatcher;
 
 impl TrueMatcher {
     pub fn new_box() -> Box<dyn Matcher> {
-        Box::new(TrueMatcher {})
+        Box::new(Self {})
     }
 }
 
@@ -314,7 +314,7 @@ impl Matcher for FalseMatcher {
 
 impl FalseMatcher {
     pub fn new_box() -> Box<dyn Matcher> {
-        Box::new(FalseMatcher {})
+        Box::new(Self {})
     }
 }
 
@@ -324,12 +324,12 @@ pub struct NotMatcher {
 }
 
 impl NotMatcher {
-    pub fn new(submatcher: Box<dyn Matcher>) -> NotMatcher {
-        NotMatcher { submatcher }
+    pub fn new(submatcher: Box<dyn Matcher>) -> Self {
+        Self { submatcher }
     }
 
-    pub fn new_box(submatcher: Box<dyn Matcher>) -> Box<NotMatcher> {
-        Box::new(NotMatcher::new(submatcher))
+    pub fn new_box(submatcher: Box<dyn Matcher>) -> Box<Self> {
+        Box::new(Self::new(submatcher))
     }
 }
 
@@ -375,7 +375,7 @@ mod tests {
 
     impl HasSideEffects {
         pub fn new_box() -> Box<dyn Matcher> {
-            Box::new(HasSideEffects {})
+            Box::new(Self {})
         }
     }
 

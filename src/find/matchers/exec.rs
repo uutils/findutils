@@ -29,7 +29,7 @@ impl SingleExecMatcher {
         executable: &str,
         args: &[&str],
         exec_in_parent_dir: bool,
-    ) -> Result<SingleExecMatcher, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error>> {
         let transformed_args = args
             .iter()
             .map(|&a| match a {
@@ -38,7 +38,7 @@ impl SingleExecMatcher {
             })
             .collect();
 
-        Ok(SingleExecMatcher {
+        Ok(Self {
             executable: executable.to_string(),
             args: transformed_args,
             exec_in_parent_dir,
@@ -50,11 +50,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(SingleExecMatcher::new(
-            executable,
-            args,
-            exec_in_parent_dir,
-        )?))
+        Ok(Box::new(Self::new(executable, args, exec_in_parent_dir)?))
     }
 }
 

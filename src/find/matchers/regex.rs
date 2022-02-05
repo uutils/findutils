@@ -39,11 +39,11 @@ pub enum RegexType {
 }
 
 impl RegexType {
-    pub const VALUES: &'static [RegexType] = &[
-        RegexType::Emacs,
-        RegexType::Grep,
-        RegexType::PosixBasic,
-        RegexType::PosixExtended,
+    pub const VALUES: &'static [Self] = &[
+        Self::Emacs,
+        Self::Grep,
+        Self::PosixBasic,
+        Self::PosixExtended,
     ];
 }
 
@@ -63,10 +63,10 @@ impl FromStr for RegexType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "emacs" => Ok(RegexType::Emacs),
-            "grep" => Ok(RegexType::Grep),
-            "posix-basic" => Ok(RegexType::PosixBasic),
-            "posix-extended" => Ok(RegexType::PosixExtended),
+            "emacs" => Ok(Self::Emacs),
+            "grep" => Ok(Self::Grep),
+            "posix-basic" => Ok(Self::PosixBasic),
+            "posix-extended" => Ok(Self::PosixExtended),
             _ => Err(ParseRegexTypeError(s.to_owned())),
         }
     }
@@ -74,7 +74,7 @@ impl FromStr for RegexType {
 
 impl Default for RegexType {
     fn default() -> Self {
-        RegexType::Emacs
+        Self::Emacs
     }
 }
 
@@ -87,7 +87,7 @@ impl RegexMatcher {
         regex_type: RegexType,
         pattern: &str,
         ignore_case: bool,
-    ) -> Result<RegexMatcher, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error>> {
         let syntax = match regex_type {
             RegexType::Emacs => Syntax::emacs(),
             RegexType::Grep => Syntax::grep(),
@@ -104,7 +104,7 @@ impl RegexMatcher {
             },
             syntax,
         )?;
-        Ok(RegexMatcher { regex })
+        Ok(Self { regex })
     }
 
     pub fn new_box(
@@ -112,11 +112,7 @@ impl RegexMatcher {
         pattern: &str,
         ignore_case: bool,
     ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(RegexMatcher::new(
-            regex_type,
-            pattern,
-            ignore_case,
-        )?))
+        Ok(Box::new(Self::new(regex_type, pattern, ignore_case)?))
     }
 }
 

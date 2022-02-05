@@ -34,7 +34,7 @@ fn matching_executes_code() {
     let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),
-        &vec![temp_dir_path.as_ref(), "abc", "{}", "xyz"],
+        &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         false,
     )
     .expect("Failed to create matcher");
@@ -65,7 +65,7 @@ fn matching_executes_code_in_files_directory() {
     let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),
-        &vec![temp_dir_path.as_ref(), "abc", "{}", "xyz"],
+        &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         true,
     )
     .expect("Failed to create matcher");
@@ -102,7 +102,7 @@ fn execdir_in_current_directory() {
         .expect("result wasn't OK");
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),
-        &vec![temp_dir_path.as_ref(), "abc", "{}", "xyz"],
+        &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         true,
     )
     .expect("Failed to create matcher");
@@ -144,7 +144,7 @@ fn execdir_in_root_directory() {
 
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),
-        &vec![temp_dir_path.as_ref(), "abc", "{}", "xyz"],
+        &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         true,
     )
     .expect("Failed to create matcher");
@@ -176,7 +176,7 @@ fn matching_fails_if_executable_fails() {
     let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),
-        &vec![
+        &[
             temp_dir_path.as_ref(),
             "--exit_with_failure",
             "abc",

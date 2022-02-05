@@ -334,7 +334,7 @@ struct FormatString {
 }
 
 impl FormatString {
-    fn parse(string: &str) -> Result<FormatString, Box<dyn Error>> {
+    fn parse(string: &str) -> Result<Self, Box<dyn Error>> {
         FormatStringParser { string }.parse()
     }
 }
@@ -600,14 +600,14 @@ pub struct Printf {
 }
 
 impl Printf {
-    pub fn new(format: &str) -> Result<Printf, Box<dyn Error>> {
-        Ok(Printf {
+    pub fn new(format: &str) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
             format: FormatString::parse(format)?,
         })
     }
 
     pub fn new_box(format: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Printf::new(format)?))
+        Ok(Box::new(Self::new(format)?))
     }
 }
 

@@ -31,11 +31,11 @@ pub enum ComparisonType {
 #[cfg(unix)]
 impl FromStr for ComparisonType {
     type Err = Box<dyn Error>;
-    fn from_str(s: &str) -> Result<ComparisonType, Box<dyn Error>> {
+    fn from_str(s: &str) -> Result<Self, Box<dyn Error>> {
         Ok(match s {
-            "" => ComparisonType::Exact,
-            "-" => ComparisonType::AtLeast,
-            "/" => ComparisonType::AnyOf,
+            "" => Self::Exact,
+            "-" => Self::AtLeast,
+            "/" => Self::AnyOf,
             _ => {
                 return Err(From::from(format!(
                     "Invalid prefix {} for -perm. Only allowed \
@@ -270,9 +270,9 @@ pub struct PermMatcher {}
 
 impl PermMatcher {
     #[cfg(unix)]
-    pub fn new(pattern: &str) -> Result<PermMatcher, Box<dyn Error>> {
+    pub fn new(pattern: &str) -> Result<Self, Box<dyn Error>> {
         let (bit_pattern, comparison_type) = parsing::parse(pattern)?;
-        Ok(PermMatcher {
+        Ok(Self {
             pattern: bit_pattern,
             comparison_type,
         })
@@ -286,7 +286,7 @@ impl PermMatcher {
     }
 
     pub fn new_box(pattern: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(PermMatcher::new(pattern)?))
+        Ok(Box::new(Self::new(pattern)?))
     }
 }
 

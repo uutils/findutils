@@ -23,8 +23,8 @@ pub struct FakeDependencies {
 }
 
 impl<'a> FakeDependencies {
-    pub fn new() -> FakeDependencies {
-        FakeDependencies {
+    pub fn new() -> Self {
+        Self {
             output: RefCell::new(Cursor::new(Vec::<u8>::new())),
             now: SystemTime::now(),
         }

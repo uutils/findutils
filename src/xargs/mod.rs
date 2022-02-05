@@ -103,8 +103,8 @@ struct LimiterCollection {
 }
 
 impl LimiterCollection {
-    fn new() -> LimiterCollection {
-        LimiterCollection { limiters: vec![] }
+    fn new() -> Self {
+        Self { limiters: vec![] }
     }
 
     fn add(&mut self, limiter: impl CommandSizeLimiter + 'static) {
@@ -121,7 +121,7 @@ impl LimiterCollection {
 
 impl Clone for LimiterCollection {
     fn clone(&self) -> Self {
-        LimiterCollection {
+        Self {
             limiters: self
                 .limiters
                 .iter()
@@ -152,8 +152,8 @@ struct MaxCharsCommandSizeLimiter {
 }
 
 impl MaxCharsCommandSizeLimiter {
-    fn new(max_chars: usize) -> MaxCharsCommandSizeLimiter {
-        MaxCharsCommandSizeLimiter {
+    fn new(max_chars: usize) -> Self {
+        Self {
             current_size: 0,
             max_chars,
         }
@@ -167,7 +167,7 @@ impl MaxCharsCommandSizeLimiter {
     }
 
     #[cfg(unix)]
-    fn new_system(env: &HashMap<OsString, OsString>) -> MaxCharsCommandSizeLimiter {
+    fn new_system(env: &HashMap<OsString, OsString>) -> Self {
         // POSIX requires that we leave 2048 bytes of space so that the child processes
         // can have room to set their own environment variables.
         const ARG_HEADROOM: usize = 2048;
@@ -178,7 +178,7 @@ impl MaxCharsCommandSizeLimiter {
             .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
             .sum();
 
-        MaxCharsCommandSizeLimiter::new(arg_max - ARG_HEADROOM - env_size)
+        Self::new(arg_max - ARG_HEADROOM - env_size)
     }
 }
 
@@ -213,8 +213,8 @@ struct MaxArgsCommandSizeLimiter {
 }
 
 impl MaxArgsCommandSizeLimiter {
-    fn new(max_args: usize) -> MaxArgsCommandSizeLimiter {
-        MaxArgsCommandSizeLimiter {
+    fn new(max_args: usize) -> Self {
+        Self {
             current_args: 0,
             max_args,
         }
@@ -253,8 +253,8 @@ struct MaxLinesCommandSizeLimiter {
 }
 
 impl MaxLinesCommandSizeLimiter {
-    fn new(max_lines: usize) -> MaxLinesCommandSizeLimiter {
-        MaxLinesCommandSizeLimiter {
+    fn new(max_lines: usize) -> Self {
+        Self {
             current_line: 1,
             max_lines,
         }
@@ -296,7 +296,7 @@ enum CommandResult {
 }
 
 impl CommandResult {
-    fn combine(&mut self, other: CommandResult) {
+    fn combine(&mut self, other: Self) {
         if matches!(*self, CommandResult::Success) {
             *self = other;
         }
@@ -347,7 +347,7 @@ impl CommandBuilderOptions {
         action: ExecAction,
         env: HashMap<OsString, OsString>,
         mut limiters: LimiterCollection,
-    ) -> Result<CommandBuilderOptions, ExhaustedCommandSpace> {
+    ) -> Result<Self, ExhaustedCommandSpace> {
         let initial_args = match &action {
             ExecAction::Command(args) => args.iter().map(|arg| arg.as_ref()).collect(),
             ExecAction::Echo => vec![OsStr::new("echo")],
@@ -360,7 +360,7 @@ impl CommandBuilderOptions {
             })?;
         }
 
-        Ok(CommandBuilderOptions {
+        Ok(Self {
             action,
             env,
             limiters,
@@ -470,7 +470,7 @@ where
     R: Read,
 {
     fn new(rd: R) -> Self {
-        WhitespaceDelimitedArgumentReader {
+        Self {
             rd,
             pending: vec![],
         }
@@ -571,7 +571,7 @@ where
     R: Read,
 {
     fn new(rd: R, delimiter: u8) -> Self {
-        ByteDelimitedArgumentReader {
+        Self {
             rd: BufReader::new(rd),
             delimiter,
         }
@@ -633,7 +633,7 @@ impl Error for XargsError {}
 
 impl From<String> for XargsError {
     fn from(s: String) -> Self {
-        XargsError::Untyped(s)
+        Self::Untyped(s)
     }
 }
 
@@ -645,13 +645,13 @@ impl From<&'_ str> for XargsError {
 
 impl From<CommandExecutionError> for XargsError {
     fn from(e: CommandExecutionError) -> Self {
-        XargsError::CommandExecution(e)
+        Self::CommandExecution(e)
     }
 }
 
 impl From<io::Error> for XargsError {
     fn from(e: io::Error) -> Self {
-        XargsError::Io(e)
+        Self::Io(e)
     }
 }
 
@@ -998,8 +998,8 @@ mod tests {
     }
 
     impl ChunkReader {
-        fn new(chunks: Vec<Chunk>) -> ChunkReader {
-            ChunkReader { chunks, current: 0 }
+        fn new(chunks: Vec<Chunk>) -> Self {
+            Self { chunks, current: 0 }
         }
     }
 

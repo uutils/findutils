@@ -23,14 +23,14 @@ enum Unit {
 
 impl FromStr for Unit {
     type Err = Box<dyn Error>;
-    fn from_str(s: &str) -> Result<Unit, Box<dyn Error>> {
+    fn from_str(s: &str) -> Result<Self, Box<dyn Error>> {
         Ok(match s {
-            "c" => Unit::Byte,
-            "w" => Unit::TwoByteWord,
-            "" | "b" => Unit::Block,
-            "k" => Unit::KibiByte,
-            "M" => Unit::MebiByte,
-            "G" => Unit::GibiByte,
+            "c" => Self::Byte,
+            "w" => Self::TwoByteWord,
+            "" | "b" => Self::Block,
+            "k" => Self::KibiByte,
+            "M" => Self::MebiByte,
+            "G" => Self::GibiByte,
             _ => {
                 return Err(From::from(format!(
                     "Invalid suffix {} for -size. Only allowed \
@@ -75,8 +75,8 @@ impl SizeMatcher {
     pub fn new(
         value_to_match: ComparableValue,
         suffix_string: &str,
-    ) -> Result<SizeMatcher, Box<dyn Error>> {
-        Ok(SizeMatcher {
+    ) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
             unit: suffix_string.parse()?,
             value_to_match,
         })
@@ -86,7 +86,7 @@ impl SizeMatcher {
         value_to_match: ComparableValue,
         suffix_string: &str,
     ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(SizeMatcher::new(value_to_match, suffix_string)?))
+        Ok(Box::new(Self::new(value_to_match, suffix_string)?))
     }
 }
 
