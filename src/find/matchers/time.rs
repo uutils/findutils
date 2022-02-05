@@ -169,7 +169,7 @@ mod tests {
         let new_file_name = "newFile";
         File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
 
-        let new_file = get_dir_entry_for(&temp_dir_path, &new_file_name);
+        let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
 
         let matcher_for_new =
             NewerMatcher::new(&temp_dir.path().join(new_file_name).to_string_lossy()).unwrap();
@@ -266,7 +266,7 @@ mod tests {
 
         // set "now" to a second before the file was modified (e.g. the file was
         // modified after find started running
-        deps.set_time(files_mtime - Duration::new(1 as u64, 0));
+        deps.set_time(files_mtime - Duration::new(1_u64, 0));
         assert!(
             !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
             "future-modified file shouldn'1 match exactly 1 day old"
@@ -359,14 +359,14 @@ mod tests {
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time);
             assert!(
-                matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                matcher.matches(file_info, &mut deps.new_matcher_io()),
                 "{:?} time matcher should match",
                 file_time_type
             );
 
             deps.set_time(file_time - Duration::from_secs(1));
             assert!(
-                !matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                !matcher.matches(file_info, &mut deps.new_matcher_io()),
                 "{:?} time matcher shouldn't match a second before",
                 file_time_type
             );

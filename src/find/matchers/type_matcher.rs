@@ -158,7 +158,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
         let deps = FakeDependencies::new();
 
-        for typ in ["b", "c", "p", "s"].iter() {
+        for typ in &["b", "c", "p", "s"] {
             let matcher = TypeMatcher::new(&typ.to_string()).unwrap();
             assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
             assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
