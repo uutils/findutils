@@ -58,7 +58,7 @@ impl<'a> MatcherIO<'a> {
 /// is what's being searched for. To a first order approximation, find consists
 /// of building a chain of Matcher objects, and then walking a directory tree,
 /// passing each entry to the chain of Matchers.
-pub trait Matcher {
+pub trait Matcher: Sync {
     /// Returns whether the given file matches the object's predicate.
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool;
 
