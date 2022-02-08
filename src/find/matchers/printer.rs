@@ -31,10 +31,6 @@ impl Printer {
     pub fn new(delimiter: PrintDelimiter) -> Self {
         Self { delimiter }
     }
-
-    pub fn new_box(delimiter: PrintDelimiter) -> Box<dyn Matcher> {
-        Box::new(Self::new(delimiter))
-    }
 }
 
 impl Matcher for Printer {

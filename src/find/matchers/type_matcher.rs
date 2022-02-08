@@ -59,10 +59,6 @@ impl TypeMatcher {
             file_type_fn: function,
         })
     }
-
-    pub fn new_box(type_string: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(type_string)?))
-    }
 }
 
 impl Matcher for TypeMatcher {
@@ -70,8 +66,8 @@ impl Matcher for TypeMatcher {
         (self.file_type_fn)(&file_info.file_type())
     }
 }
-#[cfg(test)]
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;

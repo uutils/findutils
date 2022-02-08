@@ -15,10 +15,6 @@ impl PruneMatcher {
     pub fn new() -> Self {
         Self {}
     }
-
-    pub fn new_box() -> Box<dyn Matcher> {
-        Box::new(Self::new())
-    }
 }
 
 impl Matcher for PruneMatcher {

@@ -81,13 +81,6 @@ impl SizeMatcher {
             value_to_match,
         })
     }
-
-    pub fn new_box(
-        value_to_match: ComparableValue,
-        suffix_string: &str,
-    ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(value_to_match, suffix_string)?))
-    }
 }
 
 impl Matcher for SizeMatcher {

@@ -51,16 +51,6 @@ impl NameMatcher {
             match_link_target,
         })
     }
-
-    pub fn new_box(
-        pattern_string: &str,
-        match_link_target: bool,
-    ) -> Result<Box<dyn Matcher>, PatternError> {
-        Ok(Box::new(NameMatcher::new(
-            pattern_string,
-            match_link_target,
-        )?))
-    }
 }
 
 impl Matcher for NameMatcher {
@@ -96,16 +86,6 @@ impl CaselessNameMatcher {
             pattern: p,
             match_link_target,
         })
-    }
-
-    pub fn new_box(
-        pattern_string: &str,
-        match_link_target: bool,
-    ) -> Result<Box<dyn Matcher>, PatternError> {
-        Ok(Box::new(CaselessNameMatcher::new(
-            pattern_string,
-            match_link_target,
-        )?))
     }
 }
 

@@ -68,8 +68,8 @@ impl AndMatcherBuilder {
         }
     }
 
-    pub fn new_and_condition(&mut self, matcher: Box<dyn Matcher>) {
-        self.submatchers.push(matcher);
+    pub fn new_and_condition(&mut self, matcher: impl Matcher) {
+        self.submatchers.push(matcher.into_box());
     }
 
     /// Builds a Matcher: consuming the builder in the process.
@@ -131,7 +131,7 @@ pub struct OrMatcherBuilder {
 }
 
 impl OrMatcherBuilder {
-    pub fn new_and_condition(&mut self, matcher: Box<dyn Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: impl Matcher) {
         // safe to unwrap. submatchers always has at least one member
         self.submatchers
             .last_mut()
@@ -222,7 +222,7 @@ pub struct ListMatcherBuilder {
 }
 
 impl ListMatcherBuilder {
-    pub fn new_and_condition(&mut self, matcher: Box<dyn Matcher>) {
+    pub fn new_and_condition(&mut self, matcher: impl Matcher) {
         // safe to unwrap. submatchers always has at least one member
         self.submatchers
             .last_mut()
@@ -291,12 +291,6 @@ impl ListMatcherBuilder {
 /// A simple matcher that always matches.
 pub struct TrueMatcher;
 
-impl TrueMatcher {
-    pub fn new_box() -> Box<dyn Matcher> {
-        Box::new(Self {})
-    }
-}
-
 impl Matcher for TrueMatcher {
     fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {
         true
@@ -312,24 +306,16 @@ impl Matcher for FalseMatcher {
     }
 }
 
-impl FalseMatcher {
-    pub fn new_box() -> Box<dyn Matcher> {
-        Box::new(Self {})
-    }
-}
-
 /// Matcher that wraps another matcher and inverts matching criteria.
 pub struct NotMatcher {
     submatcher: Box<dyn Matcher>,
 }
 
 impl NotMatcher {
-    pub fn new(submatcher: Box<dyn Matcher>) -> Self {
-        Self { submatcher }
-    }
-
-    pub fn new_box(submatcher: Box<dyn Matcher>) -> Box<Self> {
-        Box::new(Self::new(submatcher))
+    pub fn new(submatcher: impl Matcher) -> Self {
+        Self {
+            submatcher: submatcher.into_box(),
+        }
     }
 }
 
@@ -361,7 +347,7 @@ mod tests {
     use walkdir::DirEntry;
 
     /// Simple Matcher impl that has side effects
-    pub struct HasSideEffects {}
+    pub struct HasSideEffects;
 
     impl Matcher for HasSideEffects {
         fn matches(&self, _: &DirEntry, _: &mut MatcherIO) -> bool {
@@ -373,12 +359,6 @@ mod tests {
         }
     }
 
-    impl HasSideEffects {
-        pub fn new_box() -> Box<dyn Matcher> {
-            Box::new(Self {})
-        }
-    }
-
     #[test]
     fn and_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
@@ -386,12 +366,12 @@ mod tests {
         let deps = FakeDependencies::new();
 
         // start with one matcher returning true
-        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
         assert!(builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         builder = AndMatcherBuilder::new();
-        builder.new_and_condition(TrueMatcher::new_box());
-        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
+        builder.new_and_condition(FalseMatcher);
         assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
@@ -402,13 +382,13 @@ mod tests {
         let deps = FakeDependencies::new();
 
         // start with one matcher returning false
-        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_and_condition(FalseMatcher);
         assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         let mut builder = OrMatcherBuilder::new();
-        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_and_condition(FalseMatcher);
         builder.new_or_condition("-o").unwrap();
-        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
         assert!(builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
@@ -419,21 +399,21 @@ mod tests {
         let deps = FakeDependencies::new();
 
         // result should always match that of the last pushed submatcher
-        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_and_condition(FalseMatcher);
         assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         builder = ListMatcherBuilder::new();
-        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_and_condition(FalseMatcher);
         builder.new_list_condition().unwrap();
-        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
         assert!(builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
 
         builder = ListMatcherBuilder::new();
-        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_and_condition(FalseMatcher);
         builder.new_list_condition().unwrap();
-        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
         builder.new_list_condition().unwrap();
-        builder.new_and_condition(FalseMatcher::new_box());
+        builder.new_and_condition(FalseMatcher);
         assert!(!builder.build().matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
@@ -460,12 +440,12 @@ mod tests {
         let mut builder = AndMatcherBuilder::new();
 
         // start with one matcher with no side effects false
-        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
         assert!(!builder.build().has_side_effects());
 
         builder = AndMatcherBuilder::new();
-        builder.new_and_condition(TrueMatcher::new_box());
-        builder.new_and_condition(HasSideEffects::new_box());
+        builder.new_and_condition(TrueMatcher);
+        builder.new_and_condition(HasSideEffects);
         assert!(builder.build().has_side_effects());
     }
 
@@ -474,12 +454,12 @@ mod tests {
         let mut builder = OrMatcherBuilder::new();
 
         // start with one matcher with no side effects false
-        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
         assert!(!builder.build().has_side_effects());
 
         builder = OrMatcherBuilder::new();
-        builder.new_and_condition(TrueMatcher::new_box());
-        builder.new_and_condition(HasSideEffects::new_box());
+        builder.new_and_condition(TrueMatcher);
+        builder.new_and_condition(HasSideEffects);
         assert!(builder.build().has_side_effects());
     }
 
@@ -488,12 +468,12 @@ mod tests {
         let mut builder = ListMatcherBuilder::new();
 
         // start with one matcher with no side effects false
-        builder.new_and_condition(TrueMatcher::new_box());
+        builder.new_and_condition(TrueMatcher);
         assert!(!builder.build().has_side_effects());
 
         builder = ListMatcherBuilder::new();
-        builder.new_and_condition(TrueMatcher::new_box());
-        builder.new_and_condition(HasSideEffects::new_box());
+        builder.new_and_condition(TrueMatcher);
+        builder.new_and_condition(HasSideEffects);
         assert!(builder.build().has_side_effects());
     }
 
@@ -512,8 +492,8 @@ mod tests {
     #[test]
     fn not_matches_works() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let not_true = NotMatcher::new(TrueMatcher::new_box());
-        let not_false = NotMatcher::new(FalseMatcher::new_box());
+        let not_true = NotMatcher::new(TrueMatcher);
+        let not_false = NotMatcher::new(FalseMatcher);
         let deps = FakeDependencies::new();
         assert!(!not_true.matches(&abbbc, &mut deps.new_matcher_io()));
         assert!(not_false.matches(&abbbc, &mut deps.new_matcher_io()));
@@ -521,8 +501,8 @@ mod tests {
 
     #[test]
     fn not_has_side_effects_works() {
-        let has_fx = NotMatcher::new(HasSideEffects::new_box());
-        let hasnt_fx = NotMatcher::new(FalseMatcher::new_box());
+        let has_fx = NotMatcher::new(HasSideEffects);
+        let hasnt_fx = NotMatcher::new(FalseMatcher);
         assert!(has_fx.has_side_effects());
         assert!(!hasnt_fx.has_side_effects());
     }

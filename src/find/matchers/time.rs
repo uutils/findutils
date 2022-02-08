@@ -27,10 +27,6 @@ impl NewerMatcher {
         })
     }
 
-    pub fn new_box(path_to_file: &str) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-        Ok(Box::new(Self::new(path_to_file)?))
-    }
-
     /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
@@ -137,10 +133,6 @@ impl FileTimeMatcher {
             days,
             file_time_type,
         }
-    }
-
-    pub fn new_box(file_time_type: FileTimeType, days: ComparableValue) -> Box<dyn Matcher> {
-        Box::new(Self::new(file_time_type, days))
     }
 }
 
