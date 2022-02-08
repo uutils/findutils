@@ -88,6 +88,18 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut i = 0;
     let mut config = Config::default();
 
+    while i < args.len() {
+        match args[i] {
+            "-O0" | "-O1" | "-O2" | "-O3" => {
+                // GNU find optimization level flag (ignored)
+            }
+            _ => break,
+        }
+
+        i += 1;
+    }
+
+    let paths_start = i;
     while i < args.len()
         && (args[i] == "-" || !args[i].starts_with('-'))
         && args[i] != "!"
@@ -96,7 +108,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         paths.push(args[i].to_string());
         i += 1;
     }
-    if i == 0 {
+    if i == paths_start {
         paths.push(".".to_string());
     }
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
@@ -337,6 +349,13 @@ mod tests {
         } else {
             panic!("parse_args should have returned an error");
         }
+    }
+
+    #[test]
+    fn parse_optimize_flag() {
+        let parsed_info =
+            super::parse_args(&["-O0", ".", "-print"]).expect("parsing should succeed");
+        assert_eq!(parsed_info.paths, ["."]);
     }
 
     #[test]
