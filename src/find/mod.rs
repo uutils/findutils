@@ -93,6 +93,14 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             "-O0" | "-O1" | "-O2" | "-O3" => {
                 // GNU find optimization level flag (ignored)
             }
+            "-P" => {
+                // Never follow symlinks (the default)
+            }
+            "--" => {
+                // End of flags
+                i += 1;
+                break;
+            }
             _ => break,
         }
 
@@ -356,6 +364,23 @@ mod tests {
         let parsed_info =
             super::parse_args(&["-O0", ".", "-print"]).expect("parsing should succeed");
         assert_eq!(parsed_info.paths, ["."]);
+    }
+
+    #[test]
+    fn parse_p_flag() {
+        super::parse_args(&["-P"]).expect("parsing should succeed");
+    }
+
+    #[test]
+    fn parse_flag_then_double_dash() {
+        super::parse_args(&["-P", "--"]).expect("parsing should succeed");
+    }
+
+    #[test]
+    fn parse_double_dash_then_flag() {
+        super::parse_args(&["--", "-P"])
+            .err()
+            .expect("parsing should fail");
     }
 
     #[test]
