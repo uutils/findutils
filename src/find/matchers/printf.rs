@@ -28,25 +28,25 @@ enum TimeFormat {
     Ctime,
     /// Seconds since the epoch, as a float w/ nanosecond part.
     SinceEpoch,
-    /// Follow strftime-compatible syntax '%c' where 'c' is the given character.
-    Strftime(char),
+    /// Follow strftime-compatible syntax
+    Strftime(String),
 }
 
 impl TimeFormat {
     fn apply(&self, time: SystemTime) -> Result<Cow<'static, str>, Box<dyn Error>> {
-        const CTIME_FORMAT: &str = "%a %b %d %H:%M:%S.%f %Y";
+        const CTIME_FORMAT: &str = "%a %b %d %H:%M:%S.%f0 %Y";
 
         let formatted = match self {
             TimeFormat::SinceEpoch => {
                 let duration = time.duration_since(SystemTime::UNIX_EPOCH)?;
-                format!("{}.{:09}", duration.as_secs(), duration.subsec_nanos())
+                format!("{}.{:09}0", duration.as_secs(), duration.subsec_nanos())
             }
             TimeFormat::Ctime => DateTime::<Local>::from(time)
                 .format(CTIME_FORMAT)
                 .to_string(),
-            TimeFormat::Strftime(c) => DateTime::<Local>::from(time)
-                .format(&format!("%{}", c))
-                .to_string(),
+            TimeFormat::Strftime(format) => {
+                DateTime::<Local>::from(time).format(format).to_string()
+            }
         };
 
         Ok(formatted.into())
@@ -213,19 +213,21 @@ impl FormatStringParser<'_> {
     }
 
     fn parse_time_specifier(&mut self, first: char) -> Result<TimeFormat, Box<dyn Error>> {
-        let c = self.advance_one()?;
-        if c == '@' {
-            return Ok(TimeFormat::SinceEpoch);
-        }
-
-        // We can't store the parsed items inside TimeFormat, because the items
-        // take a reference to the full format string, but we still try to parse
-        // it here so that errors get caught early.
-        match StrftimeItems::new(&format!("%{}", c)).next() {
-            None | Some(chrono::format::Item::Error) => {
-                Err(format!("Invalid time specifier: %{}{}", first, c).into())
+        match self.advance_one()? {
+            '@' => Ok(TimeFormat::SinceEpoch),
+            'S' => Ok(TimeFormat::Strftime("%S.%f0".to_string())),
+            c => {
+                // We can't store the parsed items inside TimeFormat, because the items
+                // take a reference to the full format string, but we still try to parse
+                // it here so that errors get caught early.
+                let format = format!("%{}", c);
+                match StrftimeItems::new(&format).next() {
+                    None | Some(chrono::format::Item::Error) => {
+                        Err(format!("Invalid time specifier: %{}{}", first, c).into())
+                    }
+                    Some(_item) => Ok(TimeFormat::Strftime(format)),
+                }
             }
-            Some(_item) => Ok(TimeFormat::Strftime(c)),
         }
     }
 
@@ -727,13 +729,17 @@ mod tests {
                 FormatComponent::Literal("%".to_owned()),
                 unaligned_directive(FormatDirective::AccessTime(TimeFormat::Ctime)),
                 unaligned_directive(FormatDirective::AccessTime(TimeFormat::SinceEpoch)),
-                unaligned_directive(FormatDirective::AccessTime(TimeFormat::Strftime('k'))),
+                unaligned_directive(FormatDirective::AccessTime(TimeFormat::Strftime(
+                    "%k".to_string()
+                ))),
                 unaligned_directive(FormatDirective::Blocks {
                     large_blocks: false
                 }),
                 unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Ctime)),
                 unaligned_directive(FormatDirective::ChangeTime(TimeFormat::SinceEpoch)),
-                unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Strftime('H'))),
+                unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Strftime(
+                    "%H".to_string()
+                ))),
                 unaligned_directive(FormatDirective::Depth),
                 unaligned_directive(FormatDirective::Device),
                 FormatComponent::Literal("TEST".to_owned()),
@@ -767,7 +773,9 @@ mod tests {
                 unaligned_directive(FormatDirective::Sparseness),
                 unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Ctime)),
                 unaligned_directive(FormatDirective::ModificationTime(TimeFormat::SinceEpoch)),
-                unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Strftime('d'))),
+                unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Strftime(
+                    "%d".to_string()
+                ))),
                 unaligned_directive(FormatDirective::User { as_name: true }),
                 unaligned_directive(FormatDirective::User { as_name: false }),
                 unaligned_directive(FormatDirective::Type {
@@ -1050,7 +1058,7 @@ mod tests {
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!(
             format!(
-                "Sat Jan 15 09:30:21.002000000 2000,{}.002000000,2000-01-15",
+                "Sat Jan 15 09:30:21.0020000000 2000,{}.0020000000,2000-01-15",
                 mtime.timestamp()
             ),
             deps.get_output_as_string()
