@@ -392,7 +392,7 @@ fn build_matcher_tree(
                 invert_next_matcher = !invert_next_matcher;
                 None
             }
-            "-a" => {
+            "-and" | "-a" => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!(
                         "expected an expression after {}",
@@ -674,17 +674,19 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_dash_a_works() {
-        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
-        let mut config = Config::default();
-        let deps = FakeDependencies::new();
+        for arg in &["-a", "-and"] {
+            let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+            let mut config = Config::default();
+            let deps = FakeDependencies::new();
 
-        // build a matcher using an explicit -a argument
-        let matcher = build_top_level_matcher(&["-true", "-a", "-true"], &mut config).unwrap();
-        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-        assert_eq!(
-            deps.get_output_as_string(),
-            fix_up_slashes("./test_data/simple/abbbc\n")
-        );
+            // build a matcher using an explicit -a argument
+            let matcher = build_top_level_matcher(&["-true", arg, "-true"], &mut config).unwrap();
+            assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/abbbc\n")
+            );
+        }
     }
 
     #[test]
