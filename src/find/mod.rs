@@ -124,6 +124,7 @@ fn process_dir<'a>(
     config: &Config,
     deps: &'a dyn Dependencies<'a>,
     matcher: &dyn matchers::Matcher,
+    quit: &mut bool,
 ) -> u64 {
     let mut found_count: u64 = 0;
     let mut walkdir = WalkDir::new(dir)
@@ -138,14 +139,17 @@ fn process_dir<'a>(
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
-    loop {
-        match it.next() {
-            None => break,
-            Some(Err(err)) => writeln!(&mut stderr(), "Error: {}: {}", dir, err).unwrap(),
-            Some(Ok(entry)) => {
+    while let Some(result) = it.next() {
+        match result {
+            Err(err) => writeln!(&mut stderr(), "Error: {}: {}", dir, err).unwrap(),
+            Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
                 if matcher.matches(&entry, &mut matcher_io) {
                     found_count += 1;
+                }
+                if matcher_io.should_quit() {
+                    *quit = true;
+                    break;
                 }
                 if matcher_io.should_skip_current_dir() {
                     it.skip_current_dir();
@@ -168,13 +172,18 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
     }
 
     let mut found_count: u64 = 0;
+    let mut quit = false;
     for path in paths_and_matcher.paths {
         found_count += process_dir(
             &path,
             &paths_and_matcher.config,
             deps,
             &*paths_and_matcher.matcher,
+            &mut quit,
         );
+        if quit {
+            break;
+        }
     }
     Ok(found_count)
 }
@@ -794,6 +803,28 @@ mod tests {
         assert_eq!(
             deps.get_output_as_string(),
             fix_up_slashes("./test_data/links/link-f\n")
+        );
+    }
+
+    #[test]
+    fn find_print_then_quit() {
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/simple"),
+                &fix_up_slashes("./test_data/simple"),
+                "-print",
+                "-quit",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/simple\n"),
         );
     }
 }
