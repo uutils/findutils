@@ -35,9 +35,16 @@ impl Matcher for AndMatcher {
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        self.submatchers
-            .iter()
-            .all(|x| x.matches(dir_entry, matcher_io))
+        for matcher in &self.submatchers {
+            if !matcher.matches(dir_entry, matcher_io) {
+                return false;
+            }
+            if matcher_io.should_quit() {
+                break;
+            }
+        }
+
+        true
     }
 
     fn has_side_effects(&self) -> bool {
@@ -79,9 +86,7 @@ impl AndMatcherBuilder {
             // safe to unwrap: we've just checked the size
             return self.submatchers.pop().unwrap();
         }
-        let matcher = Box::new(AndMatcher::new(self.submatchers));
-        self.submatchers = Vec::new();
-        matcher
+        AndMatcher::new(self.submatchers).into_box()
     }
 }
 
@@ -104,9 +109,16 @@ impl Matcher for OrMatcher {
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
     fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        self.submatchers
-            .iter()
-            .any(|x| x.matches(dir_entry, matcher_io))
+        for matcher in &self.submatchers {
+            if matcher.matches(dir_entry, matcher_io) {
+                return true;
+            }
+            if matcher_io.should_quit() {
+                break;
+            }
+        }
+
+        false
     }
 
     fn has_side_effects(&self) -> bool {
@@ -170,7 +182,7 @@ impl OrMatcherBuilder {
         for x in self.submatchers {
             submatchers.push(x.build());
         }
-        Box::new(OrMatcher::new(submatchers))
+        OrMatcher::new(submatchers).into_box()
     }
 }
 
@@ -196,6 +208,9 @@ impl Matcher for ListMatcher {
         let mut rc = false;
         for matcher in &self.submatchers {
             rc = matcher.matches(dir_entry, matcher_io);
+            if matcher_io.should_quit() {
+                break;
+            }
         }
         rc
     }
@@ -341,9 +356,12 @@ impl Matcher for NotMatcher {
 
 mod tests {
     use super::*;
+    use crate::find::matchers::quit::QuitMatcher;
     use crate::find::matchers::tests::get_dir_entry_for;
     use crate::find::matchers::{Matcher, MatcherIO};
     use crate::find::tests::FakeDependencies;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use walkdir::DirEntry;
 
     /// Simple Matcher impl that has side effects
@@ -355,6 +373,16 @@ mod tests {
         }
 
         fn has_side_effects(&self) -> bool {
+            true
+        }
+    }
+
+    /// Matcher that counts its invocations
+    struct Counter(Rc<RefCell<u32>>);
+
+    impl Matcher for Counter {
+        fn matches(&self, _: &DirEntry, _: &mut MatcherIO) -> bool {
+            *self.0.borrow_mut() += 1;
             true
         }
     }
@@ -505,5 +533,60 @@ mod tests {
         let hasnt_fx = NotMatcher::new(FalseMatcher);
         assert!(has_fx.has_side_effects());
         assert!(!hasnt_fx.has_side_effects());
+    }
+
+    #[test]
+    fn and_quit_works() {
+        let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+        let mut builder = AndMatcherBuilder::new();
+        let deps = FakeDependencies::new();
+
+        let before = Rc::new(RefCell::new(0));
+        let after = Rc::new(RefCell::new(0));
+        builder.new_and_condition(Counter(before.clone()));
+        builder.new_and_condition(QuitMatcher);
+        builder.new_and_condition(Counter(after.clone()));
+        builder.build().matches(&abbbc, &mut deps.new_matcher_io());
+
+        assert_eq!(*before.borrow(), 1);
+        assert_eq!(*after.borrow(), 0);
+    }
+
+    #[test]
+    fn or_quit_works() {
+        let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+        let mut builder = OrMatcherBuilder::new();
+        let deps = FakeDependencies::new();
+
+        let before = Rc::new(RefCell::new(0));
+        let after = Rc::new(RefCell::new(0));
+        builder.new_and_condition(Counter(before.clone()));
+        builder.new_or_condition("-o").unwrap();
+        builder.new_and_condition(QuitMatcher);
+        builder.new_or_condition("-o").unwrap();
+        builder.new_and_condition(Counter(after.clone()));
+        builder.build().matches(&abbbc, &mut deps.new_matcher_io());
+
+        assert_eq!(*before.borrow(), 1);
+        assert_eq!(*after.borrow(), 0);
+    }
+
+    #[test]
+    fn list_quit_works() {
+        let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+        let mut builder = ListMatcherBuilder::new();
+        let deps = FakeDependencies::new();
+
+        let before = Rc::new(RefCell::new(0));
+        let after = Rc::new(RefCell::new(0));
+        builder.new_and_condition(Counter(before.clone()));
+        builder.new_list_condition().unwrap();
+        builder.new_and_condition(QuitMatcher);
+        builder.new_list_condition().unwrap();
+        builder.new_and_condition(Counter(after.clone()));
+        builder.build().matches(&abbbc, &mut deps.new_matcher_io());
+
+        assert_eq!(*before.borrow(), 1);
+        assert_eq!(*after.borrow(), 0);
     }
 }

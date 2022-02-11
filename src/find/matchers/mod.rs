@@ -13,6 +13,7 @@ mod perm;
 mod printer;
 mod printf;
 mod prune;
+mod quit;
 mod regex;
 mod size;
 mod time;
@@ -35,6 +36,7 @@ use self::perm::PermMatcher;
 use self::printer::{PrintDelimiter, Printer};
 use self::printf::Printf;
 use self::prune::PruneMatcher;
+use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
 use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher};
@@ -46,6 +48,7 @@ use super::{Config, Dependencies};
 /// from the file/directory info.
 pub struct MatcherIO<'a> {
     should_skip_dir: bool,
+    quit: bool,
     deps: &'a dyn Dependencies<'a>,
 }
 
@@ -54,6 +57,7 @@ impl<'a> MatcherIO<'a> {
         MatcherIO {
             deps,
             should_skip_dir: false,
+            quit: false,
         }
     }
 
@@ -63,6 +67,14 @@ impl<'a> MatcherIO<'a> {
 
     pub fn should_skip_current_dir(&self) -> bool {
         self.should_skip_dir
+    }
+
+    pub fn quit(&mut self) {
+        self.quit = true;
+    }
+
+    pub fn should_quit(&self) -> bool {
+        self.quit
     }
 
     pub fn now(&self) -> SystemTime {
@@ -382,6 +394,7 @@ fn build_matcher_tree(
                 Some(PermMatcher::new(args[i])?.into_box())
             }
             "-prune" => Some(PruneMatcher::new().into_box()),
+            "-quit" => Some(QuitMatcher.into_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!(
