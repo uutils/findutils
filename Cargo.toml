@@ -23,7 +23,7 @@ uucore = { version = "0.0.12", features = ["entries", "fs", "fsext"] }
 assert_cmd = "2"
 filetime = "0.2"
 predicates = "2"
-serial_test = "0.5"
+serial_test = "0.6"
 tempfile = "3"
 
 [[bin]]
