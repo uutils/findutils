@@ -1,6 +1,6 @@
 on: [push, pull_request]
 
-name: GNU findutils compatibility tests
+name: External testsuites
 
 jobs:
   gnu-tests:
