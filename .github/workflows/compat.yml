@@ -70,9 +70,7 @@ jobs:
     - name: Compare failing tests against master
       shell: bash
       run: |
-        mkdir -p ./logs
-        cp findutils.gnu/{tests,{find,xargs}/testsuite}/*.log ./logs
-        ./findutils/util/diff-gnu.sh dl logs
+        ./findutils/util/diff-gnu.sh ./dl ./findutils.gnu
     - name: Compare against main results
       shell: bash
       run: |
