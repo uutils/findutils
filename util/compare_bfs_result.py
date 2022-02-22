@@ -11,14 +11,15 @@ NEW = json.load(open("bfs-result.json"))
 OLD = json.load(open("latest-bfs-result.json"))
 
 # Extract the specific results from the dicts
-last = OLD[list(OLD.keys())[0]]
-current = NEW[list(NEW.keys())[0]]
+[last] = OLD.values()
+[current] = NEW.values()
 
 pass_d = int(current["pass"]) - int(last["pass"])
+skip_d = int(current["skip"]) - int(last.get("skip", 0))
 fail_d = int(current["fail"]) - int(last["fail"])
 
 # Get an annotation to highlight changes
-print(f"::warning ::Changes from main: PASS {pass_d:+d} / FAIL {fail_d:+d}")
+print(f"::warning ::Changes from main: PASS {pass_d:+d} / SKIP {skip_d:+d} / FAIL {fail_d:+d}")
 
 # If results are worse fail the job to draw attention
 if pass_d < 0:
