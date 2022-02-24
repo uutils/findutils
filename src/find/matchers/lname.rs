@@ -34,48 +34,37 @@ fn read_link_target(file_info: &DirEntry) -> Option<PathBuf> {
     }
 }
 
-/// This matcher makes a case-sensitive comparison of the link target against a
-/// shell wildcard pattern. See `glob::Pattern` for details on the exact syntax.
+/// This matcher makes a comparison of the link target against a shell wildcard
+/// pattern. See `glob::Pattern` for details on the exact syntax.
 pub struct LinkNameMatcher {
     pattern: Pattern,
+    caseless: bool,
 }
 
 impl LinkNameMatcher {
-    pub fn new(pattern_string: &str) -> Result<Self, PatternError> {
-        let p = Pattern::new(pattern_string)?;
-        Ok(Self { pattern: p })
+    pub fn new(pattern_string: &str, caseless: bool) -> Result<LinkNameMatcher, PatternError> {
+        let pattern = if caseless {
+            Pattern::new(&pattern_string.to_lowercase())?
+        } else {
+            Pattern::new(pattern_string)?
+        };
+
+        Ok(Self {
+            pattern,
+            caseless,
+        })
     }
 }
 
 impl Matcher for LinkNameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         if let Some(target) = read_link_target(file_info) {
-            self.pattern.matches(&target.to_string_lossy())
-        } else {
-            false
-        }
-    }
-}
-
-/// This matcher makes a case-insensitive comparison of the link target against
-/// a shell wildcard pattern. See `glob::Pattern` for details on the exact
-/// syntax.
-pub struct CaselessLinkNameMatcher {
-    pattern: Pattern,
-}
-
-impl CaselessLinkNameMatcher {
-    pub fn new(pattern_string: &str) -> Result<Self, PatternError> {
-        let p = Pattern::new(&pattern_string.to_lowercase())?;
-        Ok(Self { pattern: p })
-    }
-}
-
-impl Matcher for CaselessLinkNameMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        if let Some(target) = read_link_target(file_info) {
-            self.pattern
-                .matches(&target.to_string_lossy().to_lowercase())
+            let target = target.to_string_lossy();
+            if self.caseless {
+                self.pattern.matches(&target.to_lowercase())
+            } else {
+                self.pattern.matches(&target)
+            }
         } else {
             false
         }
@@ -116,7 +105,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = LinkNameMatcher::new("ab?bc").unwrap();
+        let matcher = LinkNameMatcher::new("ab?bc", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
@@ -126,7 +115,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = CaselessLinkNameMatcher::new("AbB?c").unwrap();
+        let matcher = LinkNameMatcher::new("AbB?c", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }

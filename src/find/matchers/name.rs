@@ -10,45 +10,36 @@ use walkdir::DirEntry;
 
 use super::{Matcher, MatcherIO};
 
-/// This matcher makes a case-sensitive comparison of the name against a
-/// shell wildcard pattern. See `glob::Pattern` for details on the exact
-/// syntax.
+/// This matcher makes a comparison of the name against a shell wildcard
+/// pattern. See `glob::Pattern` for details on the exact syntax.
 pub struct NameMatcher {
     pattern: Pattern,
+    caseless: bool,
 }
 
 impl NameMatcher {
-    pub fn new(pattern_string: &str) -> Result<Self, PatternError> {
-        let p = Pattern::new(pattern_string)?;
-        Ok(Self { pattern: p })
+    pub fn new(pattern_string: &str, caseless: bool) -> Result<Self, PatternError> {
+        let pattern = if caseless {
+            Pattern::new(&pattern_string.to_lowercase())?
+        } else {
+            Pattern::new(pattern_string)?
+        };
+
+        Ok(Self {
+            pattern,
+            caseless,
+        })
     }
 }
 
 impl Matcher for NameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        self.pattern
-            .matches(file_info.file_name().to_string_lossy().as_ref())
-    }
-}
-
-/// This matcher makes a case-insensitive comparison of the name against a
-/// shell wildcard pattern. See `glob::Pattern` for details on the exact
-/// syntax.
-pub struct CaselessNameMatcher {
-    pattern: Pattern,
-}
-
-impl CaselessNameMatcher {
-    pub fn new(pattern_string: &str) -> Result<Self, PatternError> {
-        let p = Pattern::new(&pattern_string.to_lowercase())?;
-        Ok(Self { pattern: p })
-    }
-}
-
-impl super::Matcher for CaselessNameMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        self.pattern
-            .matches(&file_info.file_name().to_string_lossy().to_lowercase())
+        let name = file_info.file_name().to_string_lossy();
+        if self.caseless {
+            self.pattern.matches(&name.to_lowercase())
+        } else {
+            self.pattern.matches(&name)
+        }
     }
 }
 
@@ -85,7 +76,7 @@ mod tests {
     #[test]
     fn matching_with_wrong_case_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = NameMatcher::new("A*C").unwrap();
+        let matcher = NameMatcher::new("A*C", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -93,7 +84,7 @@ mod tests {
     #[test]
     fn matching_with_right_case_returns_true() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = NameMatcher::new("abb?c").unwrap();
+        let matcher = NameMatcher::new("abb?c", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -101,7 +92,7 @@ mod tests {
     #[test]
     fn not_matching_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = NameMatcher::new("shouldn't match").unwrap();
+        let matcher = NameMatcher::new("shouldn't match", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -111,21 +102,21 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = NameMatcher::new("link?f").unwrap();
+        let matcher = NameMatcher::new("link?f", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
 
     #[test]
     fn cant_create_with_invalid_pattern() {
-        let result = NameMatcher::new("a**c");
+        let result = NameMatcher::new("a**c", false);
         assert!(result.is_err());
     }
 
     #[test]
     fn caseless_matching_with_wrong_case_returns_true() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = CaselessNameMatcher::new("A*C").unwrap();
+        let matcher = NameMatcher::new("A*C", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -133,7 +124,7 @@ mod tests {
     #[test]
     fn caseless_matching_with_right_case_returns_true() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = CaselessNameMatcher::new("abb?c").unwrap();
+        let matcher = NameMatcher::new("abb?c", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -141,7 +132,7 @@ mod tests {
     #[test]
     fn caseless_not_matching_returns_false() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = CaselessNameMatcher::new("shouldn't match").unwrap();
+        let matcher = NameMatcher::new("shouldn't match", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -151,14 +142,14 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = CaselessNameMatcher::new("linK?f").unwrap();
+        let matcher = NameMatcher::new("linK?f", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
 
     #[test]
     fn caseless_cant_create_with_invalid_pattern() {
-        let result = CaselessNameMatcher::new("a**c");
+        let result = NameMatcher::new("a**c", true);
         assert!(result.is_err());
     }
 }
