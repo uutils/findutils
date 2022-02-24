@@ -26,6 +26,12 @@ LOG_FILE=bfs/tests.log
 PASS=$(sed -n "s/^tests passed: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
 SKIP=$(sed -n "s/^tests skipped: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
 FAIL=$(sed -n "s/^tests failed: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
+
+# Default any missing numbers to zero (e.g. no tests skipped)
+: ${PASS:=0}
+: ${SKIP:=0}
+: ${FAIL:=0}
+
 TOTAL=$((PASS + SKIP + FAIL))
 if (( TOTAL <= 1 )); then
     echo "Error in the execution, failing early"
