@@ -4,12 +4,5 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-extern crate glob;
-extern crate regex;
-extern crate walkdir;
-
-#[cfg(test)]
-extern crate tempfile;
-
 pub mod find;
 pub mod xargs;

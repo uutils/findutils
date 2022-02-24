@@ -4,9 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-extern crate findutils;
-extern crate glob;
-
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
     let strs: Vec<&str> = args.iter().map(|s| s.as_ref()).collect();

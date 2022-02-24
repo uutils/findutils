@@ -223,7 +223,6 @@ dependencies = [
  "chrono",
  "clap",
  "filetime",
- "glob",
  "once_cell",
  "onig",
  "predicates",

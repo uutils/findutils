@@ -7,10 +7,9 @@
 use std::io::{stderr, Write};
 use std::path::PathBuf;
 
-use glob::Pattern;
-use glob::PatternError;
 use walkdir::DirEntry;
 
+use super::glob::Pattern;
 use super::{Matcher, MatcherIO};
 
 fn read_link_target(file_info: &DirEntry) -> Option<PathBuf> {
@@ -38,33 +37,19 @@ fn read_link_target(file_info: &DirEntry) -> Option<PathBuf> {
 /// pattern. See `glob::Pattern` for details on the exact syntax.
 pub struct LinkNameMatcher {
     pattern: Pattern,
-    caseless: bool,
 }
 
 impl LinkNameMatcher {
-    pub fn new(pattern_string: &str, caseless: bool) -> Result<LinkNameMatcher, PatternError> {
-        let pattern = if caseless {
-            Pattern::new(&pattern_string.to_lowercase())?
-        } else {
-            Pattern::new(pattern_string)?
-        };
-
-        Ok(Self {
-            pattern,
-            caseless,
-        })
+    pub fn new(pattern_string: &str, caseless: bool) -> LinkNameMatcher {
+        let pattern = Pattern::new(pattern_string, caseless);
+        Self { pattern }
     }
 }
 
 impl Matcher for LinkNameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
         if let Some(target) = read_link_target(file_info) {
-            let target = target.to_string_lossy();
-            if self.caseless {
-                self.pattern.matches(&target.to_lowercase())
-            } else {
-                self.pattern.matches(&target)
-            }
+            self.pattern.matches(&target.to_string_lossy())
         } else {
             false
         }
@@ -105,7 +90,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = LinkNameMatcher::new("ab?bc", false).unwrap();
+        let matcher = LinkNameMatcher::new("ab?bc", false);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
@@ -115,7 +100,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = LinkNameMatcher::new("AbB?c", true).unwrap();
+        let matcher = LinkNameMatcher::new("AbB?c", true);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
