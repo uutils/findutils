@@ -130,7 +130,7 @@ mod tests {
     // being in a regex.
     #[cfg(windows)]
     fn fix_up_regex_slashes(re: &str) -> String {
-        re.replace("/", "\\\\")
+        re.replace("/", r"\\")
     }
 
     #[cfg(not(windows))]
