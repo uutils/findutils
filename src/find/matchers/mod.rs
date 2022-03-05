@@ -7,8 +7,11 @@
 mod delete;
 mod empty;
 pub mod exec;
+mod glob;
+mod lname;
 mod logical_matchers;
 mod name;
+mod path;
 mod perm;
 mod printer;
 mod printf;
@@ -28,10 +31,12 @@ use walkdir::DirEntry;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
 use self::exec::SingleExecMatcher;
+use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
     AndMatcherBuilder, FalseMatcher, ListMatcherBuilder, NotMatcher, TrueMatcher,
 };
-use self::name::{CaselessNameMatcher, NameMatcher};
+use self::name::NameMatcher;
+use self::path::PathMatcher;
 use self::perm::PermMatcher;
 use self::printer::{PrintDelimiter, Printer};
 use self::printf::Printf;
@@ -279,19 +284,26 @@ fn build_matcher_tree(
             }
             "-true" => Some(TrueMatcher.into_box()),
             "-false" => Some(FalseMatcher.into_box()),
-            "-name" | "-lname" => {
+            "-lname" | "-ilname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(NameMatcher::new(args[i], args[i - 1].starts_with("-l"))?.into_box())
+                Some(LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
-            "-iname" | "-ilname" => {
+            "-name" | "-iname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(CaselessNameMatcher::new(args[i], args[i - 1].starts_with("-il"))?.into_box())
+                Some(NameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
+            }
+            "-path" | "-ipath" | "-wholename" | "-iwholename" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-regextype" => {
                 if i >= args.len() - 1 {
