@@ -557,25 +557,26 @@ fn format_directive<'entry>(
         FormatDirective::Type { follow_links } => if file_info.path_is_symlink() {
             if *follow_links {
                 match file_info.path().metadata() {
-                    Ok(meta) => format_non_link_file_type(meta.file_type()),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => 'N',
+                    Ok(meta) => format_non_link_file_type(meta.file_type()).to_string(),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => "N".to_string(),
                     // The ErrorKinds corresponding to ELOOP and ENOTDIR are
                     // nightly-only:
                     // https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.FilesystemLoop
                     // so we need to use the raw errno values instead.
                     #[cfg(unix)]
-                    Err(e) if e.raw_os_error().unwrap_or(0) == uucore::libc::ENOTDIR => 'N',
+                    Err(e) if e.raw_os_error().unwrap_or(0) == uucore::libc::ENOTDIR => "N".to_string(),
                     #[cfg(unix)]
-                    Err(e) if e.raw_os_error().unwrap_or(0) == uucore::libc::ELOOP => 'L',
-                    Err(_) => '?',
+                    Err(e) if e.raw_os_error().unwrap_or(0) == uucore::libc::ELOOP => "L".to_string(),
+                    Err(e) => {
+                        format!("{:?}", e)
+                    }
                 }
             } else {
-                'l'
+                "l".to_string()
             }
         } else {
-            format_non_link_file_type(file_info.file_type())
+            format_non_link_file_type(file_info.file_type()).to_string()
         }
-        .to_string()
         .into(),
 
         #[cfg(not(unix))]
