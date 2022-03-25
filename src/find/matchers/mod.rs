@@ -1102,7 +1102,7 @@ mod tests {
     fn build_top_level_matcher_perm_bad() {
         let mut config = Config::default();
         if let Err(e) = build_top_level_matcher(&["-perm", "foo"], &mut config) {
-            assert!(e.to_string().contains("invalid mode"));
+            assert!(e.to_string().contains("invalid operator"));
         } else {
             panic!("-perm with bad mode pattern should fail");
         }

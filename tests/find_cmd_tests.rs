@@ -355,3 +355,26 @@ fn find_printf() {
             .join(""),
         ));
 }
+
+#[cfg(unix)]
+#[serial(working_dir)]
+#[test]
+fn find_perm() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["-perm", "+rwx"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["-perm", "u+rwX"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["-perm", "u=g"])
+        .assert()
+        .success();
+}
