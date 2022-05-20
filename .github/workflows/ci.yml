@@ -154,7 +154,7 @@ jobs:
           path: lcov.info
 
       - name: Upload coverage to codecov.io
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           # file: ${{ steps.grcov.outputs.report }}
           file: lcov.info
