@@ -147,7 +147,7 @@ jobs:
               --service-name "GitHub Actions" \
               --service-number ${{ github.run_id }}
       - name: Upload coverage as artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: lcov.info
           # path: ${{ steps.grcov.outputs.report }}
