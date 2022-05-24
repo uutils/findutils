@@ -14,7 +14,7 @@ chrono = "0.4"
 clap = "2.34"
 walkdir = "2.3"
 regex = "1.5"
-once_cell = "1.11"
+once_cell = "1.12"
 onig = "6.3"
 uucore = { version = "0.0.12", features = ["entries", "fs", "fsext", "mode"] }
 
