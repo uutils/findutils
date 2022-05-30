@@ -13,15 +13,15 @@ cargo build --release
 FIND=$(readlink -f target/release/find)
 
 cd ..
-make -C bfs -j "$(nproc)" tests/mksock WITH_ONIGURUMA=
+make -C bfs -j "$(nproc)" bin/tests/mksock WITH_ONIGURUMA=
 
 # Run the GNU find compatibility tests by default
 if test "$#" -eq 0; then
-    set -- --verbose --gnu
+    set -- --verbose=tests --gnu --sudo
 fi
 
 LOG_FILE=bfs/tests.log
-./bfs/tests.sh --bfs="$FIND" "$@" | tee "$LOG_FILE" || :
+./bfs/tests/tests.sh --bfs="$FIND" "$@" | tee "$LOG_FILE" || :
 
 PASS=$(sed -n "s/^tests passed: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
 SKIP=$(sed -n "s/^tests skipped: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
