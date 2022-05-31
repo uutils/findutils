@@ -378,3 +378,26 @@ fn find_perm() {
         .assert()
         .success();
 }
+
+#[serial(working_dir)]
+#[test]
+fn find_mount_xdev() {
+    // Make sure that -mount/-xdev doesn't prune unexpectedly.
+    // TODO: Test with a mount point in the search.
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-mount"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-xdev"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+}
