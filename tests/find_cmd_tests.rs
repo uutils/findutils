@@ -190,6 +190,34 @@ fn regex_types() {
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("teeest"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &temp_dir_path,
+            "-regextype",
+            "ed",
+            "-regex",
+            &fix_up_regex_slashes(r".*/te\{1,3\}st"),
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("teeest"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &temp_dir_path,
+            "-regextype",
+            "sed",
+            "-regex",
+            &fix_up_regex_slashes(r".*/te\{1,3\}st"),
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("teeest"));
 }
 
 #[test]
