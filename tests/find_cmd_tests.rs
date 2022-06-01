@@ -190,6 +190,34 @@ fn regex_types() {
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("teeest"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &temp_dir_path,
+            "-regextype",
+            "ed",
+            "-regex",
+            &fix_up_regex_slashes(r".*/te\{1,3\}st"),
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("teeest"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&[
+            &temp_dir_path,
+            "-regextype",
+            "sed",
+            "-regex",
+            &fix_up_regex_slashes(r".*/te\{1,3\}st"),
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("teeest"));
 }
 
 #[test]
@@ -407,6 +435,29 @@ fn find_links() {
     Command::cargo_bin("find")
         .expect("found binary")
         .args(&["test_data", "-links", "1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+}
+
+#[serial(working_dir)]
+#[test]
+fn find_mount_xdev() {
+    // Make sure that -mount/-xdev doesn't prune unexpectedly.
+    // TODO: Test with a mount point in the search.
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-mount"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-xdev"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())

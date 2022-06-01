@@ -481,7 +481,7 @@ fn build_matcher_tree(
                 config.depth_first = true;
                 None
             }
-            "-xdev" => {
+            "-mount" | "-xdev" => {
                 // TODO add warning if it appears after actual testing criterion
                 config.same_file_system = true;
                 None
