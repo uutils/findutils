@@ -67,6 +67,8 @@ impl FromStr for RegexType {
             "grep" => Ok(Self::Grep),
             "posix-basic" => Ok(Self::PosixBasic),
             "posix-extended" => Ok(Self::PosixExtended),
+            // ed and sed are the same as posix-basic
+            "ed" | "sed" => Ok(Self::PosixBasic),
             _ => Err(ParseRegexTypeError(s.to_owned())),
         }
     }
