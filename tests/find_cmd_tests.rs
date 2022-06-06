@@ -429,3 +429,32 @@ fn find_mount_xdev() {
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc"));
 }
+
+#[serial(working_dir)]
+#[test]
+fn find_accessable() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-readable"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-writable"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+
+    #[cfg(unix)]
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-executable"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc").not());
+}

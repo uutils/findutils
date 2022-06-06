@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+mod access;
 mod delete;
 mod empty;
 pub mod exec;
@@ -28,6 +29,7 @@ use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
 use walkdir::DirEntry;
 
+use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
 use self::exec::SingleExecMatcher;
@@ -305,6 +307,7 @@ fn build_matcher_tree(
                 i += 1;
                 Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
+            "-readable" => Some(AccessMatcher::Readable.into_box()),
             "-regextype" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
@@ -398,6 +401,7 @@ fn build_matcher_tree(
                         .into_box(),
                 )
             }
+            "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
@@ -407,6 +411,7 @@ fn build_matcher_tree(
             }
             "-prune" => Some(PruneMatcher::new().into_box()),
             "-quit" => Some(QuitMatcher.into_box()),
+            "-writable" => Some(AccessMatcher::Writable.into_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
                     return Err(From::from(format!(
