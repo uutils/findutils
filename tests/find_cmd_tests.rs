@@ -407,6 +407,40 @@ fn find_perm() {
         .success();
 }
 
+#[cfg(unix)]
+#[serial(working_dir)]
+#[test]
+fn find_inum() {
+    use std::fs::metadata;
+    use std::os::unix::fs::MetadataExt;
+
+    let inum = metadata("test_data/simple/abbbc")
+        .expect("metadata for abbbc")
+        .ino()
+        .to_string();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-inum", &inum])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+}
+
+#[cfg(unix)]
+#[serial(working_dir)]
+#[test]
+fn find_links() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(&["test_data", "-links", "1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+}
+
 #[serial(working_dir)]
 #[test]
 fn find_mount_xdev() {

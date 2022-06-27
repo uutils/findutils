@@ -20,6 +20,7 @@ mod prune;
 mod quit;
 mod regex;
 mod size;
+mod stat;
 mod time;
 mod type_matcher;
 
@@ -46,6 +47,7 @@ use self::prune::PruneMatcher;
 use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
+use self::stat::{InodeMatcher, LinksMatcher};
 use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher};
 use self::type_matcher::TypeMatcher;
 
@@ -400,6 +402,22 @@ fn build_matcher_tree(
                     SingleExecMatcher::new(executable, exec_args, expression == "-execdir")?
                         .into_box(),
                 )
+            }
+            "-inum" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let inum = convert_arg_to_comparable_value(args[i], args[i + 1])?;
+                i += 1;
+                Some(InodeMatcher::new(inum)?.into_box())
+            }
+            "-links" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let inum = convert_arg_to_comparable_value(args[i], args[i + 1])?;
+                i += 1;
+                Some(LinksMatcher::new(inum)?.into_box())
             }
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
