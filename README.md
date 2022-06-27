@@ -19,3 +19,5 @@ bash util/build-gnu.sh tests/misc/help-version.sh
 
 ![Evolution over time - GNU testsuite](https://github.com/uutils/findutils-tracking/blob/main/gnu-results.png?raw=true)
 ![Evolution over time - BFS testsuite](https://github.com/uutils/findutils-tracking/blob/main/bfs-results.png?raw=true)
+
+For more details, see https://github.com/uutils/findutils-tracking/
