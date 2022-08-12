@@ -906,19 +906,16 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_printf_special_types() {
-        use std::os::unix::{net::UnixListener, prelude::OsStrExt};
+        use std::os::unix::net::UnixListener;
+
+        use nix::sys::stat::Mode;
 
         let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
         let temp_dir_path = temp_dir.path().to_string_lossy();
 
         let fifo_name = "fifo";
         let fifo_path = temp_dir.path().join(fifo_name);
-        unsafe {
-            uucore::libc::mkfifo(
-                fifo_path.as_os_str().as_bytes().as_ptr() as *const i8,
-                0o644,
-            );
-        };
+        nix::unistd::mkfifo(&fifo_path, Mode::from_bits(0o644).unwrap()).unwrap();
 
         let socket_name = "socket";
         let socket_path = temp_dir.path().join(socket_name);
