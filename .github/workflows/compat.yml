@@ -90,7 +90,7 @@ jobs:
       with:
         repository: tavianator/bfs
         path: bfs
-        ref: '2.6'
+        ref: '2.6.2'
     - uses: actions-rs/toolchain@v1
       with:
         profile: minimal
@@ -137,18 +137,7 @@ jobs:
     - name: Compare failing tests against main
       shell: bash
       run: |
-        OLD_FAILING=$(sed -n "s/^\([[:print:]]\+\) failed\!/\1/p" dl/tests.log | sort)
-        NEW_FAILING=$(sed -n "s/^\([[:print:]]\+\) failed\!/\1/p" bfs/tests.log | sort)
-        for LINE in $OLD_FAILING; do
-          if ! grep -Fxq $LINE<<<"$NEW_FAILING"; then
-            echo "::warning ::Congrats! The bfs test $LINE is now passing!"
-          fi
-        done
-        for LINE in $NEW_FAILING; do
-          if ! grep -Fxq $LINE<<<"$OLD_FAILING"; then
-            echo "::error ::bfs test failed: $LINE. $LINE is passing on 'main'. Maybe you have to rebase?"
-          fi
-        done
+        ./findutils/util/diff-bfs.sh dl/tests.log bfs/tests.log
     - name: Compare against main results
       shell: bash
       run: |
