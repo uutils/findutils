@@ -206,7 +206,7 @@ impl FormatStringParser<'_> {
         if digits > 0 {
             // safe to unwrap: we already know all the digits are valid due to
             // the above checks.
-            Some((&start[0..digits]).parse().unwrap())
+            Some((start[0..digits]).parse().unwrap())
         } else {
             None
         }
