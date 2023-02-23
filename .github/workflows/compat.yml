@@ -18,11 +18,11 @@ jobs:
         path: findutils.gnu
         ref: 5768a03ddfb5e18b1682e339d6cdd24ff721c510
         submodules: true
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+        rustup default stable
     - name: Install dependencies
       shell: bash
       run: |
@@ -91,11 +91,11 @@ jobs:
         repository: tavianator/bfs
         path: bfs
         ref: '2.6.2'
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+        rustup default stable
     - name: Install dependencies
       shell: bash
       run: |

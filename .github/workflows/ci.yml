@@ -11,11 +11,11 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - name: Install `rust` toolchain
+        run: |
+          ## Install `rust` toolchain
+          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+          rustup default stable
 
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v1
@@ -26,9 +26,9 @@ jobs:
       - run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
         if: matrix.os == 'windows-latest'
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
+      - name: Check
+        run: |
+          cargo check
 
   test:
     name: cargo test
@@ -38,11 +38,11 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - name: Install `rust` toolchain
+        run: |
+          ## Install `rust` toolchain
+          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+          rustup default stable
 
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v1
@@ -53,41 +53,40 @@ jobs:
       - run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
         if: matrix.os == 'windows-latest'
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Check
+        run: |
+          cargo check
 
   fmt:
     name: cargo fmt --all -- --check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - name: Install `rust` toolchain
+        run: |
+          ## Install `rust` toolchain
+          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+          rustup default stable
+
       - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - name: cargo fmt
+        run: |
+          cargo fmt --all -- --check
 
   clippy:
     name: cargo clippy -- -D warnings
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - name: Install `rust` toolchain
+        run: |
+          ## Install `rust` toolchain
+          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+          rustup default stable
       - run: rustup component add clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+      - name: cargo clippy
+        run: |
+          cargo clippy -- -D warnings
 
   grcov:
     name: Code coverage
@@ -104,25 +103,18 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.toolchain }}
-          override: true
+      - name: Install `rust` toolchain
+        run: |
+          ## Install `rust` toolchain
+          rustup toolchain install nightly --no-self-update -c rustfmt --profile minimal
+          rustup default nightly
 
-      - name: Install grcov
-        uses: actions-rs/install@v0.1
-        with:
-          crate: grcov
-          version: latest
-          use-tool-cache: true
+      - name: "`grcov` ~ install"
+        run: cargo install grcov
 
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all --no-fail-fast ${{ matrix.cargo_flags }}
+      - name: cargo test
+        run: |
+          cargo test --all --no-fail-fast ${{ matrix.cargo_flags }}
         env:
           CARGO_INCREMENTAL: "0"
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort -Cdebug-assertions=off'
@@ -130,7 +122,6 @@ jobs:
 
       - name: Generate coverage data
         id: grcov
-        # uses: actions-rs/grcov@v0.1
         run: |
           grcov target/debug/ \
               --branch \
