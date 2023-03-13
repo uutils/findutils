@@ -14,7 +14,7 @@ use walkdir::DirEntry;
 use super::{Matcher, MatcherIO};
 
 enum Arg {
-    Filename,
+    FileArg(Vec<OsString>),
     LiteralArg(OsString),
 }
 
@@ -32,9 +32,14 @@ impl SingleExecMatcher {
     ) -> Result<Self, Box<dyn Error>> {
         let transformed_args = args
             .iter()
-            .map(|&a| match a {
-                "{}" => Arg::Filename,
-                _ => Arg::LiteralArg(OsString::from(a)),
+            .map(|&a| {
+                let parts = a.split("{}").collect::<Vec<_>>();
+                if parts.len() == 1 {
+                    // No {} present
+                    Arg::LiteralArg(OsString::from(a))
+                } else {
+                    Arg::FileArg(parts.iter().map(OsString::from).collect())
+                }
             })
             .collect();
 
@@ -60,10 +65,10 @@ impl Matcher for SingleExecMatcher {
         };
 
         for arg in &self.args {
-            command.arg(match *arg {
-                Arg::LiteralArg(ref a) => a.as_os_str(),
-                Arg::Filename => path_to_file.as_os_str(),
-            });
+            match *arg {
+                Arg::LiteralArg(ref a) => command.arg(a.as_os_str()),
+                Arg::FileArg(ref parts) => command.arg(&parts.join(path_to_file.as_os_str())),
+            };
         }
         if self.exec_in_parent_dir {
             match file_info.path().parent() {

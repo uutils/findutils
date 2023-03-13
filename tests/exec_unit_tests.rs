@@ -86,6 +86,37 @@ fn matching_executes_code_in_files_directory() {
 }
 
 #[test]
+fn matching_embedded_filename() {
+    let temp_dir = Builder::new()
+        .prefix("matching_embedded_filename")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+    let matcher = SingleExecMatcher::new(
+        &path_to_testing_commandline(),
+        &[temp_dir_path.as_ref(), "abc{}x{}yz"],
+        false,
+    )
+    .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\nabctest_data/simple/abbbcxtest_data/simple/abbbcyz\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
 /// Running "find . -execdir whatever \;" failed with a No such file or directory error.
 /// It's now fixed, and this is a regression test to check that it stays fixed.
 fn execdir_in_current_directory() {
