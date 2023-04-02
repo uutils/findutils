@@ -22,7 +22,7 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 
-use common::test_helpers::*;
+use common::test_helpers::fix_up_slashes;
 
 mod common;
 
@@ -54,7 +54,7 @@ fn no_args() {
 fn two_matchers_both_match() {
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["-type", "d", "-name", "test_data"])
+        .args(["-type", "d", "-name", "test_data"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -66,7 +66,7 @@ fn two_matchers_both_match() {
 fn two_matchers_one_matches() {
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["-type", "f", "-name", "test_data"])
+        .args(["-type", "f", "-name", "test_data"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -83,7 +83,7 @@ fn matcher_with_side_effects_at_end() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-name", "test", "-delete"])
+        .args([&temp_dir_path, "-name", "test", "-delete"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -103,7 +103,7 @@ fn matcher_with_side_effects_in_front() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-delete", "-name", "test"])
+        .args([&temp_dir_path, "-delete", "-name", "test"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -123,12 +123,12 @@ fn matcher_with_side_effects_in_front() {
 fn delete_on_dot_dir() {
     let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
     let original_dir = env::current_dir().unwrap();
-    env::set_current_dir(&temp_dir.path()).expect("working dir changed");
+    env::set_current_dir(temp_dir.path()).expect("working dir changed");
 
     // "." should be matched (confirmed by the print), but not deleted.
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[".", "-delete", "-print"])
+        .args([".", "-delete", "-print"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -145,11 +145,11 @@ fn regex_types() {
 
     let temp_dir_path = temp_dir.path().to_string_lossy();
     let test_file = temp_dir.path().join("teeest");
-    File::create(&test_file).expect("created test file");
+    File::create(test_file).expect("created test file");
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-regex", &fix_up_regex_slashes(".*/tE+st")])
+        .args([&temp_dir_path, "-regex", &fix_up_regex_slashes(".*/tE+st")])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -157,7 +157,7 @@ fn regex_types() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-iregex", &fix_up_regex_slashes(".*/tE+st")])
+        .args([&temp_dir_path, "-iregex", &fix_up_regex_slashes(".*/tE+st")])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -165,7 +165,7 @@ fn regex_types() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[
+        .args([
             &temp_dir_path,
             "-regextype",
             "posix-basic",
@@ -179,7 +179,7 @@ fn regex_types() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[
+        .args([
             &temp_dir_path,
             "-regextype",
             "posix-extended",
@@ -193,7 +193,7 @@ fn regex_types() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[
+        .args([
             &temp_dir_path,
             "-regextype",
             "ed",
@@ -207,7 +207,7 @@ fn regex_types() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[
+        .args([
             &temp_dir_path,
             "-regextype",
             "sed",
@@ -227,18 +227,18 @@ fn empty_files() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-empty"])
+        .args([&temp_dir_path, "-empty"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(fix_up_slashes(&format!("{}\n", temp_dir_path)));
+        .stdout(fix_up_slashes(&format!("{temp_dir_path}\n")));
 
     let test_file_path = temp_dir.path().join("test");
     let mut test_file = File::create(&test_file_path).unwrap();
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-empty"])
+        .args([&temp_dir_path, "-empty"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -252,7 +252,7 @@ fn empty_files() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-empty", "-sorted"])
+        .args([&temp_dir_path, "-empty", "-sorted"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -267,7 +267,7 @@ fn empty_files() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[&temp_dir_path, "-empty", "-sorted"])
+        .args([&temp_dir_path, "-empty", "-sorted"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -283,29 +283,39 @@ fn find_printf() {
     #[cfg(unix)]
     {
         if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                e.kind() == ErrorKind::AlreadyExists,
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("subdir", "test_data/links/link-d") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                e.kind() == ErrorKind::AlreadyExists,
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("missing", "test_data/links/link-missing") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                e.kind() == ErrorKind::AlreadyExists,
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("abbbc/x", "test_data/links/link-notdir") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                e.kind() == ErrorKind::AlreadyExists,
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("link-loop", "test_data/links/link-loop") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                e.kind() == ErrorKind::AlreadyExists,
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
     }
     #[cfg(windows)]
@@ -334,7 +344,7 @@ fn find_printf() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[
+        .args([
             &fix_up_slashes("./test_data/simple"),
             "-sorted",
             "-printf",
@@ -356,7 +366,7 @@ fn find_printf() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&[
+        .args([
             &fix_up_slashes("./test_data/links"),
             "-sorted",
             "-type",
@@ -390,19 +400,19 @@ fn find_printf() {
 fn find_perm() {
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["-perm", "+rwx"])
+        .args(["-perm", "+rwx"])
         .assert()
         .success();
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["-perm", "u+rwX"])
+        .args(["-perm", "u+rwX"])
         .assert()
         .success();
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["-perm", "u=g"])
+        .args(["-perm", "u=g"])
         .assert()
         .success();
 }
@@ -421,7 +431,7 @@ fn find_inum() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["test_data", "-inum", &inum])
+        .args(["test_data", "-inum", &inum])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -434,7 +444,7 @@ fn find_inum() {
 fn find_links() {
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["test_data", "-links", "1"])
+        .args(["test_data", "-links", "1"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -449,7 +459,7 @@ fn find_mount_xdev() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["test_data", "-mount"])
+        .args(["test_data", "-mount"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -457,7 +467,7 @@ fn find_mount_xdev() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["test_data", "-xdev"])
+        .args(["test_data", "-xdev"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -469,7 +479,7 @@ fn find_mount_xdev() {
 fn find_accessable() {
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["test_data", "-readable"])
+        .args(["test_data", "-readable"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -477,7 +487,7 @@ fn find_accessable() {
 
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["test_data", "-writable"])
+        .args(["test_data", "-writable"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -486,7 +496,7 @@ fn find_accessable() {
     #[cfg(unix)]
     Command::cargo_bin("find")
         .expect("found binary")
-        .args(&["test_data", "-executable"])
+        .args(["test_data", "-executable"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())

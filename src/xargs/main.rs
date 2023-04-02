@@ -7,6 +7,9 @@
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
     std::process::exit(findutils::xargs::xargs_main(
-        &args.iter().map(|s| s.as_ref()).collect::<Vec<&str>>(),
+        &args
+            .iter()
+            .map(std::convert::AsRef::as_ref)
+            .collect::<Vec<&str>>(),
     ))
 }

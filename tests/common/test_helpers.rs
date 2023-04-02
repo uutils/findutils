@@ -14,7 +14,7 @@ use walkdir::{DirEntry, WalkDir};
 use findutils::find::matchers::MatcherIO;
 use findutils::find::Dependencies;
 
-/// A copy of find::tests::FakeDependencies.
+/// A copy of `find::tests::FakeDependencies`.
 /// TODO: find out how to share #[cfg(test)] functions/structs between unit
 /// and integration tests.
 pub struct FakeDependencies {
@@ -81,7 +81,7 @@ pub fn fix_up_slashes(path: &str) -> String {
     path.to_string()
 }
 
-/// A copy of find::tests::FakeDependencies.
+/// A copy of `find::tests::FakeDependencies`.
 /// TODO: find out how to share #[cfg(test)] functions/structs between unit
 /// and integration tests.
 pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {

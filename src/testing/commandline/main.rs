@@ -37,7 +37,7 @@ fn open_file(destination_dir: &str) -> File {
     loop {
         file_number += 1;
         let mut file_path: PathBuf = PathBuf::from(destination_dir);
-        file_path.push(format!("{}.txt", file_number));
+        file_path.push(format!("{file_number}.txt"));
         if let Ok(f) = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -68,7 +68,7 @@ fn write_content(mut f: impl Write, config: &Config, args: &[String]) {
     // the destination_dir we want to write to. Don't write either of those
     // as they'll be non-deterministic.
     for arg in &args[2..] {
-        writeln!(f, "{}", arg).expect("failed to write to file");
+        writeln!(f, "{arg}").expect("failed to write to file");
     }
 }
 
