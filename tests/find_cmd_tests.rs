@@ -22,7 +22,7 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 
-use common::test_helpers::*;
+use common::test_helpers::fix_up_slashes;
 
 mod common;
 
@@ -231,7 +231,7 @@ fn empty_files() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(fix_up_slashes(&format!("{}\n", temp_dir_path)));
+        .stdout(fix_up_slashes(&format!("{temp_dir_path}\n")));
 
     let test_file_path = temp_dir.path().join("test");
     let mut test_file = File::create(&test_file_path).unwrap();
@@ -283,29 +283,39 @@ fn find_printf() {
     #[cfg(unix)]
     {
         if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                !(e.kind() != ErrorKind::AlreadyExists),
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("subdir", "test_data/links/link-d") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                !(e.kind() != ErrorKind::AlreadyExists),
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("missing", "test_data/links/link-missing") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                !(e.kind() != ErrorKind::AlreadyExists),
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("abbbc/x", "test_data/links/link-notdir") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                !(e.kind() != ErrorKind::AlreadyExists),
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
         if let Err(e) = symlink("link-loop", "test_data/links/link-loop") {
-            if e.kind() != ErrorKind::AlreadyExists {
-                panic!("Failed to create sym link: {:?}", e);
-            }
+            assert!(
+                !(e.kind() != ErrorKind::AlreadyExists),
+                "Failed to create sym link: {:?}",
+                e
+            );
         }
     }
     #[cfg(windows)]

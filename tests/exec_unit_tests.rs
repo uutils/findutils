@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-/// ! This file contains what would be normally be unit tests for find::matchers::exec.
+/// ! This file contains what would be normally be unit tests for `find::matchers::exec`.
 /// ! But as the tests require running an external executable, they need to be run
 /// ! as integration tests so we can ensure that our testing-commandline binary
 /// ! has been built.
@@ -17,8 +17,10 @@ use std::io::Read;
 use tempfile::Builder;
 use walkdir::WalkDir;
 
-use common::test_helpers::*;
-use findutils::find::matchers::exec::*;
+use common::test_helpers::{
+    fix_up_slashes, get_dir_entry_for, path_to_testing_commandline, FakeDependencies,
+};
+use findutils::find::matchers::exec::SingleExecMatcher;
 use findutils::find::matchers::Matcher;
 
 mod common;

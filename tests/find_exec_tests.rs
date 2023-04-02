@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-/// ! This file contains what would be normally be unit tests for find::find_main
+/// ! This file contains what would be normally be unit tests for `find::find_main`
 /// ! related to -exec[dir] and ok[dir] clauses.
 /// ! But as the tests require running an external executable, they need to be run
 /// ! as integration tests so we can ensure that our testing-commandline binary
@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::Read;
 use tempfile::Builder;
 
-use common::test_helpers::*;
+use common::test_helpers::{fix_up_slashes, path_to_testing_commandline, FakeDependencies};
 use findutils::find::find_main;
 
 mod common;

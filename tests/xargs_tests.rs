@@ -14,7 +14,7 @@ use std::io::{Seek, SeekFrom, Write};
 use assert_cmd::Command;
 use predicates::prelude::*;
 
-use common::test_helpers::*;
+use common::test_helpers::path_to_testing_commandline;
 
 mod common;
 
