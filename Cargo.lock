@@ -37,13 +37,14 @@ checksum = "23ea9e81bd02e310c216d080f6223c179012256e5151c41db88d12c88a1684d2"
 
 [[package]]
 name = "assert_cmd"
-version = "2.0.8"
+version = "2.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9834fcc22e0874394a010230586367d4a3e9f11b560f469262678547e1d2575e"
+checksum = "ec0b2340f55d9661d76793b2bfc2eb0e62689bd79d067a95707ea762afd5e9dd"
 dependencies = [
+ "anstyle",
  "bstr",
  "doc-comment",
- "predicates 2.1.5",
+ "predicates",
  "predicates-core",
  "predicates-tree",
  "wait-timeout",
@@ -280,7 +281,7 @@ dependencies = [
  "nix 0.26.2",
  "once_cell",
  "onig",
- "predicates 3.0.2",
+ "predicates",
  "regex",
  "serial_test",
  "tempfile",
@@ -674,17 +675,6 @@ checksum = "58893f751c9b0412871a09abd62ecd2a00298c6c83befa223ef98c52aef40cbe"
 
 [[package]]
 name = "predicates"
-version = "2.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59230a63c37f3e18569bdb90e4a89cbf5bf8b06fea0b84e65ea10cc4df47addd"
-dependencies = [
- "difflib",
- "itertools",
- "predicates-core",
-]
-
-[[package]]
-name = "predicates"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c575290b64d24745b6c57a12a31465f0a66f3a4799686a6921526a33b0797965"
@@ -700,9 +690,9 @@ dependencies = [
 
 [[package]]
 name = "predicates-core"
-version = "1.0.1"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb3dbeaaf793584e29c58c7e3a82bbb3c7c06b63cea68d13b0e3cddc124104dc"
+checksum = "b794032607612e7abeb4db69adb4e33590fa6cf1149e95fd7cb00e634b92f174"
 
 [[package]]
 name = "predicates-tree"
