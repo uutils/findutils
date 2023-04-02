@@ -638,7 +638,7 @@ mod tests {
         assert_eq!(rc, 0);
         assert_eq!(
             deps.get_output_as_string(),
-            (&new_dir).path().to_string_lossy().to_string() + "\n"
+            new_dir.path().to_string_lossy().to_string() + "\n"
         );
 
         // now do it the other way around, and nothing should be output

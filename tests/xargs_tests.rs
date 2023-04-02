@@ -33,7 +33,7 @@ fn xargs_basics() {
 fn xargs_null() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&["-0n1"])
+        .args(["-0n1"])
         .write_stdin("ab c\0d\tef\0")
         .assert()
         .success()
@@ -45,7 +45,7 @@ fn xargs_null() {
 fn xargs_delim() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&["-d1"])
+        .args(["-d1"])
         .write_stdin("ab1cd1ef")
         .assert()
         .success()
@@ -54,7 +54,7 @@ fn xargs_delim() {
 
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&["-d\\t", "-n1"])
+        .args(["-d\\t", "-n1"])
         .write_stdin("a\nb\td e\tfg")
         .assert()
         .success()
@@ -63,7 +63,7 @@ fn xargs_delim() {
 
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&["-dabc"])
+        .args(["-dabc"])
         .assert()
         .failure()
         .code(1)
@@ -75,7 +75,7 @@ fn xargs_delim() {
 fn xargs_null_conflict() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&["-d\t", "-0n1"])
+        .args(["-d\t", "-0n1"])
         .write_stdin("ab c\0d\tef\0")
         .assert()
         .success()
@@ -95,7 +95,7 @@ fn xargs_if_empty() {
 
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&["--no-run-if-empty"])
+        .args(["--no-run-if-empty"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -256,7 +256,7 @@ fn xargs_exec_stdin_open() {
 fn xargs_exec_failure() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&[
+        .args([
             "-n1",
             &path_to_testing_commandline(),
             "-",
@@ -278,7 +278,7 @@ fn xargs_exec_failure() {
 fn xargs_exec_urgent_failure() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&[
+        .args([
             "-n1",
             &path_to_testing_commandline(),
             "-",
@@ -298,7 +298,7 @@ fn xargs_exec_urgent_failure() {
 fn xargs_exec_with_signal() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&[
+        .args([
             "-n1",
             &path_to_testing_commandline(),
             "-",
@@ -317,7 +317,7 @@ fn xargs_exec_with_signal() {
 fn xargs_exec_not_found() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(&["this-file-does-not-exist"])
+        .args(["this-file-does-not-exist"])
         .assert()
         .failure()
         .code(127)

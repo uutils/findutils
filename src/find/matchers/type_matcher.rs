@@ -87,7 +87,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
         let deps = FakeDependencies::new();
 
-        let matcher = TypeMatcher::new(&"f".to_string()).unwrap();
+        let matcher = TypeMatcher::new("f").unwrap();
         assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&file, &mut deps.new_matcher_io()));
     }
@@ -98,7 +98,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
         let deps = FakeDependencies::new();
 
-        let matcher = TypeMatcher::new(&"d".to_string()).unwrap();
+        let matcher = TypeMatcher::new("d").unwrap();
         assert!(matcher.matches(&dir, &mut deps.new_matcher_io()));
         assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
     }
@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn link_type_matcher() {
         #[cfg(unix)]
-        let _ = {
+        {
             if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
                 if e.kind() != ErrorKind::AlreadyExists {
                     panic!("Failed to create sym link: {:?}", e);
@@ -140,7 +140,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "links");
         let deps = FakeDependencies::new();
 
-        let matcher = TypeMatcher::new(&"l".to_string()).unwrap();
+        let matcher = TypeMatcher::new("l").unwrap();
         assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
         assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
@@ -155,7 +155,7 @@ mod tests {
         let deps = FakeDependencies::new();
 
         for typ in &["b", "c", "p", "s"] {
-            let matcher = TypeMatcher::new(&typ.to_string()).unwrap();
+            let matcher = TypeMatcher::new(typ.as_ref()).unwrap();
             assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
             assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
         }
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn cant_create_with_invalid_pattern() {
-        let result = TypeMatcher::new(&"xxx".to_string());
+        let result = TypeMatcher::new("xxx");
         assert!(result.is_err());
     }
 }
