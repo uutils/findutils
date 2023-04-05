@@ -947,35 +947,35 @@ mod tests {
         {
             if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
             }
             if let Err(e) = symlink("subdir", "test_data/links/link-d") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
             }
             if let Err(e) = symlink("missing", "test_data/links/link-missing") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
             }
             if let Err(e) = symlink("abbbc/x", "test_data/links/link-notdir") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
             }
             if let Err(e) = symlink("link-loop", "test_data/links/link-loop") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
@@ -985,28 +985,28 @@ mod tests {
         {
             if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
             }
             if let Err(e) = symlink_dir("subdir", "test_data/links/link-d") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
             }
             if let Err(e) = symlink_file("missing", "test_data/links/link-missing") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
             }
             if let Err(e) = symlink_file("abbbc/x", "test_data/links/link-notdir") {
                 assert!(
-                    !(e.kind() != ErrorKind::AlreadyExists),
+                    e.kind() == ErrorKind::AlreadyExists,
                     "Failed to create sym link: {:?}",
                     e
                 );
