@@ -396,7 +396,7 @@ fn format_directive<'entry>(
     // NOTE ON QUOTING:
     // GNU find's man page claims that several directives that print names (like
     // %f) are quoted like ls; however, I could not reproduce this at all in
-    // pratice, thus the set of rules is undoubtedly very different (if this is
+    // practice, thus the set of rules is undoubtedly very different (if this is
     // still done at all).
 
     let res: Cow<'entry, str> = match directive {

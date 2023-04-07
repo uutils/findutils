@@ -1,6 +1,6 @@
 // Copyright 2021 Chad Williamson <chad@dahc.us>
 //
-// Use of this source code is governed by an MIT-syle license that can be
+// Use of this source code is governed by an MIT-style license that can be
 // found in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 // This file contains integration tests for the find command.
@@ -476,7 +476,7 @@ fn find_mount_xdev() {
 
 #[serial(working_dir)]
 #[test]
-fn find_accessable() {
+fn find_accessible() {
     Command::cargo_bin("find")
         .expect("found binary")
         .args(["test_data", "-readable"])

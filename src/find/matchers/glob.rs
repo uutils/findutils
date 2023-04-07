@@ -169,7 +169,7 @@ impl Pattern {
         Self { regex }
     }
 
-    /// Test if this patern matches a string.
+    /// Test if this pattern matches a string.
     pub fn matches(&self, string: &str) -> bool {
         self.regex.is_match(string)
     }

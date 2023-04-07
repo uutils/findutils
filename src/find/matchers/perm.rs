@@ -223,7 +223,7 @@ mod tests {
         PermMatcher::new("d=rwx,g=rx,o+r").expect_err("invalid category should fail");
         PermMatcher::new("u=dwx,g=rx,o+r").expect_err("invalid permission bit should fail");
         PermMatcher::new("u_rwx,g=rx,o+r")
-            .expect_err("invalid category/permissoin separator should fail");
+            .expect_err("invalid category/permission separator should fail");
         PermMatcher::new("77777777777777").expect_err("overflowing octal value should fail");
 
         // FIXME: uucore::mode shouldn't accept this

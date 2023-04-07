@@ -611,7 +611,7 @@ mod tests {
             let deps = FakeDependencies::new();
 
             let matcher =
-                build_top_level_matcher(&[arg, "-name", "doesntexist"], &mut config).unwrap();
+                build_top_level_matcher(&[arg, "-name", "does_not_exist"], &mut config).unwrap();
 
             assert!(matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
             assert_eq!(
@@ -652,7 +652,8 @@ mod tests {
 
             config = Config::default();
             let matcher =
-                build_top_level_matcher(&[arg, arg, "-name", "doesntexist"], &mut config).unwrap();
+                build_top_level_matcher(&[arg, arg, "-name", "does_not_exist"], &mut config)
+                    .unwrap();
 
             assert!(!matcher.matches(&abbbc_lower, &mut deps.new_matcher_io()));
         }

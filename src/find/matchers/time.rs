@@ -261,7 +261,7 @@ mod tests {
         deps.set_time(files_mtime - Duration::new(1_u64, 0));
         assert!(
             !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-            "future-modified file shouldn'1 match exactly 1 day old"
+            "future-modified file shouldn't match exactly 1 day old"
         );
         assert!(
             !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
@@ -311,14 +311,14 @@ mod tests {
         }
 
         thread::sleep(Duration::from_secs(2));
-        // read the file agaion - potentially changing accessed time
+        // read the file again - potentially changing accessed time
         {
             let mut f = File::open(&foo_path).expect("open temp file");
             let _ = f.read(&mut buffer);
         }
 
         // OK our modification time and creation time should definitely be different
-        // and depending on our platform and file system, our accessed time migh be
+        // and depending on our platform and file system, our accessed time might be
         // different too.
 
         let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");

@@ -530,9 +530,9 @@ mod tests {
     #[test]
     fn not_has_side_effects_works() {
         let has_fx = NotMatcher::new(HasSideEffects);
-        let hasnt_fx = NotMatcher::new(FalseMatcher);
+        let has_no_fx = NotMatcher::new(FalseMatcher);
         assert!(has_fx.has_side_effects());
-        assert!(!hasnt_fx.has_side_effects());
+        assert!(!has_no_fx.has_side_effects());
     }
 
     #[test]
