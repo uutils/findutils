@@ -79,12 +79,13 @@ fn main() {
     }
     let mut config = Config {
         destination_dir: if args[1] == "-" {
-            Some(args[1].clone())
-        } else {
             None
+        } else {
+            Some(args[1].clone())
         },
         ..Default::default()
     };
+
     for arg in &args[2..] {
         if arg.starts_with("--") {
             match arg.as_ref() {
