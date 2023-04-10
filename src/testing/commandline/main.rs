@@ -78,7 +78,7 @@ fn main() {
         usage();
     }
     let mut config = Config {
-        destination_dir: if args[1] != "-" {
+        destination_dir: if args[1] == "-" {
             Some(args[1].clone())
         } else {
             None
