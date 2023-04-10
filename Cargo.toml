@@ -11,7 +11,7 @@ authors = ["uutils developers"]
 
 [dependencies]
 chrono = "0.4"
-clap = "2.34"
+clap = "4.2"
 faccess = "0.2.4"
 walkdir = "2.3"
 regex = "1.7"
