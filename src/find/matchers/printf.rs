@@ -467,7 +467,7 @@ fn format_directive<'entry>(
                 .into_iter()
                 .find(|fs| fs.dev_id == dev_id)
                 .map(|fs| fs.fs_type)
-                .unwrap_or_else(|| "".to_owned())
+                .unwrap_or_else(String::new)
                 .into()
         }
 
