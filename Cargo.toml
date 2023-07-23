@@ -15,7 +15,7 @@ clap = "2.34"
 faccess = "0.2.4"
 walkdir = "2.3"
 regex = "1.7"
-once_cell = "1.17"
+once_cell = "1.18"
 onig = "6.4"
 uucore = { version = "0.0.12", features = ["entries", "fs", "fsext", "mode"] }
 
