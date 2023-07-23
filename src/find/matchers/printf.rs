@@ -463,7 +463,9 @@ fn format_directive<'entry>(
         #[cfg(unix)]
         FormatDirective::Filesystem => {
             let dev_id = meta()?.dev().to_string();
-            uucore::fsext::read_fs_list()
+            let fs_list =
+                uucore::fsext::read_fs_list().expect("Could not find the filesystem info");
+            fs_list
                 .into_iter()
                 .find(|fs| fs.dev_id == dev_id)
                 .map(|fs| fs.fs_type)
