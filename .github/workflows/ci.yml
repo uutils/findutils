@@ -28,7 +28,7 @@ jobs:
 
       - name: Check
         run: |
-          cargo check
+          cargo check --all --all-features
 
   test:
     name: cargo test
