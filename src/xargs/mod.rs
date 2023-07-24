@@ -825,7 +825,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         exit_if_pass_char_limit: matches.contains_id(options::EXIT),
         delimiter: matches
             .get_one::<String>(options::DELIMITER)
-            .map(|s| parse_delimiter(s).unwrap_or_default()),
+            .and_then(|s| s.bytes().next()),
 
         max_args: matches.get_one::<usize>(options::MAX_ARGS).copied(),
 
