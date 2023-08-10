@@ -33,9 +33,8 @@ impl FromStr for Unit {
             "G" => Self::GibiByte,
             _ => {
                 return Err(From::from(format!(
-                    "Invalid suffix {} for -size. Only allowed \
-                     values are <nothing>, b, c, w, k, M or G",
-                    s
+                    "Invalid suffix {s} for -size. Only allowed \
+                     values are <nothing>, b, c, w, k, M or G"
                 )));
             }
         })

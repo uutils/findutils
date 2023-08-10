@@ -46,7 +46,7 @@ impl Matcher for DeleteMatcher {
         match self.delete(path, file_info.file_type()) {
             Ok(_) => true,
             Err(e) => {
-                writeln!(&mut stderr(), "Failed to delete {}: {}", path_str, e).unwrap();
+                writeln!(&mut stderr(), "Failed to delete {path_str}: {e}").unwrap();
                 false
             }
         }

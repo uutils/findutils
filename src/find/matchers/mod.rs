@@ -203,9 +203,8 @@ fn convert_arg_to_number(
     match value_as_string.parse::<usize>() {
         Ok(val) => Ok(val),
         _ => Err(From::from(format!(
-            "Expected a positive decimal integer argument to {}, but got \
-             `{}'",
-            option_name, value_as_string
+            "Expected a positive decimal integer argument to {option_name}, but got \
+             `{value_as_string}'"
         ))),
     }
 }
@@ -226,8 +225,7 @@ fn convert_arg_to_comparable_value(
     }
     Err(From::from(format!(
         "Expected a decimal integer (with optional + or - prefix) argument \
-         to {}, but got `{}'",
-        option_name, value_as_string
+         to {option_name}, but got `{value_as_string}'"
     )))
 }
 
@@ -250,8 +248,7 @@ fn convert_arg_to_comparable_value_and_suffix(
     }
     Err(From::from(format!(
         "Expected a decimal integer (with optional + or - prefix) and \
-         (optional suffix) argument to {}, but got `{}'",
-        option_name, value_as_string
+         (optional suffix) argument to {option_name}, but got `{value_as_string}'"
     )))
 }
 
