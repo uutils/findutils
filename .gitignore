@@ -4,3 +4,4 @@ target
 .cargo
 .settings
 test_data/links/link-*
+/public/
