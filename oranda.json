@@ -2,6 +2,9 @@
   "project": {
     "name": "uutils findutils"
   },
+  "build": {
+    "path_prefix": "findutils"
+  },
   "components": {
     "changelog": true
   },
