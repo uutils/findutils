@@ -10,7 +10,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install `rust` toolchain
         run: |
           ## Install `rust` toolchain
@@ -37,7 +37,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install `rust` toolchain
         run: |
           ## Install `rust` toolchain
@@ -61,7 +61,7 @@ jobs:
     name: cargo fmt --all -- --check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install `rust` toolchain
         run: |
           ## Install `rust` toolchain
@@ -77,7 +77,7 @@ jobs:
     name: cargo clippy -- -D warnings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install `rust` toolchain
         run: |
           ## Install `rust` toolchain
@@ -101,7 +101,7 @@ jobs:
           - "--all-features"
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install `rust` toolchain
         run: |
