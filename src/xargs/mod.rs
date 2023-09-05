@@ -318,9 +318,9 @@ impl Display for CommandExecutionError {
         match self {
             CommandExecutionError::UrgentlyFailed => write!(f, "Command exited with code 255"),
             CommandExecutionError::Killed { signal } => {
-                write!(f, "Command was killed with signal {}", signal)
+                write!(f, "Command was killed with signal {signal}")
             }
-            CommandExecutionError::CannotRun(err) => write!(f, "Command could not be run: {}", err),
+            CommandExecutionError::CannotRun(err) => write!(f, "Command could not be run: {err}"),
             CommandExecutionError::NotFound => write!(f, "Command not found"),
             CommandExecutionError::Unknown => write!(f, "Unknown error running command"),
         }
@@ -407,7 +407,7 @@ impl CommandBuilder<'_> {
             command.stdin(Stdio::null());
         }
         if self.options.verbose {
-            eprintln!("{:?}", command);
+            eprintln!("{command:?}");
         }
 
         match &self.options.action {
@@ -511,7 +511,7 @@ where
                     if let Some(Escape::Quote(q)) = &escape {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            format!("Unterminated quote: {}", q),
+                            format!("Unterminated quote: {q}"),
                         ));
                     } else if i == 0 {
                         return Ok(None);
@@ -622,9 +622,9 @@ impl Display for XargsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             XargsError::ArgumentTooLarge => write!(f, "Argument too large"),
-            XargsError::CommandExecution(e) => write!(f, "{}", e),
-            XargsError::Io(e) => write!(f, "{}", e),
-            XargsError::Untyped(s) => write!(f, "{}", s),
+            XargsError::CommandExecution(e) => write!(f, "{e}"),
+            XargsError::Io(e) => write!(f, "{e}"),
+            XargsError::Untyped(s) => write!(f, "{s}"),
         }
     }
 }
@@ -707,7 +707,7 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
             "v" => Ok(b'\x0B'),
             "0" => Ok(b'\0'),
             "\\" => Ok(b'\\'),
-            _ => Err(format!("Invalid escape sequence: {}", s)),
+            _ => Err(format!("Invalid escape sequence: {s}")),
         }
     } else {
         let bytes = s.as_bytes();
@@ -722,7 +722,7 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
 fn validate_positive_usize(s: String) -> Result<(), String> {
     match s.parse::<usize>() {
         Ok(v) if v > 0 => Ok(()),
-        Ok(v) => Err(format!("Value must be > 0, not: {}", v)),
+        Ok(v) => Err(format!("Value must be > 0, not: {v}")),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -922,7 +922,7 @@ pub fn xargs_main(args: &[&str]) -> i32 {
         Ok(CommandResult::Success) => 0,
         Ok(CommandResult::Failure) => 123,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            eprintln!("Error: {e}");
             if let XargsError::CommandExecution(cx) = e {
                 match cx {
                     CommandExecutionError::UrgentlyFailed => 124,

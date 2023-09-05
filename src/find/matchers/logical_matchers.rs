@@ -155,8 +155,7 @@ impl OrMatcherBuilder {
         if self.submatchers.last().unwrap().submatchers.is_empty() {
             return Err(From::from(format!(
                 "invalid expression; you have used a binary operator \
-                 '{}' with nothing before it.",
-                arg
+                 '{arg}' with nothing before it."
             )));
         }
         self.submatchers.push(AndMatcherBuilder::new());

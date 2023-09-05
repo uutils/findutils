@@ -166,7 +166,7 @@ impl FormatStringParser<'_> {
                 let octal = self.advance_by(OCTAL_LEN).unwrap();
                 return match char::from_u32(code) {
                     Some(c) => Ok(FormatComponent::Literal(c.to_string())),
-                    None => Err(format!("Invalid character value: \\{}", octal).into()),
+                    None => Err(format!("Invalid character value: \\{octal}").into()),
                 };
             }
         }
@@ -186,7 +186,7 @@ impl FormatStringParser<'_> {
                 'v' => "\x0B",
                 '0' => "\0",
                 '\\' => "\\",
-                c => return Err(format!("Invalid escape sequence: \\{}", c).into()),
+                c => return Err(format!("Invalid escape sequence: \\{c}").into()),
             };
 
             Ok(FormatComponent::Literal(c.to_string()))
@@ -220,10 +220,10 @@ impl FormatStringParser<'_> {
                 // We can't store the parsed items inside TimeFormat, because the items
                 // take a reference to the full format string, but we still try to parse
                 // it here so that errors get caught early.
-                let format = format!("%{}", c);
+                let format = format!("%{c}");
                 match StrftimeItems::new(&format).next() {
                     None | Some(chrono::format::Item::Error) => {
-                        Err(format!("Invalid time specifier: %{}{}", first, c).into())
+                        Err(format!("Invalid time specifier: %{first}{c}").into())
                     }
                     Some(_item) => Ok(TimeFormat::Strftime(format)),
                 }
@@ -318,7 +318,7 @@ impl FormatStringParser<'_> {
             let component = match self.advance_one().unwrap() {
                 '\\' => self.parse_escape_sequence()?,
                 '%' => self.parse_format_specifier()?,
-                _ => panic!("Stopped at unexpected character: {}", self.string),
+                _ => panic!("{}", "Stopped at unexpected character: {self.string}"),
             };
             components.push(component);
         }
@@ -620,7 +620,7 @@ impl Matcher for Printf {
 
         for component in &self.format.components {
             match component {
-                FormatComponent::Literal(literal) => write!(out, "{}", literal).unwrap(),
+                FormatComponent::Literal(literal) => write!(out, "{literal}").unwrap(),
                 FormatComponent::Flush => out.flush().unwrap(),
                 FormatComponent::Directive {
                     directive,
@@ -631,14 +631,14 @@ impl Matcher for Printf {
                         if let Some(width) = width {
                             match justify {
                                 Justify::Left => {
-                                    write!(out, "{:<width$}", content, width = width).unwrap();
+                                    write!(out, "{content:<width$}").unwrap();
                                 }
                                 Justify::Right => {
-                                    write!(out, "{:>width$}", content, width = width).unwrap();
+                                    write!(out, "{content:>width$}").unwrap();
                                 }
                             }
                         } else {
-                            write!(out, "{}", content).unwrap();
+                            write!(out, "{content}").unwrap();
                         }
                     }
                     Err(e) => {
@@ -1102,7 +1102,7 @@ mod tests {
         let matcher = Printf::new("%u %U %g %G").unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!(
-            format!("{} {} {} {}", user, uid, group, gid),
+            format!("{user} {uid} {group} {gid}"),
             deps.get_output_as_string()
         );
     }

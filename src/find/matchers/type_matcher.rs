@@ -32,14 +32,12 @@ impl TypeMatcher {
             // D: door (Solaris)
             "D" => {
                 return Err(From::from(format!(
-                    "Type argument {} not supported yet",
-                    type_string
+                    "Type argument {type_string} not supported yet"
                 )))
             }
             _ => {
                 return Err(From::from(format!(
-                    "Unrecognised type argument {}",
-                    type_string
+                    "Unrecognised type argument {type_string}"
                 )))
             }
         };

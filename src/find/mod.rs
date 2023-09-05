@@ -149,7 +149,7 @@ fn process_dir<'a>(
     let mut it = walkdir.into_iter();
     while let Some(result) = it.next() {
         match result {
-            Err(err) => writeln!(&mut stderr(), "Error: {}: {}", dir, err).unwrap(),
+            Err(err) => writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap(),
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
                 if matcher.matches(&entry, &mut matcher_io) {
@@ -255,7 +255,7 @@ pub fn find_main<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> i32 {
     match do_find(&args[1..], deps) {
         Ok(_) => 0,
         Err(e) => {
-            writeln!(&mut stderr(), "Error: {}", e).unwrap();
+            writeln!(&mut stderr(), "Error: {e}").unwrap();
             1
         }
     }

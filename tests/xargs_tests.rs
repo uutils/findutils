@@ -324,3 +324,63 @@ fn xargs_exec_not_found() {
         .stderr(predicate::str::contains("Error:"))
         .stdout(predicate::str::is_empty());
 }
+
+#[test]
+fn xargs_exec_verbose() {
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args([
+            "-n2",
+            "--verbose",
+            &path_to_testing_commandline(),
+            "-",
+            "--print_stdin",
+            "--no_print_cwd",
+        ])
+        .write_stdin("a b c\nd")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("testing-commandline"))
+        .stdout(predicate::str::diff(
+            "stdin=\nargs=\n--print_stdin\n--no_print_cwd\na\nb\n\
+            stdin=\nargs=\n--print_stdin\n--no_print_cwd\nc\nd\n",
+        ));
+}
+
+#[test]
+fn xargs_unterminated_quote() {
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args([
+            "-n2",
+            &path_to_testing_commandline(),
+            "-",
+            "--print_stdin",
+            "--no_print_cwd",
+        ])
+        .write_stdin("a \"b c\nd")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("Error: Unterminated quote:"))
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn xargs_zero_lines() {
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args([
+            "-L0",
+            &path_to_testing_commandline(),
+            "-",
+            "--print_stdin",
+            "--no_print_cwd",
+        ])
+        .write_stdin("a \"b c\nd")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("Value must be > 0, not: 0"))
+        .stdout(predicate::str::is_empty());
+}
