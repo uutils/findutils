@@ -17,7 +17,7 @@ walkdir = "2.3"
 regex = "1.7"
 once_cell = "1.18"
 onig = "6.4"
-uucore = { version = "0.0.20", features = ["entries", "fs", "fsext", "mode"] }
+uucore = { version = "0.0.21", features = ["entries", "fs", "fsext", "mode"] }
 
 [dev-dependencies]
 assert_cmd = "2"
