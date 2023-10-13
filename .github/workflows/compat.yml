@@ -90,7 +90,7 @@ jobs:
       with:
         repository: tavianator/bfs
         path: bfs
-        ref: '2.6.2'
+        ref: '3.0.3'
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain

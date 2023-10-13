@@ -13,7 +13,7 @@ cargo build --release
 FIND=$(readlink -f target/release/find)
 
 cd ..
-make -C bfs -j "$(nproc)" bin/tests/mksock WITH_ONIGURUMA=
+make -C bfs -j "$(nproc)" bin/tests/{mksock,xtouch} USE_ONIGURUMA=
 
 # Run the GNU find compatibility tests by default
 if test "$#" -eq 0; then
