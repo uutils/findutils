@@ -380,7 +380,7 @@ version = "0.4.2"
 dependencies = [
  "assert_cmd",
  "chrono",
- "clap 2.34.0",
+ "clap 4.4.6",
  "faccess",
  "filetime",
  "nix",
