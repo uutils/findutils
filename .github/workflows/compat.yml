@@ -50,7 +50,7 @@ jobs:
         name: gnu-result
         path: gnu-result.json
     - name: Download the result
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       with:
         workflow: compat.yml
         workflow_conclusion: completed
@@ -59,7 +59,7 @@ jobs:
         branch: main
         path: dl
     - name: Download the log
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       with:
         workflow: compat.yml
         workflow_conclusion: completed
@@ -117,7 +117,7 @@ jobs:
         name: bfs-result
         path: bfs-result.json
     - name: Download the result
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       with:
         workflow: compat.yml
         workflow_conclusion: completed
@@ -126,7 +126,7 @@ jobs:
         branch: main
         path: dl
     - name: Download the log
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       with:
         workflow: compat.yml
         workflow_conclusion: completed
