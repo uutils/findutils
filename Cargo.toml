@@ -24,7 +24,7 @@ assert_cmd = "2"
 filetime = "0.2"
 nix = "0.27"
 predicates = "3"
-serial_test = "2.0"
+serial_test = "3.0"
 tempfile = "3"
 
 [[bin]]
