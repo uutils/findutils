@@ -666,7 +666,7 @@ mod tests {
     use std::fs::File;
     use std::io::ErrorKind;
 
-    use chrono::TimeZone;
+    use chrono::{Duration, TimeZone};
     use tempfile::Builder;
 
     use super::*;
@@ -1060,8 +1060,9 @@ mod tests {
         File::create(&file_path).expect("create temp file");
 
         let mtime = chrono::Local
-            .ymd(2000, 01, 15)
-            .and_hms_nano(09, 30, 21, 2000000);
+            .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
+            .unwrap()
+            + Duration::nanoseconds(2_000_000);
         filetime::set_file_mtime(
             &file_path,
             filetime::FileTime::from_unix_time(mtime.timestamp(), mtime.timestamp_subsec_nanos()),
