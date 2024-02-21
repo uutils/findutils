@@ -23,11 +23,11 @@ mod options {
     pub const DELIMITER: &str = "delimiter";
     pub const EXIT: &str = "exit";
     pub const MAX_ARGS: &str = "max-args";
+    pub const MAX_CHARS: &str = "max-chars";
     pub const MAX_LINES: &str = "max-lines";
     pub const MAX_PROCS: &str = "max-procs";
     pub const NO_RUN_IF_EMPTY: &str = "no-run-if-empty";
     pub const NULL: &str = "null";
-    pub const SIZE: &str = "size";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -36,10 +36,10 @@ struct Options {
     delimiter: Option<u8>,
     exit_if_pass_char_limit: bool,
     max_args: Option<usize>,
+    max_chars: Option<usize>,
     max_lines: Option<usize>,
     no_run_if_empty: bool,
     null: bool,
-    size: Option<usize>,
     verbose: bool,
 }
 
@@ -803,9 +803,9 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .help("Split the input by null terminators rather than whitespace"),
         )
         .arg(
-            Arg::with_name(options::SIZE)
+            Arg::with_name(options::MAX_CHARS)
                 .short("s")
-                .long(options::SIZE)
+                .long(options::MAX_CHARS)
                 .takes_value(true)
                 .validator(validate_positive_usize)
                 .help(
@@ -832,14 +832,14 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         max_args: matches
             .value_of(options::MAX_ARGS)
             .map(|value| value.parse().unwrap()),
+        max_chars: matches
+            .value_of(options::MAX_CHARS)
+            .map(|value| value.parse().unwrap()),
         max_lines: matches
             .value_of(options::MAX_LINES)
             .map(|value| value.parse().unwrap()),
         no_run_if_empty: matches.is_present(options::NO_RUN_IF_EMPTY),
         null: matches.is_present(options::NULL),
-        size: matches
-            .value_of(options::SIZE)
-            .map(|value| value.parse().unwrap()),
         verbose: matches.is_present(options::VERBOSE),
     };
 
@@ -888,7 +888,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         (None, None) => (),
     }
 
-    if let Some(max_chars) = options.size {
+    if let Some(max_chars) = options.max_chars {
         limiters.add(MaxCharsCommandSizeLimiter::new(max_chars));
     }
 
