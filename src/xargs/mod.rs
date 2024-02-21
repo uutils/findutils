@@ -513,12 +513,12 @@ where
                             io::ErrorKind::InvalidInput,
                             format!("Unterminated quote: {q}"),
                         ));
-                    } else if i == 0 {
-                        return Ok(None);
-                    } else {
-                        pending.clear();
-                        break;
                     }
+                    if i == 0 {
+                        return Ok(None);
+                    }
+                    pending.clear();
+                    break;
                 }
 
                 pending.resize(bytes_read, 0);
@@ -603,9 +603,8 @@ where
                     arg: String::from_utf8_lossy(bytes).into_owned().into(),
                     kind: ArgumentKind::HardTerminated,
                 });
-            } else {
-                break None;
             }
+            break None;
         })
     }
 }
@@ -671,7 +670,8 @@ fn process_input(
                 && (options.max_args.is_some() || options.max_lines.is_some())
             {
                 return Err(XargsError::ArgumentTooLarge);
-            } else if have_pending_command {
+            }
+            if have_pending_command {
                 result.combine(current_builder.execute()?);
             }
 
