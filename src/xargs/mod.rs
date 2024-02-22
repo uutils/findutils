@@ -692,12 +692,14 @@ fn process_input(
 }
 
 fn parse_delimiter(s: &str) -> Result<u8, String> {
-    if let Some(hex) = s.strip_prefix("\\x") {
-        u8::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex sequence: {}", e))
-    } else if let Some(oct) = s.strip_prefix("\\0") {
-        u8::from_str_radix(oct, 8).map_err(|e| format!("Invalid octal sequence: {}", e))
-    } else if let Some(special) = s.strip_prefix('\\') {
-        match special {
+    match s.strip_prefix('\\') {
+        Some(hex) if hex.starts_with('x') => {
+            u8::from_str_radix(&hex[1..], 16).map_err(|e| format!("Invalid hex sequence: {}", e))
+        }
+        Some(oct) if oct.starts_with('0') => {
+            u8::from_str_radix(&oct[1..], 8).map_err(|e| format!("Invalid octal sequence: {}", e))
+        }
+        Some(special) => match special {
             "a" => Ok(b'\x07'),
             "b" => Ok(b'\x08'),
             "f" => Ok(b'\x0C'),
@@ -705,17 +707,12 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
             "r" => Ok(b'\r'),
             "t" => Ok(b'\t'),
             "v" => Ok(b'\x0B'),
-            "0" => Ok(b'\0'),
             "\\" => Ok(b'\\'),
-            _ => Err(format!("Invalid escape sequence: {s}")),
-        }
-    } else {
-        let bytes = s.as_bytes();
-        if bytes.len() == 1 {
-            Ok(bytes[0])
-        } else {
-            Err("Delimiter must be one byte".to_owned())
-        }
+            "0" => Ok(b'\0'),
+            _ => Err(format!("Invalid escape sequence: \\{}", special)),
+        },
+        None if s.len() == 1 => Ok(s.as_bytes()[0]),
+        None => Err("Delimiter must be one byte".to_owned()),
     }
 }
 
