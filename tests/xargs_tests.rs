@@ -152,14 +152,16 @@ fn xargs_max_args_lines_conflict() {
 
 #[test]
 fn xargs_max_chars() {
-    Command::cargo_bin("xargs")
-        .expect("found binary")
-        .args(["-s11"])
-        .write_stdin("ab cd efg")
-        .assert()
-        .success()
-        .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::diff("ab cd\nefg\n"));
+    for arg in ["-s11", "--max-chars=11"] {
+        Command::cargo_bin("xargs")
+            .expect("found binary")
+            .arg(arg)
+            .write_stdin("ab cd efg")
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty())
+            .stdout(predicate::str::diff("ab cd\nefg\n"));
+    }
 
     // Behavior should be the same with -x, which only takes effect with -L or
     // -n.
