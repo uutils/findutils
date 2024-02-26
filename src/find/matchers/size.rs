@@ -106,10 +106,7 @@ impl Matcher for SizeMatcher {
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::matchers::{ComparableValue, Matcher};
     use crate::find::tests::FakeDependencies;
-    // need to explicitly use non-pub members
-    use super::{byte_size_to_unit_size, Unit};
 
     #[test]
     fn test_byte_size_to_unit_size() {

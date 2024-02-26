@@ -121,7 +121,6 @@ impl Matcher for RegexMatcher {
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::matchers::Matcher;
     use crate::find::tests::FakeDependencies;
 
     const POSIX_BASIC_INTERVALS_RE: &str = r".*/ab\{1,3\}c";

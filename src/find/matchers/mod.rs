@@ -544,8 +544,7 @@ mod tests {
     use super::*;
     use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
-    use crate::find::Config;
-    use walkdir::{DirEntry, WalkDir};
+    use walkdir::WalkDir;
 
     /// Helper function for tests to get a DirEntry object. directory should
     /// probably be a string starting with "test_data/" (cargo's tests run with
