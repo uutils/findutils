@@ -69,7 +69,6 @@ impl Matcher for TypeMatcher {
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::matchers::Matcher;
     use crate::find::tests::FakeDependencies;
     use std::io::ErrorKind;
 

@@ -10,7 +10,6 @@
 //! when parsing command-line options (e.g. "-foo -o -bar -baz" is equivalent
 //! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
 use std::error::Error;
-use std::iter::Iterator;
 use std::path::Path;
 use walkdir::DirEntry;
 
@@ -357,11 +356,9 @@ mod tests {
     use super::*;
     use crate::find::matchers::quit::QuitMatcher;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::matchers::{Matcher, MatcherIO};
     use crate::find::tests::FakeDependencies;
     use std::cell::RefCell;
     use std::rc::Rc;
-    use walkdir::DirEntry;
 
     /// Simple Matcher impl that has side effects
     pub struct HasSideEffects;

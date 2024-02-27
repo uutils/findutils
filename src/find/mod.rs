@@ -264,11 +264,9 @@ pub fn find_main<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> i32 {
 #[cfg(test)]
 mod tests {
 
-    use std::cell::RefCell;
     use std::fs;
-    use std::io::{Cursor, ErrorKind, Read, Write};
-    use std::time::{Duration, SystemTime};
-    use std::vec::Vec;
+    use std::io::{Cursor, ErrorKind, Read};
+    use std::time::Duration;
     use tempfile::Builder;
 
     #[cfg(unix)]

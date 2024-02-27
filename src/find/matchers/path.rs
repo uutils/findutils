@@ -33,7 +33,6 @@ impl Matcher for PathMatcher {
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::matchers::Matcher;
     use crate::find::tests::FakeDependencies;
 
     // Variants of fix_up_slashes that properly escape the forward slashes for

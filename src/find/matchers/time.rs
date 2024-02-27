@@ -139,15 +139,13 @@ impl FileTimeMatcher {
 #[cfg(test)]
 mod tests {
     use std::fs::{File, OpenOptions};
-    use std::io::{Read, Write};
+    use std::io::Read;
     use std::thread;
-    use std::time::{Duration, SystemTime};
+    use std::time::Duration;
     use tempfile::Builder;
-    use walkdir::DirEntry;
 
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::matchers::{ComparableValue, Matcher};
     use crate::find::tests::FakeDependencies;
 
     #[test]

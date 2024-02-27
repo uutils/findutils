@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use onig::{self, Regex, RegexOptions, Syntax};
+use onig::{Regex, RegexOptions, Syntax};
 
 /// Parse a string as a POSIX Basic Regular Expression.
 fn parse_bre(expr: &str, options: RegexOptions) -> Result<Regex, onig::Error> {
