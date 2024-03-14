@@ -14,7 +14,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, ArgAction};
 
 mod options {
     pub const COMMAND: &str = "COMMAND";
@@ -719,128 +719,124 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
     }
 }
 
-fn validate_positive_usize(s: String) -> Result<(), String> {
+fn validate_positive_usize(s: &str) -> Result<usize, String> {
     match s.parse::<usize>() {
-        Ok(v) if v > 0 => Ok(()),
+        Ok(v) if v > 0 => Ok(v),
         Ok(v) => Err(format!("Value must be > 0, not: {v}")),
         Err(e) => Err(e.to_string()),
     }
 }
 
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
-    let matches = App::new("xargs")
+    let matches = clap::Command::new("xargs")
         .version(crate_version!())
         .about("Run commands using arguments derived from standard input")
-        .settings(&[AppSettings::TrailingVarArg])
         .arg(
-            Arg::with_name(options::COMMAND)
-                .takes_value(true)
-                .multiple(true)
-                .help("The command to run"),
+            Arg::new(options::COMMAND)
+                .help("The command to run")
+                .trailing_var_arg(true)
+                .num_args(0..)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
-            Arg::with_name(options::ARG_FILE)
-                .short("a")
+            Arg::new(options::ARG_FILE)
+                .short('a')
                 .long(options::ARG_FILE)
-                .takes_value(true)
                 .help("Read arguments from the given file instead of stdin"),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
-                .short("d")
+            Arg::new(options::DELIMITER)
+                .short('d')
                 .long(options::DELIMITER)
-                .takes_value(true)
-                .validator(|s| parse_delimiter(&s).map(|_| ()))
-                .help("Use the given delimiter to split the input"),
+                .help("Use the given delimiter to split the input")
+                .value_parser(parse_delimiter),
         )
         .arg(
-            Arg::with_name(options::EXIT)
-                .short("x")
+            Arg::new(options::EXIT)
+                .short('x')
                 .long(options::EXIT)
                 .help(
                     "Exit if the number of arguments allowed by -L or -n do not \
                     fit into the number of allowed characters",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(options::MAX_ARGS)
-                .short("n")
-                .takes_value(true)
+            Arg::new(options::MAX_ARGS)
+                .short('n')
                 .long(options::MAX_ARGS)
-                .validator(validate_positive_usize)
                 .help(
                     "Set the max number of arguments read from stdin to be passed \
                     to each command invocation (mutually exclusive with -L)",
-                ),
+                )
+                .value_parser(validate_positive_usize),
         )
         .arg(
-            Arg::with_name(options::MAX_LINES)
-                .short("L")
-                .takes_value(true)
-                .validator(validate_positive_usize)
+            Arg::new(options::MAX_LINES)
+                .short('L')
                 .help(
                     "Set the max number of lines from stdin to be passed to each \
                     command invocation (mutually exclusive with -n)",
-                ),
+                )
+                .value_parser(validate_positive_usize),
         )
         .arg(
-            Arg::with_name(options::MAX_PROCS)
-                .short("P")
-                .takes_value(true)
+            Arg::new(options::MAX_PROCS)
+                .short('P')
                 .long(options::MAX_PROCS)
-                .help("Run up to this many commands in parallel [NOT IMPLEMENTED]"),
+                .help("Run up to this many commands in parallel [NOT IMPLEMENTED]")
+                .value_parser(clap::value_parser!(usize)),
         )
         .arg(
-            Arg::with_name(options::NO_RUN_IF_EMPTY)
-                .short("r")
+            Arg::new(options::NO_RUN_IF_EMPTY)
+                .short('r')
                 .long(options::NO_RUN_IF_EMPTY)
-                .help("If there are no input arguments, do not run the command at all"),
+                .help("If there are no input arguments, do not run the command at all")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(options::NULL)
-                .short("0")
+            Arg::new(options::NULL)
+                .short('0')
                 .long(options::NULL)
-                .help("Split the input by null terminators rather than whitespace"),
+                .help("Split the input by null terminators rather than whitespace")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(options::MAX_CHARS)
-                .short("s")
+            Arg::new(options::MAX_CHARS)
+                .short('s')
                 .long(options::MAX_CHARS)
-                .takes_value(true)
-                .validator(validate_positive_usize)
                 .help(
                     "Set the max number of characters to be passed to each \
                     invocation",
-                ),
+                )
+                .value_parser(validate_positive_usize),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-                .short("t")
+            Arg::new(options::VERBOSE)
+                .short('t')
                 .long(options::VERBOSE)
-                .help("Be verbose"),
+                .help("Be verbose")
+                .action(ArgAction::SetTrue),
         )
-        .get_matches_from(args);
+        .try_get_matches_from(args);
+
+    let matches = match matches {
+        Ok(m) => m,
+        Err(e) => return Err(XargsError::from(e.to_string())),
+    };
 
     let options = Options {
         arg_file: matches
-            .value_of(options::ARG_FILE)
+            .get_one::<String>(options::ARG_FILE)
             .map(|value| value.to_owned()),
-        delimiter: matches
-            .value_of(options::DELIMITER)
-            .map(|value| parse_delimiter(value).unwrap()),
-        exit_if_pass_char_limit: matches.is_present(options::EXIT),
-        max_args: matches
-            .value_of(options::MAX_ARGS)
-            .map(|value| value.parse().unwrap()),
-        max_chars: matches
-            .value_of(options::MAX_CHARS)
-            .map(|value| value.parse().unwrap()),
-        max_lines: matches
-            .value_of(options::MAX_LINES)
-            .map(|value| value.parse().unwrap()),
-        no_run_if_empty: matches.is_present(options::NO_RUN_IF_EMPTY),
-        null: matches.is_present(options::NULL),
-        verbose: matches.is_present(options::VERBOSE),
+        delimiter: matches.get_one::<u8>(options::DELIMITER).copied(),
+        exit_if_pass_char_limit: matches.get_flag(options::EXIT),
+        max_args: matches.get_one::<usize>(options::MAX_ARGS).copied(),
+        max_chars: matches.get_one::<usize>(options::MAX_CHARS).copied(),
+        max_lines: matches.get_one::<usize>(options::MAX_LINES).copied(),
+        no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
+        null: matches.get_flag(options::NULL),
+        verbose: matches.get_flag(options::VERBOSE),
     };
 
     let delimiter = match (options.delimiter, options.null) {
@@ -858,7 +854,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         (None, false) => None,
     };
 
-    let action = match matches.values_of_os(options::COMMAND) {
+    let action = match matches.get_many::<OsString>(options::COMMAND) {
         Some(args) if args.len() > 0 => {
             ExecAction::Command(args.map(|arg| arg.to_owned()).collect())
         }
