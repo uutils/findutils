@@ -67,7 +67,7 @@ fn xargs_delim() {
         .assert()
         .failure()
         .code(1)
-        .stderr(predicate::str::contains("Invalid"))
+        .stderr(predicate::str::contains("invalid"))
         .stdout(predicate::str::is_empty());
 }
 
