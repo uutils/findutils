@@ -28,6 +28,7 @@ mod options {
     pub const MAX_PROCS: &str = "max-procs";
     pub const NO_RUN_IF_EMPTY: &str = "no-run-if-empty";
     pub const NULL: &str = "null";
+    pub const REPLACE: &str = "replace";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -40,6 +41,7 @@ struct Options {
     max_lines: Option<usize>,
     no_run_if_empty: bool,
     null: bool,
+    replace: Option<String>,
     verbose: bool,
 }
 
@@ -340,13 +342,14 @@ struct CommandBuilderOptions {
     limiters: LimiterCollection,
     verbose: bool,
     close_stdin: bool,
+    replace: Option<String>,
 }
-
 impl CommandBuilderOptions {
     fn new(
         action: ExecAction,
         env: HashMap<OsString, OsString>,
         mut limiters: LimiterCollection,
+        replace: Option<String>,
     ) -> Result<Self, ExhaustedCommandSpace> {
         let initial_args = match &action {
             ExecAction::Command(args) => args.iter().map(|arg| arg.as_ref()).collect(),
@@ -366,6 +369,7 @@ impl CommandBuilderOptions {
             limiters,
             verbose: false,
             close_stdin: false,
+            replace,
         })
     }
 }
@@ -398,14 +402,41 @@ impl CommandBuilder<'_> {
         };
 
         let mut command = Command::new(entry_point);
-        command
-            .args(initial_args)
-            .args(&self.extra_args)
-            .env_clear()
-            .envs(&self.options.env);
+
+        if let Some(replace_str) = &self.options.replace {
+            // we replace the first instance of the replacement string with
+            // the extra args, and then replace all instances of the replacement
+            let replacement = self
+                .extra_args
+                .iter()
+                .map(|s| s.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let initial_args: Vec<OsString> = initial_args
+                .iter()
+                .map(|arg| {
+                    let arg_str = arg.to_string_lossy();
+                    OsString::from(arg_str.replace(replace_str, &replacement))
+                })
+                .collect();
+
+            command
+                .args(&initial_args)
+                .env_clear()
+                .envs(&self.options.env);
+        } else {
+            // don't do any replacement
+            command
+                .args(initial_args)
+                .args(&self.extra_args)
+                .env_clear()
+                .envs(&self.options.env);
+        };
+
         if self.options.close_stdin {
             command.stdin(Stdio::null());
         }
+
         if self.options.verbose {
             eprintln!("{command:?}");
         }
@@ -811,11 +842,21 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         )
         .arg(
             Arg::new(options::VERBOSE)
-                .short('t')
-                .long(options::VERBOSE)
-                .help("Be verbose")
-                .action(ArgAction::SetTrue),
+            .short('t')
+            .long(options::VERBOSE)
+            .help("Be verbose")
+            .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::REPLACE)
+                .long(options::REPLACE)
+                .short('I')
+                .short_alias('i')
+                .num_args(0..=1)
+                .value_parser(clap::value_parser!(String))
+                .help("Replace R in INITIAL-ARGS with names read from standard input; if R is unspecified, assume {}"),
+        )
+
         .try_get_matches_from(args);
 
     let matches = match matches {
@@ -834,6 +875,16 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         max_lines: matches.get_one::<usize>(options::MAX_LINES).copied(),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
+        replace: if matches.contains_id(options::REPLACE) {
+            Some(
+                matches
+                    .get_one::<String>(options::REPLACE)
+                    .map(|value| value.to_owned())
+                    .unwrap_or("{}".to_string()),
+            )
+        } else {
+            None
+        },
         verbose: matches.get_flag(options::VERBOSE),
     };
 
@@ -858,7 +909,6 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }
         _ => ExecAction::Echo,
     };
-
     let env = std::env::vars_os().collect();
 
     let mut limiters = LimiterCollection::new();
@@ -888,9 +938,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
 
     limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
 
-    let mut builder_options = CommandBuilderOptions::new(action, env, limiters).map_err(|_| {
-        "Base command and environment are too large to fit into one command execution"
-    })?;
+    let mut builder_options =
+        CommandBuilderOptions::new(action, env, limiters, options.replace.clone()).map_err(
+            |_| "Base command and environment are too large to fit into one command execution",
+        )?;
 
     builder_options.verbose = options.verbose;
     builder_options.close_stdin = options.arg_file.is_none();

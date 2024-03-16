@@ -385,3 +385,34 @@ fn xargs_zero_lines() {
         .stderr(predicate::str::contains("Value must be > 0, not: 0"))
         .stdout(predicate::str::is_empty());
 }
+
+#[test]
+fn xargs_replace() {
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-I", "{}", "echo", "{} bar"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("foo bar"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-I", "_", "echo", "_ bar"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("foo bar"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["--replace", "_", "echo", "_ _ bar"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("foo foo bar"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-i", "_", "echo", "_ _ bar"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("foo foo bar"));
+}
