@@ -13,7 +13,7 @@ cargo build --release
 FIND=$(readlink -f target/release/find)
 
 cd ..
-make -C bfs -j "$(nproc)" bin/tests/{mksock,xtouch} USE_ONIGURUMA=
+make -C bfs -j "$(nproc)" bin/tests/{mksock,xtouch} NOLIBS=y
 
 # Run the GNU find compatibility tests by default
 if test "$#" -eq 0; then
@@ -23,9 +23,9 @@ fi
 LOG_FILE=bfs/tests.log
 ./bfs/tests/tests.sh --bfs="$FIND" "$@" | tee "$LOG_FILE" || :
 
-PASS=$(sed -n "s/^tests passed: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
-SKIP=$(sed -n "s/^tests skipped: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
-FAIL=$(sed -n "s/^tests failed: \(.*\)/\1/p" "$LOG_FILE" | head -n1)
+PASS=$(sed -En 's|^\[PASS] *([0-9]+) / .*|\1|p' "$LOG_FILE")
+SKIP=$(sed -En 's|^\[SKIP] *([0-9]+) / .*|\1|p' "$LOG_FILE")
+FAIL=$(sed -En 's|^\[FAIL] *([0-9]+) / .*|\1|p' "$LOG_FILE")
 
 # Default any missing numbers to zero (e.g. no tests skipped)
 : ${PASS:=0}
