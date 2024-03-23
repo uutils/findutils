@@ -305,7 +305,7 @@ mod tests {
                 .write(true)
                 .open(&foo_path)
                 .expect("open temp file");
-            let _ = f.write(&mut buffer);
+            let _ = f.write(&buffer);
         }
 
         thread::sleep(Duration::from_secs(2));
