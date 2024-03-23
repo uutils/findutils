@@ -160,7 +160,7 @@ mod tests {
         let deps = FakeDependencies::new();
 
         for typ in &["b", "c", "p", "s"] {
-            let matcher = TypeMatcher::new(typ.as_ref()).unwrap();
+            let matcher = TypeMatcher::new(typ).unwrap();
             assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
             assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
         }
