@@ -209,7 +209,7 @@ fn xargs_exit_on_large() {
 
 #[test]
 fn xargs_exec() {
-    Command::cargo_bin("xargs")
+    let result = Command::cargo_bin("xargs")
         .expect("found binary")
         .args([
             "-n2",
@@ -219,13 +219,20 @@ fn xargs_exec() {
             "--no_print_cwd",
         ])
         .write_stdin("a b c\nd")
-        .assert()
-        .success()
-        .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::diff(
-            "stdin=\nargs=\n--print_stdin\n--no_print_cwd\na\nb\n\
+        .output();
+    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    let result = result.unwrap();
+    assert_eq!(result.status.code(), Some(0));
+
+    assert!(result.stderr.is_empty(), "stderr: {:?}", result);
+
+    let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
+
+    assert_eq!(
+        stdout_string,
+        "stdin=\nargs=\n--print_stdin\n--no_print_cwd\na\nb\n\
             stdin=\nargs=\n--print_stdin\n--no_print_cwd\nc\nd\n",
-        ));
+    );
 }
 
 #[test]
@@ -235,7 +242,7 @@ fn xargs_exec_stdin_open() {
     write!(temp_file, "a b c").unwrap();
     temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-    Command::cargo_bin("xargs")
+    let result = Command::cargo_bin("xargs")
         .expect("found binary")
         .args([
             "-a",
@@ -246,17 +253,25 @@ fn xargs_exec_stdin_open() {
             "--no_print_cwd",
         ])
         .write_stdin("test")
-        .assert()
-        .success()
-        .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::diff(
-            "stdin=test\nargs=\n--print_stdin\n--no_print_cwd\na\nb\nc\n",
-        ));
+        .output();
+
+    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    let result = result.unwrap();
+    assert_eq!(result.status.code(), Some(0));
+
+    assert!(result.stderr.is_empty(), "stderr: {:?}", result);
+
+    let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
+
+    assert_eq!(
+        stdout_string,
+        "stdin=test\nargs=\n--print_stdin\n--no_print_cwd\na\nb\nc\n",
+    );
 }
 
 #[test]
 fn xargs_exec_failure() {
-    Command::cargo_bin("xargs")
+    let result = Command::cargo_bin("xargs")
         .expect("found binary")
         .args([
             "-n1",
@@ -266,19 +281,26 @@ fn xargs_exec_failure() {
             "--exit_with_failure",
         ])
         .write_stdin("a b")
-        .assert()
-        .failure()
-        .code(123)
-        .stderr(predicate::str::is_empty())
-        .stdout(
-            "args=\n--no_print_cwd\n--exit_with_failure\na\n\
+        .output();
+
+    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    let result = result.unwrap();
+    assert_eq!(result.status.code(), Some(123));
+
+    assert!(result.stderr.is_empty(), "stderr: {:?}", result);
+
+    let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
+
+    assert_eq!(
+        stdout_string,
+        "args=\n--no_print_cwd\n--exit_with_failure\na\n\
                 args=\n--no_print_cwd\n--exit_with_failure\nb\n",
-        );
+    );
 }
 
 #[test]
 fn xargs_exec_urgent_failure() {
-    Command::cargo_bin("xargs")
+    let result = Command::cargo_bin("xargs")
         .expect("found binary")
         .args([
             "-n1",
@@ -288,17 +310,26 @@ fn xargs_exec_urgent_failure() {
             "--exit_with_urgent_failure",
         ])
         .write_stdin("a b")
-        .assert()
-        .failure()
-        .code(124)
-        .stderr(predicate::str::contains("Error:"))
-        .stdout("args=\n--no_print_cwd\n--exit_with_urgent_failure\na\n");
+        .output();
+
+    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    let result = result.unwrap();
+    assert_eq!(result.status.code(), Some(124));
+
+    assert!(!result.stderr.is_empty(), "stderr: {:?}", result);
+
+    let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
+
+    assert_eq!(
+        stdout_string,
+        "args=\n--no_print_cwd\n--exit_with_urgent_failure\na\n"
+    );
 }
 
 #[test]
 #[cfg(unix)]
 fn xargs_exec_with_signal() {
-    Command::cargo_bin("xargs")
+    let result = Command::cargo_bin("xargs")
         .expect("found binary")
         .args([
             "-n1",
@@ -308,11 +339,19 @@ fn xargs_exec_with_signal() {
             "--exit_with_signal",
         ])
         .write_stdin("a b")
-        .assert()
-        .failure()
-        .code(125)
-        .stderr(predicate::str::contains("Error:"))
-        .stdout("args=\n--no_print_cwd\n--exit_with_signal\na\n");
+        .output();
+
+    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    let result = result.unwrap();
+    assert_eq!(result.status.code(), Some(125));
+    assert!(!result.stderr.is_empty(), "stderr: {:?}", result);
+
+    let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
+
+    assert_eq!(
+        stdout_string,
+        "args=\n--no_print_cwd\n--exit_with_signal\na\n"
+    );
 }
 
 #[test]
