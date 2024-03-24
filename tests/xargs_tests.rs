@@ -15,6 +15,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 use common::test_helpers::path_to_testing_commandline;
+use pretty_assertions::assert_eq;
 
 mod common;
 
