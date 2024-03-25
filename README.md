@@ -6,7 +6,7 @@
 [![dependency status](https://deps.rs/repo/github/uutils/findutils/status.svg)](https://deps.rs/repo/github/uutils/findutils)
 [![codecov](https://codecov.io/gh/uutils/findutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/findutils)
 
-Rust implementation of [GNU findutils](https://www.gnu.org/software/findutils/) and xargs.
+Rust implemementation of [GNU findutils](https://www.gnu.org/software/findutils/): `xargs`, `find`, `locate` and `updatedb`.
 The goal is to be a full drop-in replacement of the original commands.
 
 ## Run the GNU testsuite on rust/findutils:
