@@ -7,7 +7,7 @@
 [![codecov](https://codecov.io/gh/uutils/findutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/findutils)
 
 Rust implementation of [GNU findutils](https://www.gnu.org/software/findutils/) and xargs.
-The goal is to be a full dropped-in replacement of the original commands.
+The goal is to be a full drop-in replacement of the original commands.
 
 ## Run the GNU testsuite on rust/findutils:
 
