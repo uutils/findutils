@@ -9,10 +9,6 @@
 /// ! But as the tests require running an external executable, they need to be run
 /// ! as integration tests so we can ensure that our testing-commandline binary
 /// ! has been built.
-extern crate findutils;
-extern crate tempfile;
-extern crate walkdir;
-
 use std::env;
 use std::fs::File;
 use std::io::Read;
