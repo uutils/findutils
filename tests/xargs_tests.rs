@@ -6,9 +6,6 @@
 
 /// ! This file contains integration tests for xargs, separate from the unit
 /// ! tests so that testing-commandline can be built first.
-extern crate findutils;
-extern crate tempfile;
-
 use std::io::{Seek, SeekFrom, Write};
 
 use assert_cmd::Command;
