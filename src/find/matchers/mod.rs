@@ -48,7 +48,7 @@ use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
-use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher};
+use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher, NewerTimeMatcher, NewerTimeType};
 use self::type_matcher::TypeMatcher;
 
 use super::{Config, Dependencies};
@@ -350,6 +350,26 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(NewerMatcher::new(args[i])?.into_box())
+            }
+            "-newerat" | "-newerBt" | "-newerct" | "-newermt" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                // TODO Some code is also needed to bs compatible with different file
+                // systems for file create time.
+                let newer_time_type = match args[i] {
+                    "-newerat" => NewerTimeType::Accessed,
+                    "-newerBt" => NewerTimeType::Birthed,
+                    "-newerct" => NewerTimeType::Changed,
+                    "-newermt" => NewerTimeType::Modified,
+                    _ => unreachable!("Encountered unexpected value {}", args[i]),
+                };
+                // TODO Convert args to unix timestamps. (expressed in numeric types)
+                let time = args[i + 1];
+                // The newer operation always requires a greater than the comparison value.
+                let comparable_time = convert_arg_to_comparable_value("+", time)?;
+                i += 1;
+                Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
