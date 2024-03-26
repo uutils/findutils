@@ -61,6 +61,71 @@ impl Matcher for NewerMatcher {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub enum NewerTimeType {
+    Accessed,
+    Birthed,
+    Changed,
+    Modified,
+}
+
+impl NewerTimeType {
+    fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
+        match self {
+            NewerTimeType::Accessed => metadata.accessed(),
+            NewerTimeType::Birthed => metadata.created(),
+            // metadata.ctime() only impl in MetadataExt
+            NewerTimeType::Changed => metadata.accessed(),
+            NewerTimeType::Modified => metadata.modified(),
+        }
+    }
+}
+
+pub struct NewerTimeMatcher {
+    time: ComparableValue,
+    newer_time_type: NewerTimeType,
+}
+
+impl Matcher for NewerTimeMatcher {
+    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info, matcher_io.now()) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} time for {}: {}",
+                    self.newer_time_type,
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
+        }
+    }
+}
+
+impl NewerTimeMatcher {
+    /// Implementation of matches that returns a result, allowing use to use try!
+    /// to deal with the errors.
+    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+        let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
+        let timestamp = match now.duration_since(this_time) {
+            Ok(duration) => duration,
+            Err(e) => e.duration(),
+        };
+
+        Ok(self.time.matches(timestamp.as_secs()))
+    }
+
+    pub fn new(newer_time_type: NewerTimeType, time: ComparableValue) -> Self {
+        Self {
+            time,
+            newer_time_type,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum FileTimeType {
     Accessed,
     Created,
