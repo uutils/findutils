@@ -854,7 +854,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short_alias('i')
                 .num_args(0..=1)
                 .value_parser(clap::value_parser!(String))
-                .help("Replace R in INITIAL-ARGS with names read from standard input; if R is unspecified, assume {}"),
+                .help(
+                    "Replace R in INITIAL-ARGS with names read from standard input; \
+                    if R is unspecified, assume {}",
+                ),
         )
 
         .try_get_matches_from(args);
