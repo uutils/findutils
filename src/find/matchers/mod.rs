@@ -289,7 +289,7 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Result<i64, Box<dyn Error>> {
             NaiveTime::from_hms_opt(hour, minute, second).ok_or("create NaiveTime error")?,
         )
         .and_utc()
-        .timestamp();
+        .timestamp_millis();
 
         Ok(timestamp)
     } else {
