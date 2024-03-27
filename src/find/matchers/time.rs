@@ -81,7 +81,7 @@ impl NewerTimeType {
 }
 
 pub struct NewerTimeMatcher {
-    time: u64,
+    time: i64,
     newer_time_type: NewerTimeType,
 }
 
@@ -112,10 +112,12 @@ impl NewerTimeMatcher {
             Err(e) => e.duration(),
         };
 
-        Ok(self.time <= timestamp.as_secs())
+        // timestamp.as_millis() return u128 but time is i64
+        // This may leave memory implications. :(
+        Ok(self.time <= timestamp.as_millis().try_into().unwrap())
     }
 
-    pub fn new(newer_time_type: NewerTimeType, time: u64) -> Self {
+    pub fn new(newer_time_type: NewerTimeType, time: i64) -> Self {
         Self {
             time,
             newer_time_type,

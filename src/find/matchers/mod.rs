@@ -25,6 +25,7 @@ mod time;
 mod type_matcher;
 
 use ::regex::Regex;
+use chrono::NaiveDateTime;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -364,15 +365,19 @@ fn build_matcher_tree(
                     "-newermt" => NewerTimeType::Modified,
                     _ => unreachable!("Encountered unexpected value {}", args[i]),
                 };
-                // TODO Convert args to unix timestamps. (expressed in numeric types)
+                // Convert args to unix timestamps. (expressed in numeric types)
                 let time = args[i + 1];
-                let comparable_time: u64 = match time.parse::<u64>() {
-                    Ok(time) => time,
-                    Err(_) => {
-                        // Handling cannot parse time string.
-                        return Err(From::from(format!("find: I cannot figure out how to interpret ‘{}’ as a date or time", args[i + 1])));
-                    }
-                };
+                let comparable_time =
+                    match NaiveDateTime::parse_from_str(time, "%b %d, %Y %H:%M:%S") {
+                        Ok(time) => time.and_utc().timestamp_millis(),
+                        Err(_) => {
+                            // Handling cannot parse time string.
+                            return Err(From::from(format!(
+                                "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                                args[i + 1]
+                            )));
+                        }
+                    };
                 i += 1;
                 Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
             }
