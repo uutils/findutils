@@ -854,4 +854,36 @@ mod tests {
             fix_up_slashes("./test_data/simple\n"),
         );
     }
+
+    #[test]
+    fn find_newer_xy() {
+        // normal - before the created time
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
+
+        for (arg, time) in args.iter().zip(times.iter()) {
+            let deps = FakeDependencies::new();
+
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 0);
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"),
+            );
+        }
+
+        // normal - after the created time
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let times = ["jan 01, 2037", "jan 01, 2037 00:00:00"];
+
+        for (arg, time) in args.iter().zip(times.iter()) {
+            let deps = FakeDependencies::new();
+
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 0);
+            assert_eq!(deps.get_output_as_string(), "");
+        }
+    }
 }

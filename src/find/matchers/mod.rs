@@ -1224,4 +1224,16 @@ mod tests {
             panic!("-perm with no mode pattern should fail");
         }
     }
+
+    #[test]
+    fn parse_date_str_to_timestamps_test() {
+        let full_date_timestamps = parse_date_str_to_timestamps("jan 01, 2025 00:00:01").unwrap();
+        assert!(full_date_timestamps.to_string().contains("1735689601000"));
+
+        let not_include_time_date_timestamps =
+            parse_date_str_to_timestamps("jan 01, 2025").unwrap();
+        assert!(not_include_time_date_timestamps
+            .to_string()
+            .contains("1735689600000"));
+    }
 }
