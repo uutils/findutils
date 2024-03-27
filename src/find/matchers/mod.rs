@@ -266,10 +266,10 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Result<i64, Box<dyn Error>> {
         let date_str = captures.get(1).ok_or("Invalid date string")?.as_str();
         let month_day_year = NaiveDate::parse_from_str(date_str, "%b %d, %Y")?;
         let time_str = captures.get(2).map_or("00:00:00", |m| m.as_str());
-        let hour_minute_second: Vec<&str> = time_str.split(":").collect();
+        let hour_minute_second: Vec<&str> = time_str.split(':').collect();
 
         let hour = hour_minute_second
-            .get(0)
+            .first()
             .ok_or("Invalid hour")?
             .parse::<u32>()?;
         let minute = hour_minute_second
@@ -408,7 +408,7 @@ fn build_matcher_tree(
                 };
                 let time = args[i + 1];
                 // Convert args to unix timestamps. (expressed in numeric types)
-                let comparable_time = match parse_date_str_to_timestamps(&time) {
+                let comparable_time = match parse_date_str_to_timestamps(time) {
                     Ok(timestamp) => timestamp,
                     Err(_) => {
                         return Err(From::from(format!(
