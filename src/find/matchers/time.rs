@@ -7,7 +7,7 @@
 use std::error::Error;
 use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::DirEntry;
 
 use super::{ComparableValue, Matcher, MatcherIO};
@@ -56,6 +56,71 @@ impl Matcher for NewerMatcher {
                 false
             }
             Ok(t) => t,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum NewerTimeType {
+    Accessed,
+    Birthed,
+    Changed,
+    Modified,
+}
+
+impl NewerTimeType {
+    fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
+        match self {
+            NewerTimeType::Accessed => metadata.accessed(),
+            NewerTimeType::Birthed => metadata.created(),
+            // metadata.ctime() only impl in MetadataExt
+            NewerTimeType::Changed => metadata.accessed(),
+            NewerTimeType::Modified => metadata.modified(),
+        }
+    }
+}
+
+pub struct NewerTimeMatcher {
+    time: i64,
+    newer_time_type: NewerTimeType,
+}
+
+impl Matcher for NewerTimeMatcher {
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} time for {}: {}",
+                    self.newer_time_type,
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
+        }
+    }
+}
+
+impl NewerTimeMatcher {
+    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+        let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
+        let timestamp = match this_time.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration,
+            Err(e) => e.duration(),
+        };
+
+        // timestamp.as_millis() return u128 but time is i64
+        // This may leave memory implications. :(
+        Ok(self.time <= timestamp.as_millis().try_into().unwrap())
+    }
+
+    pub fn new(newer_time_type: NewerTimeType, time: i64) -> Self {
+        Self {
+            time,
+            newer_time_type,
         }
     }
 }
@@ -138,6 +203,7 @@ impl FileTimeMatcher {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::Read;
     use std::thread;
@@ -361,5 +427,112 @@ mod tests {
                 file_time_type
             );
         }
+    }
+
+    #[test]
+    fn newer_time_matcher() {
+        let deps = FakeDependencies::new();
+        let before_created_time = deps
+            .new_matcher_io()
+            .now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .try_into()
+            .unwrap();
+        let created_matcher = NewerTimeMatcher::new(NewerTimeType::Birthed, before_created_time);
+
+        thread::sleep(Duration::from_secs(2));
+
+        let temp_dir = Builder::new()
+            .prefix("newer_time_matcher")
+            .tempdir()
+            .unwrap();
+        // No easy way to independently set file times. So create it - setting creation time
+        let foo_path = temp_dir.path().join("foo");
+        // after "before_created_time" created a file
+        let _ = File::create(&foo_path).expect("create temp file");
+        // so this file created time should after "before_created_time"
+        let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
+        assert!(
+            created_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file created time should after 'before_created_time'"
+        );
+
+        // accessed time test
+        let before_accessed_time = deps
+            .new_matcher_io()
+            .now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .try_into()
+            .unwrap();
+        let accessed_matcher = NewerTimeMatcher::new(NewerTimeType::Accessed, before_accessed_time);
+
+        thread::sleep(Duration::from_secs(2));
+        let mut buffer = [0; 10];
+        {
+            let mut file = File::open(&foo_path).expect("open temp file");
+            let _ = file.read(&mut buffer);
+        }
+
+        assert!(
+            accessed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file accessed time should after 'before_accessed_time'"
+        );
+
+        // modified time test
+        let before_modified_time = deps
+            .new_matcher_io()
+            .now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .try_into()
+            .unwrap();
+        let modified_matcher = NewerTimeMatcher::new(NewerTimeType::Modified, before_modified_time);
+
+        thread::sleep(Duration::from_secs(2));
+        let mut buffer = [0; 10];
+        {
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&foo_path)
+                .expect("open temp file");
+            let _ = file.write(&mut buffer);
+        }
+
+        assert!(
+            modified_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file modified time should after 'before_modified_time'"
+        );
+
+        let before_changed_time = deps
+            .new_matcher_io()
+            .now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .try_into()
+            .unwrap();
+        let inode_changed_matcher =
+            NewerTimeMatcher::new(NewerTimeType::Changed, before_changed_time);
+        thread::sleep(Duration::from_secs(2));
+
+        // Steps to change inode:
+        // 1. Copy and rename the file
+        // 2. Delete the old file
+        // 3. Change the new file name to the old file name
+        let _ = File::create(temp_dir.path().join("inode_test_file")).expect("create temp file");
+        let _ = fs::copy("inode_test_file", "new_inode_test_file");
+        let _ = fs::remove_file("inode_test_file");
+        let _ = fs::rename("new_inode_test_file", "inode_test_file");
+
+        assert!(
+            inode_changed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file inode changed time should after 'std_time'"
+        );
     }
 }

@@ -25,6 +25,7 @@ mod time;
 mod type_matcher;
 
 use ::regex::Regex;
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -48,7 +49,7 @@ use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
-use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher};
+use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher, NewerTimeMatcher, NewerTimeType};
 use self::type_matcher::TypeMatcher;
 
 use super::{Config, Dependencies};
@@ -252,6 +253,50 @@ fn convert_arg_to_comparable_value_and_suffix(
     )))
 }
 
+/// This is a function that converts a specific string format into a timestamp.
+/// It allows converting a time string of "(week abbreviation) (date), (year) (time)" to a Unix timestamp.
+/// such as: "jan 01, 2025 00:00:01" -> 1735689601
+/// When (time) is not provided, it will be automatically filled in as 00:00:00
+/// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600
+fn parse_date_str_to_timestamps(date_str: &str) -> Result<i64, Box<dyn Error>> {
+    let regex_pattern = r"^(\w{3} \d{2}, \d+)(?: (\d{2}:\d{2}:\d{2}))?$";
+    let re = Regex::new(regex_pattern)?;
+
+    if let Some(captures) = re.captures(date_str) {
+        let date_str = captures.get(1).ok_or("Invalid date string")?.as_str();
+        let month_day_year = NaiveDate::parse_from_str(date_str, "%b %d, %Y")?;
+        let time_str = captures.get(2).map_or("00:00:00", |m| m.as_str());
+        let hour_minute_second: Vec<&str> = time_str.split(':').collect();
+
+        let hour = hour_minute_second
+            .first()
+            .ok_or("Invalid hour")?
+            .parse::<u32>()?;
+        let minute = hour_minute_second
+            .get(1)
+            .ok_or("Invalid minute")?
+            .parse::<u32>()?;
+        let second = hour_minute_second
+            .get(2)
+            .ok_or("Invalid second")?
+            .parse::<u32>()?;
+
+        let timestamp = NaiveDateTime::new(
+            month_day_year,
+            NaiveTime::from_hms_opt(hour, minute, second).ok_or("create NaiveTime error")?,
+        )
+        .and_utc()
+        .timestamp_millis();
+
+        Ok(timestamp)
+    } else {
+        Err(From::from(format!(
+            "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+            date_str
+        )))
+    }
+}
+
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -347,6 +392,33 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(NewerMatcher::new(args[i])?.into_box())
+            }
+            "-newerat" | "-newerBt" | "-newerct" | "-newermt" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                // TODO Some code is also needed to bs compatible with different file
+                // systems for file create time.
+                let newer_time_type = match args[i] {
+                    "-newerat" => NewerTimeType::Accessed,
+                    "-newerBt" => NewerTimeType::Birthed,
+                    "-newerct" => NewerTimeType::Changed,
+                    "-newermt" => NewerTimeType::Modified,
+                    _ => unreachable!("Encountered unexpected value {}", args[i]),
+                };
+                let time = args[i + 1];
+                // Convert args to unix timestamps. (expressed in numeric types)
+                let comparable_time = match parse_date_str_to_timestamps(time) {
+                    Ok(timestamp) => timestamp,
+                    Err(_) => {
+                        return Err(From::from(format!(
+                            "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                            args[i + 1]
+                        )))
+                    }
+                };
+                i += 1;
+                Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
@@ -1149,5 +1221,17 @@ mod tests {
         } else {
             panic!("-perm with no mode pattern should fail");
         }
+    }
+
+    #[test]
+    fn parse_date_str_to_timestamps_test() {
+        let full_date_timestamps = parse_date_str_to_timestamps("jan 01, 2025 00:00:01").unwrap();
+        assert!(full_date_timestamps.to_string().contains("1735689601000"));
+
+        let not_include_time_date_timestamps =
+            parse_date_str_to_timestamps("jan 01, 2025").unwrap();
+        assert!(not_include_time_date_timestamps
+            .to_string()
+            .contains("1735689600000"));
     }
 }
