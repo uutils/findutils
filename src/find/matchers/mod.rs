@@ -366,8 +366,13 @@ fn build_matcher_tree(
                 };
                 // TODO Convert args to unix timestamps. (expressed in numeric types)
                 let time = args[i + 1];
-                // The newer operation always requires a greater than the comparison value.
-                let comparable_time = convert_arg_to_comparable_value("+", time)?;
+                let comparable_time: u64 = match time.parse::<u64>() {
+                    Ok(time) => time,
+                    Err(_) => {
+                        // Handling cannot parse time string.
+                        return Err(From::from(format!("find: I cannot figure out how to interpret ‘{}’ as a date or time", args[i + 1])));
+                    }
+                };
                 i += 1;
                 Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
             }
