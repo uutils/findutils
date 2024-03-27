@@ -7,7 +7,7 @@
 use std::error::Error;
 use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::DirEntry;
 
 use super::{ComparableValue, Matcher, MatcherIO};
@@ -81,13 +81,13 @@ impl NewerTimeType {
 }
 
 pub struct NewerTimeMatcher {
-    time: ComparableValue,
+    time: u64,
     newer_time_type: NewerTimeType,
 }
 
 impl Matcher for NewerTimeMatcher {
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        match self.matches_impl(file_info, matcher_io.now()) {
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info) {
             Err(e) => {
                 writeln!(
                     &mut stderr(),
@@ -105,19 +105,17 @@ impl Matcher for NewerTimeMatcher {
 }
 
 impl NewerTimeMatcher {
-    /// Implementation of matches that returns a result, allowing use to use try!
-    /// to deal with the errors.
-    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
-        let timestamp = match now.duration_since(this_time) {
+        let timestamp = match this_time.duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(e) => e.duration(),
         };
 
-        Ok(self.time.matches(timestamp.as_secs()))
+        Ok(self.time <= timestamp.as_secs())
     }
 
-    pub fn new(newer_time_type: NewerTimeType, time: ComparableValue) -> Self {
+    pub fn new(newer_time_type: NewerTimeType, time: u64) -> Self {
         Self {
             time,
             newer_time_type,
