@@ -774,6 +774,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         .arg(
             Arg::new(options::MAX_LINES)
                 .short('L')
+                .long(options::MAX_LINES)
                 .help(
                     "Set the max number of lines from stdin to be passed to each \
                     command invocation (mutually exclusive with -n)",
