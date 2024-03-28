@@ -88,15 +88,31 @@ pub struct NewerOptionMatcher {
 
 impl NewerOptionMatcher {
     pub fn new(
-        x_option: NewerOptionType,
-        y_option: NewerOptionType,
-        given_modification_time: SystemTime,
-    ) -> Self {
-        Self {
+        x_option: String,
+        y_option: String,
+        path_to_file: &str,
+    ) -> Result<Self, Box<dyn Error>> {
+        let metadata = fs::metadata(path_to_file)?;
+        let x_option = match x_option.as_str() {
+            "a" => NewerOptionType::Accessed,
+            "B" => NewerOptionType::Birthed,
+            "c" => NewerOptionType::Changed,
+            "m" => NewerOptionType::Modified,
+            _ => NewerOptionType::Modified,
+        };
+
+        let y_option = match y_option.as_str() {
+            "a" => NewerOptionType::Accessed,
+            "B" => NewerOptionType::Birthed,
+            "c" => NewerOptionType::Changed,
+            "m" => NewerOptionType::Modified,
+            _ => NewerOptionType::Modified,
+        };
+        Ok(Self {
             x_option,
             y_option,
-            given_modification_time,
-        }
+            given_modification_time: metadata.modified()?,
+        })
     }
 
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {

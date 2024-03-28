@@ -49,7 +49,10 @@ use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
-use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionType, NewerTimeMatcher};
+use self::time::{
+    FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher, NewerOptionType,
+    NewerTimeMatcher,
+};
 use self::type_matcher::TypeMatcher;
 
 use super::{Config, Dependencies};
@@ -290,7 +293,7 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
 /// X and Y are constrained to a/B/c/m and t.
 /// such as: "-neweraB" -> Some(a, B) "-neweraD" -> None
 fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
-    let re = Regex::new(r"-newer([aBcmt])([aBcmt])").unwrap();
+    let re = Regex::new(r"-newer([aBcm])([aBcmt])").unwrap();
     if let Some(captures) = re.captures(input) {
         let x = captures.get(1)?.as_str().to_string();
         let y = captures.get(2)?.as_str().to_string();
@@ -395,33 +398,6 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(NewerMatcher::new(args[i])?.into_box())
-            }
-            "-newerat" | "-newerBt" | "-newerct" | "-newermt" => {
-                if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
-                }
-                // TODO Some code is also needed to bs compatible with different file
-                // systems for file create time.
-                let newer_time_type = match args[i] {
-                    "-newerat" => NewerOptionType::Accessed,
-                    "-newerBt" => NewerOptionType::Birthed,
-                    "-newerct" => NewerOptionType::Changed,
-                    "-newermt" => NewerOptionType::Modified,
-                    _ => unreachable!("Encountered unexpected value {}", args[i]),
-                };
-                let time = args[i + 1];
-                // Convert args to unix timestamps. (expressed in numeric types)
-                let comparable_time = match parse_date_str_to_timestamps(time) {
-                    Some(timestamp) => timestamp,
-                    None => {
-                        return Err(From::from(format!(
-                            "find: I cannot figure out how to interpret ‘{}’ as a date or time",
-                            args[i + 1]
-                        )))
-                    }
-                };
-                i += 1;
-                Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
@@ -593,7 +569,45 @@ fn build_matcher_tree(
                 None
             }
 
-            _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
+            _ => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                match parse_str_to_newer_args(args[i]) {
+                    Some((x_option, y_option)) => {
+                        // TODO Some code is also needed to bs compatible with different file
+                        // systems for file create time.
+                        if y_option == "t" {
+                            let time = args[i + 1];
+                            let newer_time_type = match x_option.as_str() {
+                                "a" => NewerOptionType::Accessed,
+                                "B" => NewerOptionType::Birthed,
+                                "c" => NewerOptionType::Changed,
+                                "m" => NewerOptionType::Modified,
+                                _ => NewerOptionType::Modified,
+                            };
+                            // Convert args to unix timestamps. (expressed in numeric types)
+                            let comparable_time = match parse_date_str_to_timestamps(time) {
+                                Some(timestamp) => timestamp,
+                                None => {
+                                    return Err(From::from(format!(
+                                        "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                                        args[i + 1]
+                                    )))
+                                }
+                            };
+                            i += 1;
+                            Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
+                        } else {
+                            let file_path = args[i + 1];
+                            Some(NewerOptionMatcher::new(x_option, y_option, file_path)?.into_box())
+                        }
+                    }
+                    None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
+                };
+
+                return Err(From::from(format!("Unrecognized flag: '{}'", args[i])));
+            }
         };
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
@@ -1239,10 +1253,11 @@ mod tests {
 
     #[test]
     fn parse_str_to_newer_args_test() {
-        let eqs = ["a", "B", "c", "m", "t"];
+        let x_options = ["a", "B", "c", "m"];
+        let y_options = ["a", "B", "c", "m", "t"];
 
-        eqs.iter().for_each(|&x| {
-            eqs.iter().for_each(|&y| {
+        x_options.iter().for_each(|&x| {
+            y_options.iter().for_each(|&y| {
                 let eq: (String, String) = (String::from(x), String::from(y));
                 let arg =
                     parse_str_to_newer_args(&format!("-newer{}{}", x, y).to_string()).unwrap();
