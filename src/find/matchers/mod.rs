@@ -25,7 +25,7 @@ mod time;
 mod type_matcher;
 
 use ::regex::Regex;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -257,46 +257,46 @@ fn convert_arg_to_comparable_value_and_suffix(
 }
 
 /// This is a function that converts a specific string format into a timestamp.
-/// It allows converting a time string of "(week abbreviation) (date), (year) (time)" to a Unix timestamp.
-/// such as: "jan 01, 2025 00:00:01" -> 1735689601
+/// It allows converting a time string of
+/// "(week abbreviation) (date), (year) (time)" to a Unix timestamp.
+/// such as: "jan 01, 2025 00:00:01" -> 1735689601000
 /// When (time) is not provided, it will be automatically filled in as 00:00:00
-/// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600
-fn parse_date_str_to_timestamps(date_str: &str) -> Result<i64, Box<dyn Error>> {
-    let regex_pattern = r"^(\w{3} \d{2}, \d+)(?: (\d{2}:\d{2}:\d{2}))?$";
-    let re = Regex::new(regex_pattern)?;
+/// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
+fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
+    let regex_pattern = r"^(\w{3} \d{2})(?:, (\d{4}))?(?: (\d{2}:\d{2}:\d{2}))?$";
+    let re = Regex::new(regex_pattern);
 
-    if let Some(captures) = re.captures(date_str) {
-        let date_str = captures.get(1).ok_or("Invalid date string")?.as_str();
-        let month_day_year = NaiveDate::parse_from_str(date_str, "%b %d, %Y")?;
-        let time_str = captures.get(2).map_or("00:00:00", |m| m.as_str());
-        let hour_minute_second: Vec<&str> = time_str.split(':').collect();
-
-        let hour = hour_minute_second
-            .first()
-            .ok_or("Invalid hour")?
-            .parse::<u32>()?;
-        let minute = hour_minute_second
-            .get(1)
-            .ok_or("Invalid minute")?
-            .parse::<u32>()?;
-        let second = hour_minute_second
+    if let Some(captures) = re.ok()?.captures(date_str) {
+        let month_day = captures.get(1)?.as_str();
+        // If no year input.
+        let year = captures
             .get(2)
-            .ok_or("Invalid second")?
-            .parse::<u32>()?;
+            .map_or(Utc::now().year(), |m| m.as_str().parse().unwrap());
+        // If the user does not enter a specific time, it will be filled with 0
+        let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
 
-        let timestamp = NaiveDateTime::new(
-            month_day_year,
-            NaiveTime::from_hms_opt(hour, minute, second).ok_or("create NaiveTime error")?,
-        )
-        .and_utc()
-        .timestamp_millis();
+        let date_time_str = format!("{}, {} {}", month_day, year, time_str);
+        let datetime = NaiveDateTime::parse_from_str(&date_time_str, "%b %d, %Y %H:%M:%S").ok()?;
+        let utc_datetime = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
 
-        Ok(timestamp)
+        Some(utc_datetime.timestamp_millis())
     } else {
-        Err(From::from(format!(
-            "find: I cannot figure out how to interpret ‘{}’ as a date or time",
-            date_str
-        )))
+        None
+    }
+}
+
+/// This function implements the function of matching substrings of
+/// X and Y from the -newerXY string.
+/// X and Y are constrained to a/B/c/m and t.
+/// such as: "-neweraB" -> Some(a, B) "-neweraD" -> None
+fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
+    let re = Regex::new(r"-newer([aBcmt])([aBcmt])").unwrap();
+    if let Some(captures) = re.captures(input) {
+        let x = captures.get(1)?.as_str().to_string();
+        let y = captures.get(2)?.as_str().to_string();
+        Some((x, y))
+    } else {
+        None
     }
 }
 
@@ -412,8 +412,8 @@ fn build_matcher_tree(
                 let time = args[i + 1];
                 // Convert args to unix timestamps. (expressed in numeric types)
                 let comparable_time = match parse_date_str_to_timestamps(time) {
-                    Ok(timestamp) => timestamp,
-                    Err(_) => {
+                    Some(timestamp) => timestamp,
+                    None => {
                         return Err(From::from(format!(
                             "find: I cannot figure out how to interpret ‘{}’ as a date or time",
                             args[i + 1]
@@ -1235,5 +1235,19 @@ mod tests {
         assert!(not_include_time_date_timestamps
             .to_string()
             .contains("1735689600000"));
+    }
+
+    #[test]
+    fn parse_str_to_newer_args_test() {
+        let eqs = ["a", "B", "c", "m", "t"];
+
+        eqs.iter().for_each(|&x| {
+            eqs.iter().for_each(|&y| {
+                let eq: (String, String) = (String::from(x), String::from(y));
+                let arg =
+                    parse_str_to_newer_args(&format!("-newer{}{}", x, y).to_string()).unwrap();
+                assert_eq!(eq, arg);
+            });
+        });
     }
 }

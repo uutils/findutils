@@ -105,6 +105,13 @@ impl Matcher for NewerTimeMatcher {
 }
 
 impl NewerTimeMatcher {
+    pub fn new(newer_time_type: NewerTimeType, time: i64) -> Self {
+        Self {
+            time,
+            newer_time_type,
+        }
+    }
+
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
         let timestamp = match this_time.duration_since(UNIX_EPOCH) {
@@ -115,13 +122,6 @@ impl NewerTimeMatcher {
         // timestamp.as_millis() return u128 but time is i64
         // This may leave memory implications. :(
         Ok(self.time <= timestamp.as_millis().try_into().unwrap())
-    }
-
-    pub fn new(newer_time_type: NewerTimeType, time: i64) -> Self {
-        Self {
-            time,
-            newer_time_type,
-        }
     }
 }
 
