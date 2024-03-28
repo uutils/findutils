@@ -49,7 +49,7 @@ use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
-use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher, NewerTimeMatcher, NewerTimeType};
+use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionType, NewerTimeMatcher};
 use self::type_matcher::TypeMatcher;
 
 use super::{Config, Dependencies};
@@ -403,10 +403,10 @@ fn build_matcher_tree(
                 // TODO Some code is also needed to bs compatible with different file
                 // systems for file create time.
                 let newer_time_type = match args[i] {
-                    "-newerat" => NewerTimeType::Accessed,
-                    "-newerBt" => NewerTimeType::Birthed,
-                    "-newerct" => NewerTimeType::Changed,
-                    "-newermt" => NewerTimeType::Modified,
+                    "-newerat" => NewerOptionType::Accessed,
+                    "-newerBt" => NewerOptionType::Birthed,
+                    "-newerct" => NewerOptionType::Changed,
+                    "-newermt" => NewerOptionType::Modified,
                     _ => unreachable!("Encountered unexpected value {}", args[i]),
                 };
                 let time = args[i + 1];

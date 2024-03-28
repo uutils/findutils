@@ -61,28 +61,103 @@ impl Matcher for NewerMatcher {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum NewerTimeType {
+pub enum NewerOptionType {
     Accessed,
     Birthed,
     Changed,
     Modified,
 }
 
-impl NewerTimeType {
+impl NewerOptionType {
     fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
         match self {
-            NewerTimeType::Accessed => metadata.accessed(),
-            NewerTimeType::Birthed => metadata.created(),
+            NewerOptionType::Accessed => metadata.accessed(),
+            NewerOptionType::Birthed => metadata.created(),
             // metadata.ctime() only impl in MetadataExt
-            NewerTimeType::Changed => metadata.accessed(),
-            NewerTimeType::Modified => metadata.modified(),
+            NewerOptionType::Changed => metadata.accessed(),
+            NewerOptionType::Modified => metadata.modified(),
+        }
+    }
+}
+
+pub struct NewerOptionMatcher {
+    x_option: NewerOptionType,
+    y_option: NewerOptionType,
+    given_modification_time: SystemTime,
+}
+
+impl NewerOptionMatcher {
+    pub fn new(
+        x_option: NewerOptionType,
+        y_option: NewerOptionType,
+        given_modification_time: SystemTime,
+    ) -> Self {
+        Self {
+            x_option,
+            y_option,
+            given_modification_time,
+        }
+    }
+
+    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+        let x_option_time = self.x_option.get_file_time(file_info.metadata()?)?;
+        let y_option_time = self.y_option.get_file_time(file_info.metadata()?)?;
+
+        Ok(self
+            .given_modification_time
+            .duration_since(x_option_time)
+            .is_err()
+            && self
+                .given_modification_time
+                .duration_since(y_option_time)
+                .is_err())
+    }
+}
+
+impl Matcher for NewerOptionMatcher {
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} and {:?} time for {}: {}",
+                    self.x_option,
+                    self.y_option,
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
         }
     }
 }
 
 pub struct NewerTimeMatcher {
     time: i64,
-    newer_time_type: NewerTimeType,
+    newer_time_type: NewerOptionType,
+}
+
+impl NewerTimeMatcher {
+    pub fn new(newer_time_type: NewerOptionType, time: i64) -> Self {
+        Self {
+            time,
+            newer_time_type,
+        }
+    }
+
+    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+        let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
+        let timestamp = match this_time.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration,
+            Err(e) => e.duration(),
+        };
+
+        // timestamp.as_millis() return u128 but time is i64
+        // This may leave memory implications. :(
+        Ok(self.time <= timestamp.as_millis().try_into().unwrap())
+    }
 }
 
 impl Matcher for NewerTimeMatcher {
@@ -101,27 +176,6 @@ impl Matcher for NewerTimeMatcher {
             }
             Ok(t) => t,
         }
-    }
-}
-
-impl NewerTimeMatcher {
-    pub fn new(newer_time_type: NewerTimeType, time: i64) -> Self {
-        Self {
-            time,
-            newer_time_type,
-        }
-    }
-
-    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
-        let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
-        let timestamp = match this_time.duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(e) => e.duration(),
-        };
-
-        // timestamp.as_millis() return u128 but time is i64
-        // This may leave memory implications. :(
-        Ok(self.time <= timestamp.as_millis().try_into().unwrap())
     }
 }
 
@@ -438,7 +492,7 @@ mod tests {
             .as_millis()
             .try_into()
             .unwrap();
-        let created_matcher = NewerTimeMatcher::new(NewerTimeType::Birthed, before_created_time);
+        let created_matcher = NewerTimeMatcher::new(NewerOptionType::Birthed, before_created_time);
 
         thread::sleep(Duration::from_secs(2));
 
@@ -466,7 +520,8 @@ mod tests {
             .as_millis()
             .try_into()
             .unwrap();
-        let accessed_matcher = NewerTimeMatcher::new(NewerTimeType::Accessed, before_accessed_time);
+        let accessed_matcher =
+            NewerTimeMatcher::new(NewerOptionType::Accessed, before_accessed_time);
 
         thread::sleep(Duration::from_secs(2));
         let mut buffer = [0; 10];
@@ -489,7 +544,8 @@ mod tests {
             .as_millis()
             .try_into()
             .unwrap();
-        let modified_matcher = NewerTimeMatcher::new(NewerTimeType::Modified, before_modified_time);
+        let modified_matcher =
+            NewerTimeMatcher::new(NewerOptionType::Modified, before_modified_time);
 
         thread::sleep(Duration::from_secs(2));
         let mut buffer = [0; 10];
@@ -516,7 +572,7 @@ mod tests {
             .try_into()
             .unwrap();
         let inode_changed_matcher =
-            NewerTimeMatcher::new(NewerTimeType::Changed, before_changed_time);
+            NewerTimeMatcher::new(NewerOptionType::Changed, before_changed_time);
         thread::sleep(Duration::from_secs(2));
 
         // Steps to change inode:
