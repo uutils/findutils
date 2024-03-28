@@ -579,13 +579,7 @@ fn build_matcher_tree(
                         // systems for file create time.
                         if y_option == "t" {
                             let time = args[i + 1];
-                            let newer_time_type = match x_option.as_str() {
-                                "a" => NewerOptionType::Accessed,
-                                "B" => NewerOptionType::Birthed,
-                                "c" => NewerOptionType::Changed,
-                                "m" => NewerOptionType::Modified,
-                                _ => NewerOptionType::Modified,
-                            };
+                            let newer_time_type = NewerOptionType::from_str(x_option.as_str());
                             // Convert args to unix timestamps. (expressed in numeric types)
                             let comparable_time = match parse_date_str_to_timestamps(time) {
                                 Some(timestamp) => timestamp,

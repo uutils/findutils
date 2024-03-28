@@ -60,6 +60,12 @@ impl Matcher for NewerMatcher {
     }
 }
 
+/// `-newerXY` option.
+/// a is meaning Accessed time
+/// B is meaning Birthed time
+/// c is meaning Changed time
+/// m is meaning Modified time
+/// It should be noted that not every file system supports birthed time.
 #[derive(Clone, Copy, Debug)]
 pub enum NewerOptionType {
     Accessed,
@@ -69,6 +75,15 @@ pub enum NewerOptionType {
 }
 
 impl NewerOptionType {
+    pub fn from_str(option: &str) -> Self {
+        match option {
+            "a" => NewerOptionType::Accessed,
+            "B" => NewerOptionType::Birthed,
+            "c" => NewerOptionType::Changed,
+            _ => NewerOptionType::Modified,
+        }
+    }
+
     fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
         match self {
             NewerOptionType::Accessed => metadata.accessed(),
@@ -77,9 +92,12 @@ impl NewerOptionType {
             NewerOptionType::Changed => metadata.accessed(),
             NewerOptionType::Modified => metadata.modified(),
         }
+        .map_err(|e| e.into())
     }
 }
 
+/// This matcher checks whether the file is newer than the file time of any combination of
+/// two comparison types from the target file's `NewerOptionType`.
 pub struct NewerOptionMatcher {
     x_option: NewerOptionType,
     y_option: NewerOptionType,
@@ -93,21 +111,8 @@ impl NewerOptionMatcher {
         path_to_file: &str,
     ) -> Result<Self, Box<dyn Error>> {
         let metadata = fs::metadata(path_to_file)?;
-        let x_option = match x_option.as_str() {
-            "a" => NewerOptionType::Accessed,
-            "B" => NewerOptionType::Birthed,
-            "c" => NewerOptionType::Changed,
-            "m" => NewerOptionType::Modified,
-            _ => NewerOptionType::Modified,
-        };
-
-        let y_option = match y_option.as_str() {
-            "a" => NewerOptionType::Accessed,
-            "B" => NewerOptionType::Birthed,
-            "c" => NewerOptionType::Changed,
-            "m" => NewerOptionType::Modified,
-            _ => NewerOptionType::Modified,
-        };
+        let x_option = NewerOptionType::from_str(x_option.as_str());
+        let y_option = NewerOptionType::from_str(y_option.as_str());
         Ok(Self {
             x_option,
             y_option,
@@ -150,6 +155,8 @@ impl Matcher for NewerOptionMatcher {
     }
 }
 
+/// This matcher checks whether files's accessed|creation|modification time is
+/// newer than the given times.
 pub struct NewerTimeMatcher {
     time: i64,
     newer_time_type: NewerOptionType,
