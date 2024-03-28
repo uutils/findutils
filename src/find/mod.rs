@@ -857,6 +857,28 @@ mod tests {
 
     #[test]
     fn find_newer_xy() {
+        // test all possible X and Y except for the t parameter.
+        let x_options = ["a", "B", "c", "m"];
+        let y_options = ["a", "B", "c", "m"];
+
+        x_options.iter().for_each(|&x| {
+            y_options.iter().for_each(|&y| {
+                let arg = &format!("-newer{}{}", x, y).to_string();
+                let deps = FakeDependencies::new();
+
+                let rc = find_main(
+                    &[
+                        "find",
+                        "./test_data/simple/subdir",
+                        arg,
+                        "./test_data/simple/subdir/ABBBC",
+                    ],
+                    &deps,
+                );
+                assert_eq!(rc, 0);
+            });
+        });
+
         // normal - before the created time
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
         let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];

@@ -600,13 +600,12 @@ fn build_matcher_tree(
                             Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
                         } else {
                             let file_path = args[i + 1];
+                            i += 1;
                             Some(NewerOptionMatcher::new(x_option, y_option, file_path)?.into_box())
                         }
                     }
                     None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
-                };
-
-                return Err(From::from(format!("Unrecognized flag: '{}'", args[i])));
+                }
             }
         };
         if let Some(submatcher) = possible_submatcher {
