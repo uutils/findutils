@@ -114,14 +114,16 @@ fn xargs_max_args() {
 
 #[test]
 fn xargs_max_lines() {
-    Command::cargo_bin("xargs")
-        .expect("found binary")
-        .args(["-L2"])
-        .write_stdin("ab cd\nef\ngh i\n\njkl\n")
-        .assert()
-        .success()
-        .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::diff("ab cd ef\ngh i jkl\n"));
+    for arg in ["-L2", "--max-lines=2"] {
+        Command::cargo_bin("xargs")
+            .expect("found binary")
+            .arg(arg)
+            .write_stdin("ab cd\nef\ngh i\n\njkl\n")
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty())
+            .stdout(predicate::str::diff("ab cd ef\ngh i jkl\n"));
+    }
 }
 
 #[test]
