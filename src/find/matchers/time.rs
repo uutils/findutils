@@ -92,7 +92,6 @@ impl NewerOptionType {
             NewerOptionType::Changed => metadata.accessed(),
             NewerOptionType::Modified => metadata.modified(),
         }
-        .map_err(|e| e.into())
     }
 }
 
