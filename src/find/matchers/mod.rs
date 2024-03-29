@@ -570,13 +570,11 @@ fn build_matcher_tree(
             }
 
             _ => {
-                if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
-                }
                 match parse_str_to_newer_args(args[i]) {
                     Some((x_option, y_option)) => {
-                        // TODO Some code is also needed to bs compatible with different file
-                        // systems for file create time.
+                        if i >= args.len() - 1 {
+                            return Err(From::from(format!("missing argument to {}", args[i])));
+                        }
                         #[cfg(target_os = "linux")]
                         if x_option == "B" {
                             return Err(From::from("find: This system does not provide a way to find the birth time of a file."));
