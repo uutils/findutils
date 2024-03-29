@@ -871,7 +871,6 @@ mod tests {
             y_options.iter().for_each(|&y| {
                 let arg = &format!("-newer{}{}", x, y).to_string();
                 let deps = FakeDependencies::new();
-
                 let rc = find_main(
                     &[
                         "find",
@@ -881,8 +880,28 @@ mod tests {
                     ],
                     &deps,
                 );
+
                 assert_eq!(rc, 0);
             });
+        });
+
+        #[cfg(target_os = "linux")]
+        let y_options = ["a", "c", "m"];
+        #[cfg(target_os = "linux")]
+        y_options.iter().for_each(|&y| {
+            let arg = &format!("-newerB{}", y).to_string();
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &[
+                    "find",
+                    "./test_data/simple/subdir",
+                    arg,
+                    "./test_data/simple/subdir/ABBBC",
+                ],
+                &deps,
+            );
+
+            assert_eq!(rc, 1);
         });
 
         // normal - before the created time
@@ -894,7 +913,6 @@ mod tests {
 
         for (arg, time) in args.iter().zip(times.iter()) {
             let deps = FakeDependencies::new();
-
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
             assert_eq!(rc, 0);
@@ -913,11 +931,24 @@ mod tests {
 
         for (arg, time) in args.iter().zip(times.iter()) {
             let deps = FakeDependencies::new();
-
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
             assert_eq!(rc, 0);
             assert_eq!(deps.get_output_as_string(), "");
+        }
+
+        // Catch a parsing error.
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let times = [""];
+
+        for (arg, time) in args.iter().zip(times.iter()) {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 1);
         }
     }
 }

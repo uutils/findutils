@@ -504,9 +504,47 @@ mod tests {
     }
 
     #[test]
+    fn newer_option_matcher() {
+        #[cfg(target_os = "linux")]
+        let x_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
+        let x_options = ["a", "B", "c", "m"];
+        #[cfg(target_os = "linux")]
+        let y_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
+        let y_options = ["a", "B", "c", "m"];
+
+        for x_option in &x_options {
+            for y_option in &y_options {
+                let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+                let temp_dir_path = temp_dir.path().to_string_lossy();
+                let new_file_name = "newFile";
+                // this has just been created, so should be newer
+                File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
+                let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
+                // this file should already exist
+                let old_file = get_dir_entry_for("test_data", "simple");
+                let deps = FakeDependencies::new();
+                let matcher = NewerOptionMatcher::new(
+                    x_option.to_string(),
+                    y_option.to_string(),
+                    &old_file.path().to_string_lossy(),
+                );
+
+                assert!(
+                    matcher
+                        .unwrap()
+                        .matches(&new_file, &mut deps.new_matcher_io()),
+                    "new_file should be newer than old_dir"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn newer_time_matcher() {
         let deps = FakeDependencies::new();
-        let before_created_time = deps
+        let time = deps
             .new_matcher_io()
             .now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -514,10 +552,10 @@ mod tests {
             .as_millis()
             .try_into()
             .unwrap();
-        let created_matcher = NewerTimeMatcher::new(NewerOptionType::Birthed, before_created_time);
+
+        let created_matcher = NewerTimeMatcher::new(NewerOptionType::Birthed, time);
 
         thread::sleep(Duration::from_secs(2));
-
         let temp_dir = Builder::new()
             .prefix("newer_time_matcher")
             .tempdir()
@@ -534,16 +572,7 @@ mod tests {
         );
 
         // accessed time test
-        let before_accessed_time = deps
-            .new_matcher_io()
-            .now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-            .try_into()
-            .unwrap();
-        let accessed_matcher =
-            NewerTimeMatcher::new(NewerOptionType::Accessed, before_accessed_time);
+        let accessed_matcher = NewerTimeMatcher::new(NewerOptionType::Accessed, time);
 
         thread::sleep(Duration::from_secs(2));
         let mut buffer = [0; 10];
@@ -551,23 +580,13 @@ mod tests {
             let mut file = File::open(&foo_path).expect("open temp file");
             let _ = file.read(&mut buffer);
         }
-
         assert!(
             accessed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
             "file accessed time should after 'before_accessed_time'"
         );
 
         // modified time test
-        let before_modified_time = deps
-            .new_matcher_io()
-            .now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-            .try_into()
-            .unwrap();
-        let modified_matcher =
-            NewerTimeMatcher::new(NewerOptionType::Modified, before_modified_time);
+        let modified_matcher = NewerTimeMatcher::new(NewerOptionType::Modified, time);
 
         thread::sleep(Duration::from_secs(2));
         let mut buffer = [0; 10];
@@ -579,24 +598,14 @@ mod tests {
                 .expect("open temp file");
             let _ = file.write(&mut buffer);
         }
-
         assert!(
             modified_matcher.matches(&file_info, &mut deps.new_matcher_io()),
             "file modified time should after 'before_modified_time'"
         );
 
-        let before_changed_time = deps
-            .new_matcher_io()
-            .now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-            .try_into()
-            .unwrap();
-        let inode_changed_matcher =
-            NewerTimeMatcher::new(NewerOptionType::Changed, before_changed_time);
-        thread::sleep(Duration::from_secs(2));
+        let inode_changed_matcher = NewerTimeMatcher::new(NewerOptionType::Changed, time);
 
+        thread::sleep(Duration::from_secs(2));
         // Steps to change inode:
         // 1. Copy and rename the file
         // 2. Delete the old file
@@ -605,7 +614,6 @@ mod tests {
         let _ = fs::copy("inode_test_file", "new_inode_test_file");
         let _ = fs::remove_file("inode_test_file");
         let _ = fs::rename("new_inode_test_file", "inode_test_file");
-
         assert!(
             inode_changed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
             "file inode changed time should after 'std_time'"

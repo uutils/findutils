@@ -1244,6 +1244,10 @@ mod tests {
         assert!(not_include_time_date_timestamps
             .to_string()
             .contains("1735689600000"));
+
+        // pass if return None
+        let none_date_timestamps = parse_date_str_to_timestamps("");
+        assert_eq!(none_date_timestamps, None);
     }
 
     #[test]
