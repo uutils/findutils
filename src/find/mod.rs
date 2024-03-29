@@ -858,7 +858,13 @@ mod tests {
     #[test]
     fn find_newer_xy() {
         // test all possible X and Y except for the t parameter.
+        #[cfg(target_os = "linux")]
+        let x_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
         let x_options = ["a", "B", "c", "m"];
+        #[cfg(target_os = "linux")]
+        let y_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
         let y_options = ["a", "B", "c", "m"];
 
         x_options.iter().for_each(|&x| {
@@ -880,6 +886,9 @@ mod tests {
         });
 
         // normal - before the created time
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
         let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
 
@@ -896,6 +905,9 @@ mod tests {
         }
 
         // normal - after the created time
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
         let times = ["jan 01, 2037", "jan 01, 2037 00:00:00"];
 

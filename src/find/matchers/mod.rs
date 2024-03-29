@@ -577,6 +577,10 @@ fn build_matcher_tree(
                     Some((x_option, y_option)) => {
                         // TODO Some code is also needed to bs compatible with different file
                         // systems for file create time.
+                        #[cfg(target_os = "linux")]
+                        if x_option == "B" {
+                            return Err(From::from("find: This system does not provide a way to find the birth time of a file."));
+                        }
                         if y_option == "t" {
                             let time = args[i + 1];
                             let newer_time_type = NewerOptionType::from_str(x_option.as_str());
