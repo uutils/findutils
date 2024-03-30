@@ -537,6 +537,21 @@ mod tests {
                         .matches(&new_file, &mut deps.new_matcher_io()),
                     "new_file should be newer than old_dir"
                 );
+
+                // After the file is deleted, DirEntry will point to an empty file location,
+                // thus causing the Matcher to generate an IO error after matching.
+                let _ = fs::remove_file(&*new_file.path().to_string_lossy());
+                let matcher = NewerOptionMatcher::new(
+                    x_option.to_string(),
+                    y_option.to_string(),
+                    &old_file.path().to_string_lossy(),
+                );
+                assert!(
+                    !matcher
+                        .unwrap()
+                        .matches(&new_file, &mut deps.new_matcher_io()),
+                    "The correct situation is that the file reading here cannot be successful."
+                );
             }
         }
     }
@@ -562,13 +577,13 @@ mod tests {
             .unwrap();
         // No easy way to independently set file times. So create it - setting creation time
         let foo_path = temp_dir.path().join("foo");
-        // after "before_created_time" created a file
+        // after "time" created a file
         let _ = File::create(&foo_path).expect("create temp file");
-        // so this file created time should after "before_created_time"
+        // so this file created time should after "time"
         let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
         assert!(
             created_matcher.matches(&file_info, &mut deps.new_matcher_io()),
-            "file created time should after 'before_created_time'"
+            "file created time should after 'time'"
         );
 
         // accessed time test
@@ -582,7 +597,7 @@ mod tests {
         }
         assert!(
             accessed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
-            "file accessed time should after 'before_accessed_time'"
+            "file accessed time should after 'time'"
         );
 
         // modified time test
@@ -600,7 +615,7 @@ mod tests {
         }
         assert!(
             modified_matcher.matches(&file_info, &mut deps.new_matcher_io()),
-            "file modified time should after 'before_modified_time'"
+            "file modified time should after 'time'"
         );
 
         let inode_changed_matcher = NewerTimeMatcher::new(NewerOptionType::Changed, time);
@@ -614,9 +629,28 @@ mod tests {
         let _ = fs::copy("inode_test_file", "new_inode_test_file");
         let _ = fs::remove_file("inode_test_file");
         let _ = fs::rename("new_inode_test_file", "inode_test_file");
+        let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "inode_test_file");
         assert!(
             inode_changed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
             "file inode changed time should after 'std_time'"
         );
+
+        // After the file is deleted, DirEntry will point to an empty file location,
+        // thus causing the Matcher to generate an IO error after matching.
+        let _ = fs::remove_file(&*file_info.path().to_string_lossy());
+
+        let matchers = [
+            &created_matcher,
+            &accessed_matcher,
+            &modified_matcher,
+            &inode_changed_matcher,
+        ];
+
+        for matcher in &matchers {
+            assert!(
+                !matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                "The correct situation is that the file reading here cannot be successful."
+            );
+        }
     }
 }
