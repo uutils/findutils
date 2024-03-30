@@ -856,7 +856,7 @@ mod tests {
     }
 
     #[test]
-    fn find_newer_xy() {
+    fn test_find_newer_xy_all_args() {
         // test all possible X and Y except for the t parameter.
         #[cfg(target_os = "linux")]
         let x_options = ["a", "c", "m"];
@@ -884,10 +884,12 @@ mod tests {
                 assert_eq!(rc, 0);
             });
         });
+    }
 
-        #[cfg(target_os = "linux")]
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_find_newer_xy_have_not_birthed_time_filesystem() {
         let y_options = ["a", "c", "m"];
-        #[cfg(target_os = "linux")]
         y_options.iter().for_each(|&y| {
             let arg = &format!("-newerB{}", y).to_string();
             let deps = FakeDependencies::new();
@@ -903,7 +905,10 @@ mod tests {
 
             assert_eq!(rc, 1);
         });
+    }
 
+    #[test]
+    fn test_find_newer_xy_before_created_time() {
         // normal - before the created time
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
@@ -921,7 +926,10 @@ mod tests {
                 fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"),
             );
         }
+    }
 
+    #[test]
+    fn test_find_newer_xy_after_created_time() {
         // normal - after the created time
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
@@ -936,7 +944,10 @@ mod tests {
             assert_eq!(rc, 0);
             assert_eq!(deps.get_output_as_string(), "");
         }
+    }
 
+    #[test]
+    fn test_find_newer_xy_error_path() {
         // Catch a parsing error.
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
