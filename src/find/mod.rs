@@ -935,7 +935,7 @@ mod tests {
         let args = ["-newerat", "-newerct", "-newermt"];
         #[cfg(not(target_os = "linux"))]
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
-        let times = ["jan 01, 2037", "jan 01, 2037 00:00:00"];
+        let times = ["jan 01, 2037", "jan 01, 2037 00:00:00", ""];
 
         for (arg, time) in args.iter().zip(times.iter()) {
             let deps = FakeDependencies::new();
@@ -947,19 +947,19 @@ mod tests {
     }
 
     #[test]
-    fn test_find_newer_xy_error_path() {
+    fn test_find_newer_xy_error_time() {
         // Catch a parsing error.
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
         #[cfg(not(target_os = "linux"))]
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
-        let times = [""];
+        let time = "2037, jan 01";
 
-        for (arg, time) in args.iter().zip(times.iter()) {
+        args.iter().for_each(|&arg| {
             let deps = FakeDependencies::new();
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
             assert_eq!(rc, 1);
-        }
+        });
     }
 }

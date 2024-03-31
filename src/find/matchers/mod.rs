@@ -266,22 +266,25 @@ fn convert_arg_to_comparable_value_and_suffix(
 /// When (time) is not provided, it will be automatically filled in as 00:00:00
 /// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
 fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
-    let regex_pattern = r"^(\w{3} \d{2})(?:, (\d{4}))?(?: (\d{2}:\d{2}:\d{2}))?$";
+    let regex_pattern = r"^(?:(\w{3} \d{2}))?(?:, (\d{4}))?(?: (\d{2}:\d{2}:\d{2}))?$";
     let re = Regex::new(regex_pattern);
 
     if let Some(captures) = re.ok()?.captures(date_str) {
-        let month_day = captures.get(1)?.as_str();
+        let now = Utc::now();
+        let month_day = captures
+            .get(1)
+            .map_or(format!("{} {}", now.format("%b"), now.format("%d")), |m| {
+                m.as_str().to_string()
+            });
         // If no year input.
         let year = captures
             .get(2)
-            .map_or(Utc::now().year(), |m| m.as_str().parse().unwrap());
+            .map_or(now.year(), |m| m.as_str().parse().unwrap());
         // If the user does not enter a specific time, it will be filled with 0
         let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
-
         let date_time_str = format!("{}, {} {}", month_day, year, time_str);
         let datetime = NaiveDateTime::parse_from_str(&date_time_str, "%b %d, %Y %H:%M:%S").ok()?;
         let utc_datetime = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
-
         Some(utc_datetime.timestamp_millis())
     } else {
         None
@@ -1245,9 +1248,15 @@ mod tests {
             .to_string()
             .contains("1735689600000"));
 
-        // pass if return None
+        // pass if return current time.
         let none_date_timestamps = parse_date_str_to_timestamps("");
-        assert_eq!(none_date_timestamps, None);
+        let now_but_zero_hour_min_sec = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp_millis();
+        assert_eq!(none_date_timestamps, Some(now_but_zero_hour_min_sec));
     }
 
     #[test]
