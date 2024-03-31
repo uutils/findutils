@@ -430,29 +430,52 @@ fn xargs_zero_lines() {
 fn xargs_replace() {
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(["-I", "{}", "echo", "{} bar"])
+        .args(["-i={}", "echo", "{} bar"])
         .write_stdin("foo")
         .assert()
         .stdout(predicate::str::contains("foo bar"));
 
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(["-I", "_", "echo", "_ bar"])
+        .args(["-i=_", "echo", "_ bar"])
         .write_stdin("foo")
         .assert()
         .stdout(predicate::str::contains("foo bar"));
 
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(["--replace", "_", "echo", "_ _ bar"])
+        .args(["--replace=_", "echo", "_ _ bar"])
         .write_stdin("foo")
         .assert()
         .stdout(predicate::str::contains("foo foo bar"));
 
     Command::cargo_bin("xargs")
         .expect("found binary")
-        .args(["-i", "_", "echo", "_ _ bar"])
+        .args(["-i=_", "echo", "_ _ bar"])
         .write_stdin("foo")
         .assert()
         .stdout(predicate::str::contains("foo foo bar"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-i", "echo", "{} {} bar"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("foo foo bar"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-I={}", "echo", "{} bar {}"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("foo bar foo"));
+
+    // Excepted to fail
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-I", "echo", "_ _ bar"])
+        .write_stdin("foo")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Error: Command not found"));
 }

@@ -29,6 +29,7 @@ mod options {
     pub const NO_RUN_IF_EMPTY: &str = "no-run-if-empty";
     pub const NULL: &str = "null";
     pub const REPLACE: &str = "replace";
+    pub const REPLACE_I: &str = "replace-I";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -842,24 +843,30 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         )
         .arg(
             Arg::new(options::VERBOSE)
-            .short('t')
-            .long(options::VERBOSE)
-            .help("Be verbose")
-            .action(ArgAction::SetTrue),
+                .short('t')
+                .long(options::VERBOSE)
+                .help("Be verbose")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REPLACE)
                 .long(options::REPLACE)
-                .short('I')
-                .short_alias('i')
+                .short('i')
                 .num_args(0..=1)
+                .require_equals(true)
                 .value_parser(clap::value_parser!(String))
                 .help(
                     "Replace R in INITIAL-ARGS with names read from standard input; \
                     if R is unspecified, assume {}",
                 ),
         )
-
+        .arg(
+            Arg::new(options::REPLACE_I)
+                .short('I')
+                .num_args(1)
+                .hide(true)
+                .value_parser(clap::value_parser!(String)),
+        )
         .try_get_matches_from(args);
 
     let matches = match matches {
@@ -878,16 +885,16 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         max_lines: matches.get_one::<usize>(options::MAX_LINES).copied(),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
-        replace: if matches.contains_id(options::REPLACE) {
-            Some(
-                matches
-                    .get_one::<String>(options::REPLACE)
-                    .map(|value| value.to_owned())
-                    .unwrap_or("{}".to_string()),
-            )
-        } else {
-            None
-        },
+        replace: [options::REPLACE, options::REPLACE_I]
+            .iter()
+            .find_map(|&option| {
+                matches.contains_id(option).then(|| {
+                    matches
+                        .get_one::<String>(option)
+                        .map(|value| value.to_owned())
+                        .unwrap_or_else(|| "{}".to_string())
+                })
+            }),
         verbose: matches.get_flag(options::VERBOSE),
     };
 
