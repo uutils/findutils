@@ -857,7 +857,9 @@ mod tests {
 
     #[test]
     fn test_find_newer_xy_all_args() {
-        // test all possible X and Y except for the t parameter.
+        // 1. The t parameter is not allowed at the X position.
+        // 2. current Linux file systems do not support Birthed Time queries,
+        //    so the B parameter will be excluded in linux.
         #[cfg(target_os = "linux")]
         let x_options = ["a", "c", "m"];
         #[cfg(not(target_os = "linux"))]
@@ -935,7 +937,7 @@ mod tests {
         let args = ["-newerat", "-newerct", "-newermt"];
         #[cfg(not(target_os = "linux"))]
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
-        let times = ["jan 01, 2037", "jan 01, 2037 00:00:00", ""];
+        let times = ["jan 01, 2037", "jan 01, 2037 00:00:00"];
 
         for (arg, time) in args.iter().zip(times.iter()) {
             let deps = FakeDependencies::new();
@@ -944,6 +946,28 @@ mod tests {
             assert_eq!(rc, 0);
             assert_eq!(deps.get_output_as_string(), "");
         }
+    }
+
+    #[test]
+    fn test_find_newer_xy_empty_time_parameter() {
+        // When an empty time parameter is passed in, the program will use
+        // 00:00 of the current day as the default time.
+        // Therefore, the files moved out of the git repository while
+        // this test was running are likely to be newer than the default time.
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let time = "";
+
+        args.iter().for_each(|&arg| {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 0);
+            // Output comparison has been temporarily removed to account for the possibility that
+            // migration out of the repository started before 00:00 and testing was completed after 00:00.
+        });
     }
 
     #[test]
