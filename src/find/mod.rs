@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn test_find_newer_xy_all_args() {
         // 1. The t parameter is not allowed at the X position.
-        // 2. current Linux file systems do not support Birthed Time queries,
+        // 2. Current Linux filesystem do not support Birthed Time queries,
         //    so the B parameter will be excluded in linux.
         #[cfg(target_os = "linux")]
         let x_options = ["a", "c", "m"];
@@ -950,9 +950,9 @@ mod tests {
 
     #[test]
     fn test_find_newer_xy_empty_time_parameter() {
-        // When an empty time parameter is passed in, the program will use
-        // 00:00 of the current day as the default time.
-        // Therefore, the files moved out of the git repository while
+        // When an empty time parameter is passed in,
+        // the program will use 00:00 of the current day as the default time.
+        // Therefore, the files checkout of the git repository while
         // this test was running are likely to be newer than the default time.
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
