@@ -266,7 +266,8 @@ fn convert_arg_to_comparable_value_and_suffix(
 /// When (time) is not provided, it will be automatically filled in as 00:00:00
 /// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
 fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
-    let regex_pattern = r"^(?:(\w{3} \d{2}))?(?:, (\d{4}))?(?: (\d{2}:\d{2}:\d{2}))?$";
+    let regex_pattern =
+        r#"^(?P<month_day>\w{3} \d{2})?(?:, (?P<year>\d{4}))?(?: (?P<time>\d{2}:\d{2}:\d{2}))?$"#;
     let re = Regex::new(regex_pattern);
 
     if let Some(captures) = re.ok()?.captures(date_str) {
