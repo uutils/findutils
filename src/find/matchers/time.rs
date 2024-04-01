@@ -588,8 +588,6 @@ mod tests {
 
         // accessed time test
         let accessed_matcher = NewerTimeMatcher::new(NewerOptionType::Accessed, time);
-
-        thread::sleep(Duration::from_secs(2));
         let mut buffer = [0; 10];
         {
             let mut file = File::open(&foo_path).expect("open temp file");
@@ -602,8 +600,6 @@ mod tests {
 
         // modified time test
         let modified_matcher = NewerTimeMatcher::new(NewerOptionType::Modified, time);
-
-        thread::sleep(Duration::from_secs(2));
         let mut buffer = [0; 10];
         {
             let mut file = OpenOptions::new()
@@ -619,8 +615,6 @@ mod tests {
         );
 
         let inode_changed_matcher = NewerTimeMatcher::new(NewerOptionType::Changed, time);
-
-        thread::sleep(Duration::from_secs(2));
         // Steps to change inode:
         // 1. Copy and rename the file
         // 2. Delete the old file
