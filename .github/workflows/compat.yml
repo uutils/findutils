@@ -38,14 +38,16 @@ jobs:
     - name: Extract testing info
       shell: bash
       run: |
-    - uses: actions/upload-artifact@v4
+    - name: Upload gnu-test-report
+      uses: actions/upload-artifact@v4
       with:
         name: gnu-test-report
         path: |
           findutils.gnu/find/testsuite/*.log
           findutils.gnu/xargs/testsuite/*.log
           findutils.gnu/tests/**/*.log
-    - uses: actions/upload-artifact@v4
+    - name: Upload gnu-result
+      uses: actions/upload-artifact@v4
       with:
         name: gnu-result
         path: gnu-result.json
@@ -108,11 +110,13 @@ jobs:
       run: |
         cd findutils
         bash util/build-bfs.sh ||:
-    - uses: actions/upload-artifact@v4
+    - name: Upload bfs-test-report
+      uses: actions/upload-artifact@v4
       with:
         name: bfs-test-report
         path: bfs/tests.log
-    - uses: actions/upload-artifact@v4
+    - name: Upload bfs-result
+      uses: actions/upload-artifact@v4
       with:
         name: bfs-result
         path: bfs-result.json
