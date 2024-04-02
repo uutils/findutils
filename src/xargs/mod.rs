@@ -888,7 +888,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         max_lines: matches.get_one::<usize>(options::MAX_LINES).copied(),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
-        replace: [options::REPLACE, options::REPLACE_I]
+        replace: [options::REPLACE_I, options::REPLACE]
             .iter()
             .find_map(|&option| {
                 matches.contains_id(option).then(|| {

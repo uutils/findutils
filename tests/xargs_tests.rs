@@ -478,6 +478,21 @@ fn xargs_replace() {
         .assert()
         .stdout(predicate::str::contains("foo bar foo"));
 
+    // other order
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-i", "-I=_", "echo", "{} bar {}"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("{} bar {}"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-i", "-I", "_", "echo", "{} bar _"])
+        .write_stdin("foo")
+        .assert()
+        .stdout(predicate::str::contains("{} bar foo"));
+
     // Expected to fail
     Command::cargo_bin("xargs")
         .expect("found binary")
