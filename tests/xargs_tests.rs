@@ -478,7 +478,7 @@ fn xargs_replace() {
         .assert()
         .stdout(predicate::str::contains("foo bar foo"));
 
-    // Excepted to fail
+    // Expected to fail
     Command::cargo_bin("xargs")
         .expect("found binary")
         .args(["-I", "echo", "_ _ bar"])

@@ -855,6 +855,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .num_args(0..=1)
                 .require_equals(true)
                 .value_parser(clap::value_parser!(String))
+                .value_name("R")
                 .help(
                     "Replace R in INITIAL-ARGS with names read from standard input; \
                     if R is unspecified, assume {}",
@@ -864,7 +865,9 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::REPLACE_I)
                 .short('I')
                 .num_args(1)
-                .hide(true)
+                .help("same as --replace=R")
+                .value_name("R")
+                .overrides_with(options::REPLACE)
                 .value_parser(clap::value_parser!(String)),
         )
         .try_get_matches_from(args);
