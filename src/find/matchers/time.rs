@@ -570,7 +570,7 @@ mod tests {
 
         let created_matcher = NewerTimeMatcher::new(NewerOptionType::Birthed, time);
 
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_millis(100));
         let temp_dir = Builder::new()
             .prefix("newer_time_matcher")
             .tempdir()
