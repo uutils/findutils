@@ -18,7 +18,7 @@ jobs:
           rustup default stable
 
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
-      - uses: KyleMayes/install-llvm-action@v1
+      - uses: KyleMayes/install-llvm-action@v2
         if: matrix.os == 'windows-latest'
         with:
           version: "11.0"
@@ -45,7 +45,7 @@ jobs:
           rustup default stable
 
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
-      - uses: KyleMayes/install-llvm-action@v1
+      - uses: KyleMayes/install-llvm-action@v2
         if: matrix.os == 'windows-latest'
         with:
           version: "11.0"
