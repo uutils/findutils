@@ -526,8 +526,8 @@ mod tests {
                 let old_file = get_dir_entry_for("test_data", "simple");
                 let deps = FakeDependencies::new();
                 let matcher = NewerOptionMatcher::new(
-                    x_option.to_string(),
-                    y_option.to_string(),
+                    (*x_option).to_string(),
+                    (*y_option).to_string(),
                     &old_file.path().to_string_lossy(),
                 );
 
@@ -542,8 +542,8 @@ mod tests {
                 // thus causing the Matcher to generate an IO error after matching.
                 let _ = fs::remove_file(&*new_file.path().to_string_lossy());
                 let matcher = NewerOptionMatcher::new(
-                    x_option.to_string(),
-                    y_option.to_string(),
+                    (*x_option).to_string(),
+                    (*y_option).to_string(),
                     &old_file.path().to_string_lossy(),
                 );
                 assert!(
