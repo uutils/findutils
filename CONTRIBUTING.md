@@ -2,7 +2,7 @@
 
 # Contributing to findutils
 
-Hi! Welcome to uutils/findutilsutils!
+Hi! Welcome to uutils/findutils!
 
 Thanks for wanting to contribute to this project! This document explains
 everything you need to know to contribute. Before you start make sure to also
