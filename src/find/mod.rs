@@ -869,9 +869,9 @@ mod tests {
         #[cfg(not(target_os = "linux"))]
         let y_options = ["a", "B", "c", "m"];
 
-        x_options.iter().for_each(|&x| {
-            y_options.iter().for_each(|&y| {
-                let arg = &format!("-newer{}{}", x, y).to_string();
+        for &x in x_options.iter() {
+            for &y in &y_options {
+                let arg = &format!("-newer{x}{y}").to_string();
                 let deps = FakeDependencies::new();
                 let rc = find_main(
                     &[
@@ -884,16 +884,16 @@ mod tests {
                 );
 
                 assert_eq!(rc, 0);
-            });
-        });
+            }
+        }
     }
 
     #[test]
     #[cfg(target_os = "linux")]
     fn test_find_newer_xy_have_not_birthed_time_filesystem() {
         let y_options = ["a", "c", "m"];
-        y_options.iter().for_each(|&y| {
-            let arg = &format!("-newerB{}", y).to_string();
+        for &y in &y_options {
+            let arg = &format!("-newerB{y}").to_string();
             let deps = FakeDependencies::new();
             let rc = find_main(
                 &[
@@ -906,7 +906,7 @@ mod tests {
             );
 
             assert_eq!(rc, 1);
-        });
+        }
     }
 
     #[test]
@@ -960,14 +960,14 @@ mod tests {
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
         let time = "";
 
-        args.iter().for_each(|&arg| {
+        for &arg in &args {
             let deps = FakeDependencies::new();
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
             assert_eq!(rc, 0);
             // Output comparison has been temporarily removed to account for the possibility that
             // migration out of the repository started before 00:00 and testing was completed after 00:00.
-        });
+        }
     }
 
     #[test]
@@ -979,11 +979,11 @@ mod tests {
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
         let time = "2037, jan 01";
 
-        args.iter().for_each(|&arg| {
+        for &arg in &args {
             let deps = FakeDependencies::new();
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
             assert_eq!(rc, 1);
-        });
+        }
     }
 }

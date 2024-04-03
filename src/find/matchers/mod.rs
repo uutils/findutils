@@ -267,7 +267,7 @@ fn convert_arg_to_comparable_value_and_suffix(
 /// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
 fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
     let regex_pattern =
-        r#"^(?P<month_day>\w{3} \d{2})?(?:, (?P<year>\d{4}))?(?: (?P<time>\d{2}:\d{2}:\d{2}))?$"#;
+        r"^(?P<month_day>\w{3} \d{2})?(?:, (?P<year>\d{4}))?(?: (?P<time>\d{2}:\d{2}:\d{2}))?$";
     let re = Regex::new(regex_pattern);
 
     if let Some(captures) = re.ok()?.captures(date_str) {
@@ -283,7 +283,7 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
             .map_or(now.year(), |m| m.as_str().parse().unwrap());
         // If the user does not enter a specific time, it will be filled with 0
         let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
-        let date_time_str = format!("{}, {} {}", month_day, year, time_str);
+        let date_time_str = format!("{month_day}, {year} {time_str}");
         let datetime = NaiveDateTime::parse_from_str(&date_time_str, "%b %d, %Y %H:%M:%S").ok()?;
         let utc_datetime = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
         Some(utc_datetime.timestamp_millis())
@@ -1265,13 +1265,12 @@ mod tests {
         let x_options = ["a", "B", "c", "m"];
         let y_options = ["a", "B", "c", "m", "t"];
 
-        x_options.iter().for_each(|&x| {
-            y_options.iter().for_each(|&y| {
+        for &x in x_options.iter() {
+            for &y in &y_options {
                 let eq: (String, String) = (String::from(x), String::from(y));
-                let arg =
-                    parse_str_to_newer_args(&format!("-newer{}{}", x, y).to_string()).unwrap();
+                let arg = parse_str_to_newer_args(&format!("-newer{x}{y}").to_string()).unwrap();
                 assert_eq!(eq, arg);
-            });
-        });
+            }
+        }
     }
 }
