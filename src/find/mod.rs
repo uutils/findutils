@@ -854,4 +854,136 @@ mod tests {
             fix_up_slashes("./test_data/simple\n"),
         );
     }
+
+    #[test]
+    fn test_find_newer_xy_all_args() {
+        // 1. The t parameter is not allowed at the X position.
+        // 2. Current Linux filesystem do not support Birthed Time queries,
+        //    so the B parameter will be excluded in linux.
+        #[cfg(target_os = "linux")]
+        let x_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
+        let x_options = ["a", "B", "c", "m"];
+        #[cfg(target_os = "linux")]
+        let y_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
+        let y_options = ["a", "B", "c", "m"];
+
+        x_options.iter().for_each(|&x| {
+            y_options.iter().for_each(|&y| {
+                let arg = &format!("-newer{}{}", x, y).to_string();
+                let deps = FakeDependencies::new();
+                let rc = find_main(
+                    &[
+                        "find",
+                        "./test_data/simple/subdir",
+                        arg,
+                        "./test_data/simple/subdir/ABBBC",
+                    ],
+                    &deps,
+                );
+
+                assert_eq!(rc, 0);
+            });
+        });
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_find_newer_xy_have_not_birthed_time_filesystem() {
+        let y_options = ["a", "c", "m"];
+        y_options.iter().for_each(|&y| {
+            let arg = &format!("-newerB{}", y).to_string();
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &[
+                    "find",
+                    "./test_data/simple/subdir",
+                    arg,
+                    "./test_data/simple/subdir/ABBBC",
+                ],
+                &deps,
+            );
+
+            assert_eq!(rc, 1);
+        });
+    }
+
+    #[test]
+    fn test_find_newer_xy_before_created_time() {
+        // normal - before the created time
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
+
+        for (arg, time) in args.iter().zip(times.iter()) {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 0);
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"),
+            );
+        }
+    }
+
+    #[test]
+    fn test_find_newer_xy_after_created_time() {
+        // normal - after the created time
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let times = ["jan 01, 2037", "jan 01, 2037 00:00:00"];
+
+        for (arg, time) in args.iter().zip(times.iter()) {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 0);
+            assert_eq!(deps.get_output_as_string(), "");
+        }
+    }
+
+    #[test]
+    fn test_find_newer_xy_empty_time_parameter() {
+        // When an empty time parameter is passed in,
+        // the program will use 00:00 of the current day as the default time.
+        // Therefore, the files checkout of the git repository while
+        // this test was running are likely to be newer than the default time.
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let time = "";
+
+        args.iter().for_each(|&arg| {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 0);
+            // Output comparison has been temporarily removed to account for the possibility that
+            // migration out of the repository started before 00:00 and testing was completed after 00:00.
+        });
+    }
+
+    #[test]
+    fn test_find_newer_xy_error_time() {
+        // Catch a parsing error.
+        #[cfg(target_os = "linux")]
+        let args = ["-newerat", "-newerct", "-newermt"];
+        #[cfg(not(target_os = "linux"))]
+        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let time = "2037, jan 01";
+
+        args.iter().for_each(|&arg| {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+            assert_eq!(rc, 1);
+        });
+    }
 }

@@ -25,6 +25,7 @@ mod time;
 mod type_matcher;
 
 use ::regex::Regex;
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -48,7 +49,10 @@ use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
-use self::time::{FileTimeMatcher, FileTimeType, NewerMatcher};
+use self::time::{
+    FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher, NewerOptionType,
+    NewerTimeMatcher,
+};
 use self::type_matcher::TypeMatcher;
 
 use super::{Config, Dependencies};
@@ -253,6 +257,54 @@ fn convert_arg_to_comparable_value_and_suffix(
         "Expected a decimal integer (with optional + or - prefix) and \
          (optional suffix) argument to {option_name}, but got `{value_as_string}'"
     )))
+}
+
+/// This is a function that converts a specific string format into a timestamp.
+/// It allows converting a time string of
+/// "(week abbreviation) (date), (year) (time)" to a Unix timestamp.
+/// such as: "jan 01, 2025 00:00:01" -> 1735689601000
+/// When (time) is not provided, it will be automatically filled in as 00:00:00
+/// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
+fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
+    let regex_pattern =
+        r#"^(?P<month_day>\w{3} \d{2})?(?:, (?P<year>\d{4}))?(?: (?P<time>\d{2}:\d{2}:\d{2}))?$"#;
+    let re = Regex::new(regex_pattern);
+
+    if let Some(captures) = re.ok()?.captures(date_str) {
+        let now = Utc::now();
+        let month_day = captures
+            .get(1)
+            .map_or(format!("{} {}", now.format("%b"), now.format("%d")), |m| {
+                m.as_str().to_string()
+            });
+        // If no year input.
+        let year = captures
+            .get(2)
+            .map_or(now.year(), |m| m.as_str().parse().unwrap());
+        // If the user does not enter a specific time, it will be filled with 0
+        let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
+        let date_time_str = format!("{}, {} {}", month_day, year, time_str);
+        let datetime = NaiveDateTime::parse_from_str(&date_time_str, "%b %d, %Y %H:%M:%S").ok()?;
+        let utc_datetime = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
+        Some(utc_datetime.timestamp_millis())
+    } else {
+        None
+    }
+}
+
+/// This function implements the function of matching substrings of
+/// X and Y from the -newerXY string.
+/// X and Y are constrained to a/B/c/m and t.
+/// such as: "-neweraB" -> Some(a, B) "-neweraD" -> None
+fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
+    let re = Regex::new(r"-newer([aBcm])([aBcmt])").unwrap();
+    if let Some(captures) = re.captures(input) {
+        let x = captures.get(1)?.as_str().to_string();
+        let y = captures.get(2)?.as_str().to_string();
+        Some((x, y))
+    } else {
+        None
+    }
 }
 
 /// The main "translate command-line args into a matcher" function. Will call
@@ -521,7 +573,40 @@ fn build_matcher_tree(
                 None
             }
 
-            _ => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
+            _ => {
+                match parse_str_to_newer_args(args[i]) {
+                    Some((x_option, y_option)) => {
+                        if i >= args.len() - 1 {
+                            return Err(From::from(format!("missing argument to {}", args[i])));
+                        }
+                        #[cfg(target_os = "linux")]
+                        if x_option == "B" {
+                            return Err(From::from("find: This system does not provide a way to find the birth time of a file."));
+                        }
+                        if y_option == "t" {
+                            let time = args[i + 1];
+                            let newer_time_type = NewerOptionType::from_str(x_option.as_str());
+                            // Convert args to unix timestamps. (expressed in numeric types)
+                            let comparable_time = match parse_date_str_to_timestamps(time) {
+                                Some(timestamp) => timestamp,
+                                None => {
+                                    return Err(From::from(format!(
+                                        "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                                        args[i + 1]
+                                    )))
+                                }
+                            };
+                            i += 1;
+                            Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
+                        } else {
+                            let file_path = args[i + 1];
+                            i += 1;
+                            Some(NewerOptionMatcher::new(x_option, y_option, file_path)?.into_box())
+                        }
+                    }
+                    None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
+                }
+            }
         };
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
@@ -1151,5 +1236,42 @@ mod tests {
         } else {
             panic!("-perm with no mode pattern should fail");
         }
+    }
+
+    #[test]
+    fn parse_date_str_to_timestamps_test() {
+        let full_date_timestamps = parse_date_str_to_timestamps("jan 01, 2025 00:00:01").unwrap();
+        assert!(full_date_timestamps.to_string().contains("1735689601000"));
+
+        let not_include_time_date_timestamps =
+            parse_date_str_to_timestamps("jan 01, 2025").unwrap();
+        assert!(not_include_time_date_timestamps
+            .to_string()
+            .contains("1735689600000"));
+
+        // pass if return current time.
+        let none_date_timestamps = parse_date_str_to_timestamps("");
+        let now_but_zero_hour_min_sec = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp_millis();
+        assert_eq!(none_date_timestamps, Some(now_but_zero_hour_min_sec));
+    }
+
+    #[test]
+    fn parse_str_to_newer_args_test() {
+        let x_options = ["a", "B", "c", "m"];
+        let y_options = ["a", "B", "c", "m", "t"];
+
+        x_options.iter().for_each(|&x| {
+            y_options.iter().for_each(|&y| {
+                let eq: (String, String) = (String::from(x), String::from(y));
+                let arg =
+                    parse_str_to_newer_args(&format!("-newer{}{}", x, y).to_string()).unwrap();
+                assert_eq!(eq, arg);
+            });
+        });
     }
 }

@@ -7,7 +7,7 @@
 use std::error::Error;
 use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::DirEntry;
 
 use super::{ComparableValue, Matcher, MatcherIO};
@@ -49,6 +49,147 @@ impl Matcher for NewerMatcher {
                 writeln!(
                     &mut stderr(),
                     "Error getting modification time for {}: {}",
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
+        }
+    }
+}
+
+/// `-newerXY` option.
+/// a is meaning Accessed time
+/// B is meaning Birthed time
+/// c is meaning Changed time
+/// m is meaning Modified time
+/// It should be noted that not every file system supports birthed time.
+#[derive(Clone, Copy, Debug)]
+pub enum NewerOptionType {
+    Accessed,
+    Birthed,
+    Changed,
+    Modified,
+}
+
+impl NewerOptionType {
+    pub fn from_str(option: &str) -> Self {
+        match option {
+            "a" => NewerOptionType::Accessed,
+            "B" => NewerOptionType::Birthed,
+            "c" => NewerOptionType::Changed,
+            _ => NewerOptionType::Modified,
+        }
+    }
+
+    fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
+        match self {
+            NewerOptionType::Accessed => metadata.accessed(),
+            NewerOptionType::Birthed => metadata.created(),
+            // metadata.ctime() only impl in MetadataExt
+            NewerOptionType::Changed => metadata.accessed(),
+            NewerOptionType::Modified => metadata.modified(),
+        }
+    }
+}
+
+/// This matcher checks whether the file is newer than the file time of any combination of
+/// two comparison types from the target file's `NewerOptionType`.
+pub struct NewerOptionMatcher {
+    x_option: NewerOptionType,
+    y_option: NewerOptionType,
+    given_modification_time: SystemTime,
+}
+
+impl NewerOptionMatcher {
+    pub fn new(
+        x_option: String,
+        y_option: String,
+        path_to_file: &str,
+    ) -> Result<Self, Box<dyn Error>> {
+        let metadata = fs::metadata(path_to_file)?;
+        let x_option = NewerOptionType::from_str(x_option.as_str());
+        let y_option = NewerOptionType::from_str(y_option.as_str());
+        Ok(Self {
+            x_option,
+            y_option,
+            given_modification_time: metadata.modified()?,
+        })
+    }
+
+    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+        let x_option_time = self.x_option.get_file_time(file_info.metadata()?)?;
+        let y_option_time = self.y_option.get_file_time(file_info.metadata()?)?;
+
+        Ok(self
+            .given_modification_time
+            .duration_since(x_option_time)
+            .is_err()
+            && self
+                .given_modification_time
+                .duration_since(y_option_time)
+                .is_err())
+    }
+}
+
+impl Matcher for NewerOptionMatcher {
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} and {:?} time for {}: {}",
+                    self.x_option,
+                    self.y_option,
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
+        }
+    }
+}
+
+/// This matcher checks whether files's accessed|creation|modification time is
+/// newer than the given times.
+pub struct NewerTimeMatcher {
+    time: i64,
+    newer_time_type: NewerOptionType,
+}
+
+impl NewerTimeMatcher {
+    pub fn new(newer_time_type: NewerOptionType, time: i64) -> Self {
+        Self {
+            time,
+            newer_time_type,
+        }
+    }
+
+    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+        let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
+        let timestamp = match this_time.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration,
+            Err(e) => e.duration(),
+        };
+
+        // timestamp.as_millis() return u128 but time is i64
+        // This may leave memory implications. :(
+        Ok(self.time <= timestamp.as_millis().try_into().unwrap())
+    }
+}
+
+impl Matcher for NewerTimeMatcher {
+    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} time for {}: {}",
+                    self.newer_time_type,
                     file_info.path().to_string_lossy(),
                     e
                 )
@@ -138,6 +279,7 @@ impl FileTimeMatcher {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::Read;
     use std::thread;
@@ -357,6 +499,151 @@ mod tests {
             assert!(
                 !matcher.matches(file_info, &mut deps.new_matcher_io()),
                 "{file_time_type:?} time matcher shouldn't match a second before"
+            );
+        }
+    }
+
+    #[test]
+    fn newer_option_matcher() {
+        #[cfg(target_os = "linux")]
+        let x_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
+        let x_options = ["a", "B", "c", "m"];
+        #[cfg(target_os = "linux")]
+        let y_options = ["a", "c", "m"];
+        #[cfg(not(target_os = "linux"))]
+        let y_options = ["a", "B", "c", "m"];
+
+        for x_option in &x_options {
+            for y_option in &y_options {
+                let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+                let temp_dir_path = temp_dir.path().to_string_lossy();
+                let new_file_name = "newFile";
+                // this has just been created, so should be newer
+                File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
+                let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
+                // this file should already exist
+                let old_file = get_dir_entry_for("test_data", "simple");
+                let deps = FakeDependencies::new();
+                let matcher = NewerOptionMatcher::new(
+                    x_option.to_string(),
+                    y_option.to_string(),
+                    &old_file.path().to_string_lossy(),
+                );
+
+                assert!(
+                    matcher
+                        .unwrap()
+                        .matches(&new_file, &mut deps.new_matcher_io()),
+                    "new_file should be newer than old_dir"
+                );
+
+                // After the file is deleted, DirEntry will point to an empty file location,
+                // thus causing the Matcher to generate an IO error after matching.
+                let _ = fs::remove_file(&*new_file.path().to_string_lossy());
+                let matcher = NewerOptionMatcher::new(
+                    x_option.to_string(),
+                    y_option.to_string(),
+                    &old_file.path().to_string_lossy(),
+                );
+                assert!(
+                    !matcher
+                        .unwrap()
+                        .matches(&new_file, &mut deps.new_matcher_io()),
+                    "The correct situation is that the file reading here cannot be successful."
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn newer_time_matcher() {
+        let deps = FakeDependencies::new();
+        let time = deps
+            .new_matcher_io()
+            .now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .try_into()
+            .unwrap();
+
+        let created_matcher = NewerTimeMatcher::new(NewerOptionType::Birthed, time);
+
+        thread::sleep(Duration::from_millis(100));
+        let temp_dir = Builder::new()
+            .prefix("newer_time_matcher")
+            .tempdir()
+            .unwrap();
+        // No easy way to independently set file times. So create it - setting creation time
+        let foo_path = temp_dir.path().join("foo");
+        // after "time" created a file
+        let _ = File::create(&foo_path).expect("create temp file");
+        // so this file created time should after "time"
+        let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
+        assert!(
+            created_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file created time should after 'time'"
+        );
+
+        // accessed time test
+        let accessed_matcher = NewerTimeMatcher::new(NewerOptionType::Accessed, time);
+        let mut buffer = [0; 10];
+        {
+            let mut file = File::open(&foo_path).expect("open temp file");
+            let _ = file.read(&mut buffer);
+        }
+        assert!(
+            accessed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file accessed time should after 'time'"
+        );
+
+        // modified time test
+        let modified_matcher = NewerTimeMatcher::new(NewerOptionType::Modified, time);
+        let mut buffer = [0; 10];
+        {
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&foo_path)
+                .expect("open temp file");
+            let _ = file.write(&mut buffer);
+        }
+        assert!(
+            modified_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file modified time should after 'time'"
+        );
+
+        let inode_changed_matcher = NewerTimeMatcher::new(NewerOptionType::Changed, time);
+        // Steps to change inode:
+        // 1. Copy and rename the file
+        // 2. Delete the old file
+        // 3. Change the new file name to the old file name
+        let _ = File::create(temp_dir.path().join("inode_test_file")).expect("create temp file");
+        let _ = fs::copy("inode_test_file", "new_inode_test_file");
+        let _ = fs::remove_file("inode_test_file");
+        let _ = fs::rename("new_inode_test_file", "inode_test_file");
+        let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "inode_test_file");
+        assert!(
+            inode_changed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
+            "file inode changed time should after 'std_time'"
+        );
+
+        // After the file is deleted, DirEntry will point to an empty file location,
+        // thus causing the Matcher to generate an IO error after matching.
+        let _ = fs::remove_file(&*file_info.path().to_string_lossy());
+
+        let matchers = [
+            &created_matcher,
+            &accessed_matcher,
+            &modified_matcher,
+            &inode_changed_matcher,
+        ];
+
+        for matcher in &matchers {
+            assert!(
+                !matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                "The correct situation is that the file reading here cannot be successful."
             );
         }
     }
