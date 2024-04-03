@@ -220,11 +220,11 @@ fn xargs_exec() {
         ])
         .write_stdin("a b c\nd")
         .output();
-    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    assert!(result.is_ok(), "xargs failed: {result:?}");
     let result = result.unwrap();
     assert_eq!(result.status.code(), Some(0));
 
-    assert!(result.stderr.is_empty(), "stderr: {:?}", result);
+    assert!(result.stderr.is_empty(), "stderr: {result:?}");
 
     let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
 
@@ -255,11 +255,11 @@ fn xargs_exec_stdin_open() {
         .write_stdin("test")
         .output();
 
-    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    assert!(result.is_ok(), "xargs failed: {result:?}");
     let result = result.unwrap();
     assert_eq!(result.status.code(), Some(0));
 
-    assert!(result.stderr.is_empty(), "stderr: {:?}", result);
+    assert!(result.stderr.is_empty(), "stderr: {result:?}");
 
     let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
 
@@ -283,11 +283,11 @@ fn xargs_exec_failure() {
         .write_stdin("a b")
         .output();
 
-    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    assert!(result.is_ok(), "xargs failed: {result:?}");
     let result = result.unwrap();
     assert_eq!(result.status.code(), Some(123));
 
-    assert!(result.stderr.is_empty(), "stderr: {:?}", result);
+    assert!(result.stderr.is_empty(), "stderr: {result:?}");
 
     let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
 
@@ -312,11 +312,11 @@ fn xargs_exec_urgent_failure() {
         .write_stdin("a b")
         .output();
 
-    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    assert!(result.is_ok(), "xargs failed: {result:?}");
     let result = result.unwrap();
     assert_eq!(result.status.code(), Some(124));
 
-    assert!(!result.stderr.is_empty(), "stderr: {:?}", result);
+    assert!(!result.stderr.is_empty(), "stderr: {result:?}");
 
     let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
 
@@ -341,10 +341,10 @@ fn xargs_exec_with_signal() {
         .write_stdin("a b")
         .output();
 
-    assert!(result.is_ok(), "xargs failed: {:?}", result);
+    assert!(result.is_ok(), "xargs failed: {result:?}");
     let result = result.unwrap();
     assert_eq!(result.status.code(), Some(125));
-    assert!(!result.stderr.is_empty(), "stderr: {:?}", result);
+    assert!(!result.stderr.is_empty(), "stderr: {result:?}");
 
     let stdout_string = String::from_utf8(result.stdout).expect("Found invalid UTF-8");
 

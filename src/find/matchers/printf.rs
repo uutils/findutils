@@ -158,10 +158,9 @@ impl FormatStringParser<'_> {
         // Try parsing an octal sequence first.
         let first = self.front()?;
         if first.is_digit(OCTAL_RADIX) {
-            if let Ok(code) = self
-                .peek(OCTAL_LEN)
-                .and_then(|octal| u32::from_str_radix(octal, OCTAL_RADIX).map_err(|e| e.into()))
-            {
+            if let Ok(code) = self.peek(OCTAL_LEN).and_then(|octal| {
+                u32::from_str_radix(octal, OCTAL_RADIX).map_err(std::convert::Into::into)
+            }) {
                 // safe to unwrap: .peek() already succeeded above.
                 let octal = self.advance_by(OCTAL_LEN).unwrap();
                 return match char::from_u32(code) {
@@ -388,7 +387,7 @@ fn format_directive<'entry>(
                 // symlink itself instead.
                 file_info.path().symlink_metadata()
             } else {
-                file_info.metadata().map_err(|e| e.into())
+                file_info.metadata().map_err(std::convert::Into::into)
             }
         })
     };
@@ -468,8 +467,7 @@ fn format_directive<'entry>(
             fs_list
                 .into_iter()
                 .find(|fs| fs.dev_id == dev_id)
-                .map(|fs| fs.fs_type)
-                .unwrap_or_else(String::new)
+                .map_or_else(String::new, |fs| fs.fs_type)
                 .into()
         }
 
@@ -949,36 +947,31 @@ mod tests {
             if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,
-                    "Failed to create sym link: {:?}",
-                    e
+                    "Failed to create sym link: {e:?}"
                 );
             }
             if let Err(e) = symlink("subdir", "test_data/links/link-d") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,
-                    "Failed to create sym link: {:?}",
-                    e
+                    "Failed to create sym link: {e:?}"
                 );
             }
             if let Err(e) = symlink("missing", "test_data/links/link-missing") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,
-                    "Failed to create sym link: {:?}",
-                    e
+                    "Failed to create sym link: {e:?}"
                 );
             }
             if let Err(e) = symlink("abbbc/x", "test_data/links/link-notdir") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,
-                    "Failed to create sym link: {:?}",
-                    e
+                    "Failed to create sym link: {e:?}"
                 );
             }
             if let Err(e) = symlink("link-loop", "test_data/links/link-loop") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,
-                    "Failed to create sym link: {:?}",
-                    e
+                    "Failed to create sym link: {e:?}"
                 );
             }
         }

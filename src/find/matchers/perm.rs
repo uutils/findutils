@@ -41,7 +41,7 @@ impl ComparisonType {
 
 #[cfg(unix)]
 mod parsing {
-    use super::*;
+    use super::{parse_numeric, parse_symbolic, ComparisonType, Error};
 
     pub fn split_comparison_type(pattern: &str) -> (ComparisonType, &str) {
         let mut chars = pattern.chars();

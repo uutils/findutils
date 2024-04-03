@@ -74,8 +74,7 @@ mod tests {
         if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
             assert!(
                 e.kind() == ErrorKind::AlreadyExists,
-                "Failed to create sym link: {:?}",
-                e
+                "Failed to create sym link: {e:?}"
             );
         }
         #[cfg(windows)]

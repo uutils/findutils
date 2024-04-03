@@ -90,5 +90,5 @@ pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
             return dir_entry;
         }
     }
-    panic!("Couldn't find {} in {}", directory, filename);
+    panic!("Couldn't find {directory} in {filename}");
 }

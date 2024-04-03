@@ -74,6 +74,7 @@ impl<'a> MatcherIO<'a> {
         self.should_skip_dir = true;
     }
 
+    #[must_use]
     pub fn should_skip_current_dir(&self) -> bool {
         self.should_skip_dir
     }
@@ -82,10 +83,12 @@ impl<'a> MatcherIO<'a> {
         self.quit = true;
     }
 
+    #[must_use]
     pub fn should_quit(&self) -> bool {
         self.quit
     }
 
+    #[must_use]
     pub fn now(&self) -> SystemTime {
         self.deps.now()
     }
@@ -140,11 +143,11 @@ impl Matcher for Box<dyn Matcher> {
     }
 
     fn finished_dir(&self, finished_directory: &Path) {
-        (**self).finished_dir(finished_directory)
+        (**self).finished_dir(finished_directory);
     }
 
     fn finished(&self) {
-        (**self).finished()
+        (**self).finished();
     }
 }
 
@@ -546,8 +549,8 @@ mod tests {
     use crate::find::tests::FakeDependencies;
     use walkdir::WalkDir;
 
-    /// Helper function for tests to get a DirEntry object. directory should
-    /// probably be a string starting with "test_data/" (cargo's tests run with
+    /// Helper function for tests to get a `DirEntry` object. directory should
+    /// probably be a string starting with `test_data/` (cargo's tests run with
     /// a working directory set to the root findutils folder).
     pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
         for wrapped_dir_entry in WalkDir::new(fix_up_slashes(directory)) {
@@ -562,7 +565,7 @@ mod tests {
                 return dir_entry;
             }
         }
-        panic!("Couldn't find {} in {}", filename, directory);
+        panic!("Couldn't find {filename} in {directory}");
     }
 
     #[test]
@@ -1052,8 +1055,7 @@ mod tests {
         if let Err(e) = build_top_level_matcher(&["-ctime", "-123."], &mut config) {
             assert!(
                 e.to_string().contains("Expected a decimal integer"),
-                "bad description: {}",
-                e
+                "bad description: {e}"
             );
         } else {
             panic!("parsing a bad ctime value should fail");

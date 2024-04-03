@@ -285,36 +285,31 @@ fn find_printf() {
         if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
             assert!(
                 e.kind() == ErrorKind::AlreadyExists,
-                "Failed to create sym link: {:?}",
-                e
+                "Failed to create sym link: {e:?}"
             );
         }
         if let Err(e) = symlink("subdir", "test_data/links/link-d") {
             assert!(
                 e.kind() == ErrorKind::AlreadyExists,
-                "Failed to create sym link: {:?}",
-                e
+                "Failed to create sym link: {e:?}"
             );
         }
         if let Err(e) = symlink("missing", "test_data/links/link-missing") {
             assert!(
                 e.kind() == ErrorKind::AlreadyExists,
-                "Failed to create sym link: {:?}",
-                e
+                "Failed to create sym link: {e:?}"
             );
         }
         if let Err(e) = symlink("abbbc/x", "test_data/links/link-notdir") {
             assert!(
                 e.kind() == ErrorKind::AlreadyExists,
-                "Failed to create sym link: {:?}",
-                e
+                "Failed to create sym link: {e:?}"
             );
         }
         if let Err(e) = symlink("link-loop", "test_data/links/link-loop") {
             assert!(
                 e.kind() == ErrorKind::AlreadyExists,
-                "Failed to create sym link: {:?}",
-                e
+                "Failed to create sym link: {e:?}"
             );
         }
     }
