@@ -47,7 +47,9 @@ impl Matcher for AndMatcher {
     }
 
     fn has_side_effects(&self) -> bool {
-        self.submatchers.iter().any(|x| x.has_side_effects())
+        self.submatchers
+            .iter()
+            .any(super::Matcher::has_side_effects)
     }
 
     fn finished_dir(&self, dir: &Path) {
@@ -121,7 +123,9 @@ impl Matcher for OrMatcher {
     }
 
     fn has_side_effects(&self) -> bool {
-        self.submatchers.iter().any(|x| x.has_side_effects())
+        self.submatchers
+            .iter()
+            .any(super::Matcher::has_side_effects)
     }
 
     fn finished_dir(&self, dir: &Path) {
@@ -214,7 +218,9 @@ impl Matcher for ListMatcher {
     }
 
     fn has_side_effects(&self) -> bool {
-        self.submatchers.iter().any(|x| x.has_side_effects())
+        self.submatchers
+            .iter()
+            .any(super::Matcher::has_side_effects)
     }
 
     fn finished_dir(&self, dir: &Path) {

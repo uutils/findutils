@@ -79,7 +79,7 @@ trait CommandSizeLimiter {
 }
 
 /// A pointer to the next limiter. A limiter should *always* call the cursor's
-/// try_next *before* updating its own state, to ensure that all other limiters
+/// `try_next` *before* updating its own state, to ensure that all other limiters
 /// are okay with the argument first.
 struct LimiterCursor<'collection> {
     limiters: &'collection mut [Box<dyn CommandSizeLimiter>],
@@ -353,7 +353,7 @@ impl CommandBuilderOptions {
         replace: Option<String>,
     ) -> Result<Self, ExhaustedCommandSpace> {
         let initial_args = match &action {
-            ExecAction::Command(args) => args.iter().map(|arg| arg.as_ref()).collect(),
+            ExecAction::Command(args) => args.iter().map(std::convert::AsRef::as_ref).collect(),
             ExecAction::Echo => vec![OsStr::new("echo")],
         };
 
@@ -726,10 +726,10 @@ fn process_input(
 fn parse_delimiter(s: &str) -> Result<u8, String> {
     match s.strip_prefix('\\') {
         Some(hex) if hex.starts_with('x') => {
-            u8::from_str_radix(&hex[1..], 16).map_err(|e| format!("Invalid hex sequence: {}", e))
+            u8::from_str_radix(&hex[1..], 16).map_err(|e| format!("Invalid hex sequence: {e}"))
         }
         Some(oct) if oct.starts_with('0') => {
-            u8::from_str_radix(&oct[1..], 8).map_err(|e| format!("Invalid octal sequence: {}", e))
+            u8::from_str_radix(&oct[1..], 8).map_err(|e| format!("Invalid octal sequence: {e}"))
         }
         Some(special) => match special {
             "a" => Ok(b'\x07'),
@@ -741,7 +741,7 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
             "v" => Ok(b'\x0B'),
             "\\" => Ok(b'\\'),
             "0" => Ok(b'\0'),
-            _ => Err(format!("Invalid escape sequence: \\{}", special)),
+            _ => Err(format!("Invalid escape sequence: \\{special}")),
         },
         None if s.len() == 1 => Ok(s.as_bytes()[0]),
         None => Err("Delimiter must be one byte".to_owned()),
@@ -880,7 +880,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     let options = Options {
         arg_file: matches
             .get_one::<String>(options::ARG_FILE)
-            .map(|value| value.to_owned()),
+            .map(std::borrow::ToOwned::to_owned),
         delimiter: matches.get_one::<u8>(options::DELIMITER).copied(),
         exit_if_pass_char_limit: matches.get_flag(options::EXIT),
         max_args: matches.get_one::<usize>(options::MAX_ARGS).copied(),
@@ -894,8 +894,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 matches.contains_id(option).then(|| {
                     matches
                         .get_one::<String>(option)
-                        .map(|value| value.to_owned())
-                        .unwrap_or_else(|| "{}".to_string())
+                        .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
                 })
             }),
         verbose: matches.get_flag(options::VERBOSE),
@@ -918,7 +917,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
 
     let action = match matches.get_many::<OsString>(options::COMMAND) {
         Some(args) if args.len() > 0 => {
-            ExecAction::Command(args.map(|arg| arg.to_owned()).collect())
+            ExecAction::Command(args.map(std::borrow::ToOwned::to_owned).collect())
         }
         _ => ExecAction::Echo,
     };
@@ -960,7 +959,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     builder_options.close_stdin = options.arg_file.is_none();
 
     let args_file: Box<dyn Read> = if let Some(path) = &options.arg_file {
-        Box::new(fs::File::open(path).map_err(|e| format!("Failed to open {}: {}", path, e))?)
+        Box::new(fs::File::open(path).map_err(|e| format!("Failed to open {path}: {e}"))?)
     } else {
         Box::new(io::stdin())
     };
@@ -975,6 +974,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     Ok(result)
 }
 
+#[must_use]
 pub fn xargs_main(args: &[&str]) -> i32 {
     match do_xargs(args) {
         Ok(CommandResult::Success) => 0,

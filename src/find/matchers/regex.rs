@@ -23,7 +23,7 @@ impl fmt::Display for ParseRegexTypeError {
             self.0,
             RegexType::VALUES
                 .iter()
-                .map(|t| format!("'{}'", t))
+                .map(|t| format!("'{t}'"))
                 .collect::<Vec<_>>()
                 .join(", ")
         )

@@ -147,8 +147,7 @@ mod tests {
         if let Err(e) = SizeMatcher::new(ComparableValue::EqualTo(2), "xyz") {
             assert!(
                 e.to_string().contains("Invalid suffix") && e.to_string().contains("xyz"),
-                "bad description: {}",
-                e
+                "bad description: {e}"
             );
         } else {
             panic!("parsing a unit string should fail");

@@ -100,5 +100,5 @@ impl Matcher for SingleExecMatcher {
 
 #[cfg(test)]
 /// No tests here, because we need to call out to an external executable. See
-/// tests/exec_unit_tests.rs instead.
+/// `tests/exec_unit_tests.rs` instead.
 mod tests {}

@@ -337,7 +337,7 @@ mod tests {
         }
     }
 
-    /// helper function for file_time_matcher_modified_created_accessed
+    /// helper function for `file_time_matcher_modified_created_accessed`
     fn test_matcher_for_file_time_type(
         file_info: &DirEntry,
         file_time: SystemTime,
@@ -350,15 +350,13 @@ mod tests {
             deps.set_time(file_time);
             assert!(
                 matcher.matches(file_info, &mut deps.new_matcher_io()),
-                "{:?} time matcher should match",
-                file_time_type
+                "{file_time_type:?} time matcher should match"
             );
 
             deps.set_time(file_time - Duration::from_secs(1));
             assert!(
                 !matcher.matches(file_info, &mut deps.new_matcher_io()),
-                "{:?} time matcher shouldn't match a second before",
-                file_time_type
+                "{file_time_type:?} time matcher shouldn't match a second before"
             );
         }
     }

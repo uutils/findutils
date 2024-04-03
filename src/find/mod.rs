@@ -51,6 +51,7 @@ pub struct StandardDependencies {
 }
 
 impl StandardDependencies {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             output: Rc::new(RefCell::new(stdout())),
@@ -338,8 +339,7 @@ mod tests {
         if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
             assert!(
                 e.kind() == ErrorKind::AlreadyExists,
-                "Failed to create sym link: {:?}",
-                e
+                "Failed to create sym link: {e:?}"
             );
         }
         #[cfg(windows)]
@@ -692,7 +692,7 @@ mod tests {
         }
     }
 
-    /// Helper function for the find_ctime/find_atime/find_mtime tests.
+    /// Helper function for the `find_ctime/find_atime/find_mtime` tests.
     fn file_time_helper(file_time: SystemTime, arg: &str) {
         // check file time matches a file that's old enough
         {

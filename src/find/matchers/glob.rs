@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn incomplete_escape() {
-        assert_eq!(glob_to_regex(r"foo\"), r"$.")
+        assert_eq!(glob_to_regex(r"foo\"), r"$.");
     }
 
     #[test]
