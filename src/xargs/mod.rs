@@ -28,6 +28,8 @@ mod options {
     pub const MAX_PROCS: &str = "max-procs";
     pub const NO_RUN_IF_EMPTY: &str = "no-run-if-empty";
     pub const NULL: &str = "null";
+    pub const REPLACE: &str = "replace";
+    pub const REPLACE_I: &str = "replace-I";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -40,6 +42,7 @@ struct Options {
     max_lines: Option<usize>,
     no_run_if_empty: bool,
     null: bool,
+    replace: Option<String>,
     verbose: bool,
 }
 
@@ -340,13 +343,14 @@ struct CommandBuilderOptions {
     limiters: LimiterCollection,
     verbose: bool,
     close_stdin: bool,
+    replace: Option<String>,
 }
-
 impl CommandBuilderOptions {
     fn new(
         action: ExecAction,
         env: HashMap<OsString, OsString>,
         mut limiters: LimiterCollection,
+        replace: Option<String>,
     ) -> Result<Self, ExhaustedCommandSpace> {
         let initial_args = match &action {
             ExecAction::Command(args) => args.iter().map(|arg| arg.as_ref()).collect(),
@@ -366,6 +370,7 @@ impl CommandBuilderOptions {
             limiters,
             verbose: false,
             close_stdin: false,
+            replace,
         })
     }
 }
@@ -398,14 +403,41 @@ impl CommandBuilder<'_> {
         };
 
         let mut command = Command::new(entry_point);
-        command
-            .args(initial_args)
-            .args(&self.extra_args)
-            .env_clear()
-            .envs(&self.options.env);
+
+        if let Some(replace_str) = &self.options.replace {
+            // we replace the first instance of the replacement string with
+            // the extra args, and then replace all instances of the replacement
+            let replacement = self
+                .extra_args
+                .iter()
+                .map(|s| s.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let initial_args: Vec<OsString> = initial_args
+                .iter()
+                .map(|arg| {
+                    let arg_str = arg.to_string_lossy();
+                    OsString::from(arg_str.replace(replace_str, &replacement))
+                })
+                .collect();
+
+            command
+                .args(&initial_args)
+                .env_clear()
+                .envs(&self.options.env);
+        } else {
+            // don't do any replacement
+            command
+                .args(initial_args)
+                .args(&self.extra_args)
+                .env_clear()
+                .envs(&self.options.env);
+        };
+
         if self.options.close_stdin {
             command.stdin(Stdio::null());
         }
+
         if self.options.verbose {
             eprintln!("{command:?}");
         }
@@ -692,12 +724,14 @@ fn process_input(
 }
 
 fn parse_delimiter(s: &str) -> Result<u8, String> {
-    if let Some(hex) = s.strip_prefix("\\x") {
-        u8::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex sequence: {}", e))
-    } else if let Some(oct) = s.strip_prefix("\\0") {
-        u8::from_str_radix(oct, 8).map_err(|e| format!("Invalid octal sequence: {}", e))
-    } else if let Some(special) = s.strip_prefix('\\') {
-        match special {
+    match s.strip_prefix('\\') {
+        Some(hex) if hex.starts_with('x') => {
+            u8::from_str_radix(&hex[1..], 16).map_err(|e| format!("Invalid hex sequence: {}", e))
+        }
+        Some(oct) if oct.starts_with('0') => {
+            u8::from_str_radix(&oct[1..], 8).map_err(|e| format!("Invalid octal sequence: {}", e))
+        }
+        Some(special) => match special {
             "a" => Ok(b'\x07'),
             "b" => Ok(b'\x08'),
             "f" => Ok(b'\x0C'),
@@ -705,17 +739,12 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
             "r" => Ok(b'\r'),
             "t" => Ok(b'\t'),
             "v" => Ok(b'\x0B'),
-            "0" => Ok(b'\0'),
             "\\" => Ok(b'\\'),
-            _ => Err(format!("Invalid escape sequence: {s}")),
-        }
-    } else {
-        let bytes = s.as_bytes();
-        if bytes.len() == 1 {
-            Ok(bytes[0])
-        } else {
-            Err("Delimiter must be one byte".to_owned())
-        }
+            "0" => Ok(b'\0'),
+            _ => Err(format!("Invalid escape sequence: \\{}", special)),
+        },
+        None if s.len() == 1 => Ok(s.as_bytes()[0]),
+        None => Err("Delimiter must be one byte".to_owned()),
     }
 }
 
@@ -819,6 +848,28 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .help("Be verbose")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::REPLACE)
+                .long(options::REPLACE)
+                .short('i')
+                .num_args(0..=1)
+                .require_equals(true)
+                .value_parser(clap::value_parser!(String))
+                .value_name("R")
+                .help(
+                    "Replace R in INITIAL-ARGS with names read from standard input; \
+                    if R is unspecified, assume {}",
+                ),
+        )
+        .arg(
+            Arg::new(options::REPLACE_I)
+                .short('I')
+                .num_args(1)
+                .help("same as --replace=R")
+                .value_name("R")
+                .overrides_with(options::REPLACE)
+                .value_parser(clap::value_parser!(String)),
+        )
         .try_get_matches_from(args);
 
     let matches = match matches {
@@ -837,6 +888,16 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         max_lines: matches.get_one::<usize>(options::MAX_LINES).copied(),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
+        replace: [options::REPLACE_I, options::REPLACE]
+            .iter()
+            .find_map(|&option| {
+                matches.contains_id(option).then(|| {
+                    matches
+                        .get_one::<String>(option)
+                        .map(|value| value.to_owned())
+                        .unwrap_or_else(|| "{}".to_string())
+                })
+            }),
         verbose: matches.get_flag(options::VERBOSE),
     };
 
@@ -861,7 +922,6 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }
         _ => ExecAction::Echo,
     };
-
     let env = std::env::vars_os().collect();
 
     let mut limiters = LimiterCollection::new();
@@ -891,9 +951,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
 
     limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
 
-    let mut builder_options = CommandBuilderOptions::new(action, env, limiters).map_err(|_| {
-        "Base command and environment are too large to fit into one command execution"
-    })?;
+    let mut builder_options =
+        CommandBuilderOptions::new(action, env, limiters, options.replace.clone()).map_err(
+            |_| "Base command and environment are too large to fit into one command execution",
+        )?;
 
     builder_options.verbose = options.verbose;
     builder_options.close_stdin = options.arg_file.is_none();

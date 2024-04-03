@@ -26,6 +26,7 @@ nix = { version = "0.28", features = ["fs"] }
 predicates = "3"
 serial_test = "3.0"
 tempfile = "3"
+pretty_assertions = "1.4.0"
 
 [[bin]]
 name = "find"
