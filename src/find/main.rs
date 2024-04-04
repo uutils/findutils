@@ -5,6 +5,8 @@
 // https://opensource.org/licenses/MIT.
 
 fn main() {
+    uucore::panic::mute_sigpipe_panic();
+
     let args = std::env::args().collect::<Vec<String>>();
     let strs: Vec<&str> = args.iter().map(std::convert::AsRef::as_ref).collect();
     let deps = findutils::find::StandardDependencies::new();
