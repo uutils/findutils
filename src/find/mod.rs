@@ -134,6 +134,7 @@ fn process_dir<'a>(
     deps: &'a dyn Dependencies<'a>,
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
+    has_some_process_error: &mut bool,
 ) -> u64 {
     let mut found_count: u64 = 0;
     let mut walkdir = WalkDir::new(dir)
@@ -149,10 +150,14 @@ fn process_dir<'a>(
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
     while let Some(result) = it.next() {
+        let mut matcher_io = matchers::MatcherIO::new(deps);
         match result {
-            Err(err) => writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap(),
+            Err(err) => {
+                *has_some_process_error = true;
+
+                writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap()
+            }
             Ok(entry) => {
-                let mut matcher_io = matchers::MatcherIO::new(deps);
                 if matcher.matches(&entry, &mut matcher_io) {
                     found_count += 1;
                 }
@@ -182,6 +187,7 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
 
     let mut found_count: u64 = 0;
     let mut quit = false;
+    let mut has_some_process_error = false;
     for path in paths_and_matcher.paths {
         found_count += process_dir(
             &path,
@@ -189,11 +195,17 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
             deps,
             &*paths_and_matcher.matcher,
             &mut quit,
+            &mut has_some_process_error,
         );
         if quit {
             break;
         }
     }
+
+    if has_some_process_error {
+        return Err("There are some process errors.".into());
+    }
+
     Ok(found_count)
 }
 
