@@ -998,4 +998,31 @@ mod tests {
             assert_eq!(rc, 1);
         }
     }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_no_permission_file_error() {
+        use std::{path::Path, process::Command};
+
+        let path = Path::new("./test_data/no_permission");
+
+        // Because the file does not have write permission,
+        // it cannot be overwritten if it has been created.
+        if !path.exists() {
+            let _result = fs::create_dir(&path);
+            // Generate files without permissions.
+            // std::fs cannot change file permissions to 000 in normal user state,
+            // so use chmod via Command to change permissions.
+            let _output = Command::new("chmod")
+                .arg("-rwx")
+                .arg("./test_data/no_permission")
+                .output()
+                .expect("cannot set file permission");
+        }
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/no_permission"], &deps);
+
+        assert_eq!(rc, 1);
+    }
 }
