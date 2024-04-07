@@ -134,7 +134,6 @@ fn process_dir<'a>(
     deps: &'a dyn Dependencies<'a>,
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
-    has_some_process_error: &mut bool,
 ) -> u64 {
     let mut found_count: u64 = 0;
     let mut walkdir = WalkDir::new(dir)
@@ -152,8 +151,7 @@ fn process_dir<'a>(
     while let Some(result) = it.next() {
         match result {
             Err(err) => {
-                *has_some_process_error = true;
-
+                uucore::error::set_exit_code(1);
                 writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap()
             }
             Ok(entry) => {
@@ -187,7 +185,6 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
 
     let mut found_count: u64 = 0;
     let mut quit = false;
-    let mut has_some_process_error = false;
     for path in paths_and_matcher.paths {
         found_count += process_dir(
             &path,
@@ -195,17 +192,11 @@ fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box
             deps,
             &*paths_and_matcher.matcher,
             &mut quit,
-            &mut has_some_process_error,
         );
         if quit {
             break;
         }
     }
-
-    if has_some_process_error {
-        return Err("There are some process errors.".into());
-    }
-
     Ok(found_count)
 }
 
@@ -266,7 +257,7 @@ fn print_version() {
 /// the name of the executable.
 pub fn find_main<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> i32 {
     match do_find(&args[1..], deps) {
-        Ok(_) => 0,
+        Ok(_) => uucore::error::get_exit_code(),
         Err(e) => {
             writeln!(&mut stderr(), "Error: {e}").unwrap();
             1
@@ -1019,6 +1010,10 @@ mod tests {
         let rc = find_main(&["find", "./test_data/no_permission"], &deps);
 
         assert_eq!(rc, 1);
+
+        // Reset the exit code global variable in case we run another test after this one
+        // See https://github.com/uutils/coreutils/issues/5777
+        uucore::error::set_exit_code(0);
 
         if path.exists() {
             let _result = fs::create_dir(&path);
