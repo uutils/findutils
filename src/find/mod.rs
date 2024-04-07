@@ -150,7 +150,6 @@ fn process_dir<'a>(
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
     while let Some(result) = it.next() {
-        let mut matcher_io = matchers::MatcherIO::new(deps);
         match result {
             Err(err) => {
                 *has_some_process_error = true;
@@ -158,6 +157,7 @@ fn process_dir<'a>(
                 writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap()
             }
             Ok(entry) => {
+                let mut matcher_io = matchers::MatcherIO::new(deps);
                 if matcher.matches(&entry, &mut matcher_io) {
                     found_count += 1;
                 }
