@@ -150,7 +150,10 @@ fn process_dir<'a>(
     let mut it = walkdir.into_iter();
     while let Some(result) = it.next() {
         match result {
-            Err(err) => writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap(),
+            Err(err) => {
+                uucore::error::set_exit_code(1);
+                writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap()
+            }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
                 if matcher.matches(&entry, &mut matcher_io) {
@@ -254,7 +257,7 @@ fn print_version() {
 /// the name of the executable.
 pub fn find_main<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> i32 {
     match do_find(&args[1..], deps) {
-        Ok(_) => 0,
+        Ok(_) => uucore::error::get_exit_code(),
         Err(e) => {
             writeln!(&mut stderr(), "Error: {e}").unwrap();
             1
@@ -984,6 +987,42 @@ mod tests {
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
             assert_eq!(rc, 1);
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_no_permission_file_error() {
+        use std::{path::Path, process::Command};
+
+        let path = Path::new("./test_data/no_permission");
+        let _result = fs::create_dir(&path);
+        // Generate files without permissions.
+        // std::fs cannot change file permissions to 000 in normal user state,
+        // so use chmod via Command to change permissions.
+        let _output = Command::new("chmod")
+            .arg("-rwx")
+            .arg("./test_data/no_permission")
+            .output()
+            .expect("cannot set file permission");
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/no_permission"], &deps);
+
+        assert_eq!(rc, 1);
+
+        // Reset the exit code global variable in case we run another test after this one
+        // See https://github.com/uutils/coreutils/issues/5777
+        uucore::error::set_exit_code(0);
+
+        if path.exists() {
+            let _result = fs::create_dir(&path);
+            // Remove the unreadable and writable status of the file to avoid affecting other tests.
+            let _output = Command::new("chmod")
+                .arg("+rwx")
+                .arg("./test_data/no_permission")
+                .output()
+                .expect("cannot set file permission");
         }
     }
 }
