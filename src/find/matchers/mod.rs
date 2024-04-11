@@ -531,6 +531,14 @@ fn build_matcher_tree(
                 if !expecting_bracket {
                     return Err(From::from("you have too many ')'"));
                 }
+
+                let bracket = args[i - 1];
+                if bracket == "(" {
+                    return Err(From::from(
+                        "invalid expression; empty parentheses are not allowed.",
+                    ));
+                }
+
                 return Ok((i, top_level_matcher.build()));
             }
             "-d" | "-depth" => {
@@ -941,7 +949,10 @@ mod tests {
     fn build_top_level_matcher_too_many_brackets() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-true", "(", ")", ")"], &mut config) {
+        if let Err(e) = build_top_level_matcher(
+            &["-type", "f", "(", "-name", "*.txt", ")", ")"],
+            &mut config,
+        ) {
             assert!(e.to_string().contains("too many ')'"));
         } else {
             panic!("parsing argument list with too many closing brackets should fail");
@@ -994,6 +1005,17 @@ mod tests {
         {
             let matcher = build_top_level_matcher(&args_with, &mut config).unwrap();
             assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_expression_empty_parentheses() {
+        let mut config = Config::default();
+
+        if let Err(e) = build_top_level_matcher(&["-true", "(", ")"], &mut config) {
+            assert!(e.to_string().contains("empty parentheses are not allowed"));
+        } else {
+            panic!("parsing argument list with empty parentheses in an expression should fail");
         }
     }
 
