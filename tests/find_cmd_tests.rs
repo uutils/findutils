@@ -505,3 +505,16 @@ fn find_accessible() {
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc").not());
 }
+
+#[test]
+fn expression_empty_parentheses() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-true", "(", ")"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "empty parentheses are not allowed",
+        ))
+        .stdout(predicate::str::is_empty());
+}
