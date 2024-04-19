@@ -763,15 +763,11 @@ mod tests {
 
         // catch file error
         let _ = fs::remove_file(&*new_file.path().to_string_lossy());
-        let matchers = [FileAgeRangeMatcher::new(
-            FileTimeType::Modified,
-            ComparableValue::MoreThan(1),
-        )];
-        for matcher in &matchers {
-            assert!(
-                !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
-                "The correct situation is that the file reading here cannot be successful."
-            );
-        }
+        let matcher =
+            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+        assert!(
+            !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+            "The correct situation is that the file reading here cannot be successful."
+        );
     }
 }
