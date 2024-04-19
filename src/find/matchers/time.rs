@@ -695,4 +695,68 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn file_age_range_matcher() {
+        let file = get_dir_entry_for("test_data", "simple");
+
+        // mores test
+        // mocks:
+        // - find test_data/simple -mmin +1
+        // - find test_data/simple -amin +1
+        // Means to find files accessed / modified more than 1 minute ago.
+        [FileTimeType::Modified, FileTimeType::Accessed]
+            .iter()
+            .for_each(|time_type| {
+                let more_matcher =
+                    FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1));
+                assert!(
+                    more_matcher.matches(&file, &mut FakeDependencies::new().new_matcher_io()),
+                    "more minutes old file should match more than 1 minute old."
+                );
+            });
+
+        // lesses test
+        // mocks:
+        // - find test_data/simple -mmin -1
+        // - find test_data/simple -amin -1
+        // Means to find files accessed / modified less than 1 minute ago.
+        [FileTimeType::Modified, FileTimeType::Accessed]
+            .iter()
+            .for_each(|time_type| {
+                let less_matcher =
+                    FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1));
+                assert!(
+                    !less_matcher.matches(&file, &mut FakeDependencies::new().new_matcher_io()),
+                    "less minutes old file should not match less than 1 minute old."
+                );
+            });
+
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let new_file_name = "newFile";
+        // this has just been created, so should be newer
+        File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
+        let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
+
+        // mocks:
+        // - find test_data/simple -cmin -1
+        // Means to find the new file created less than 1 minute.
+        let less_matcher =
+            FileAgeRangeMatcher::new(FileTimeType::Created, ComparableValue::LessThan(1));
+        assert!(
+            less_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+            "The file just created should be included in the less 1 minute match."
+        );
+
+        // mocks:
+        // - find test_data/simple -cmin +1
+        // Means to find the new file created more than 1 minute.
+        let more_matcher =
+            FileAgeRangeMatcher::new(FileTimeType::Created, ComparableValue::MoreThan(1));
+        assert!(
+            !more_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+            "The file just created should not be included in the more 1 minute match."
+        );
+    }
 }
