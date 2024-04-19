@@ -277,6 +277,54 @@ impl FileTimeMatcher {
     }
 }
 
+pub struct FileMinutesTimeMatcher {
+    minutes: ComparableValue,
+    file_time_type: FileTimeType,
+}
+
+impl Matcher for FileMinutesTimeMatcher {
+    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info, matcher_io.now()) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} time for {}: {}",
+                    self.file_time_type,
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
+        }
+    }
+}
+
+impl FileMinutesTimeMatcher {
+    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+        let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
+        let mut is_negative = false;
+        let age = match now.duration_since(this_time) {
+            Ok(duration) => duration,
+            Err(e) => {
+                is_negative = true;
+                e.duration()
+            }
+        };
+        let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+        let age_in_minutes = age_in_seconds / 60 + if is_negative { -1 } else { 0 };
+        Ok(self.minutes.imatches(age_in_minutes))
+    }
+
+    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue) -> Self {
+        Self {
+            minutes,
+            file_time_type,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
