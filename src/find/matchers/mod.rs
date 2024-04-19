@@ -50,7 +50,7 @@ use self::regex::RegexMatcher;
 use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
 use self::time::{
-    FileMinutesTimeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
+    FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
     NewerOptionType, NewerTimeMatcher,
 };
 use self::type_matcher::TypeMatcher;
@@ -431,7 +431,7 @@ fn build_matcher_tree(
                 };
                 let minutes = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(FileMinutesTimeMatcher::new(file_time_type, minutes).into_box())
+                Some(FileAgeRangeMatcher::new(file_time_type, minutes).into_box())
             }
             "-size" => {
                 if i >= args.len() - 1 {

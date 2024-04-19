@@ -277,12 +277,12 @@ impl FileTimeMatcher {
     }
 }
 
-pub struct FileMinutesTimeMatcher {
+pub struct FileAgeRangeMatcher {
     minutes: ComparableValue,
     file_time_type: FileTimeType,
 }
 
-impl Matcher for FileMinutesTimeMatcher {
+impl Matcher for FileAgeRangeMatcher {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         match self.matches_impl(file_info, matcher_io.now()) {
             Err(e) => {
@@ -301,7 +301,7 @@ impl Matcher for FileMinutesTimeMatcher {
     }
 }
 
-impl FileMinutesTimeMatcher {
+impl FileAgeRangeMatcher {
     fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
         let mut is_negative = false;
