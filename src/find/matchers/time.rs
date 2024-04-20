@@ -705,7 +705,7 @@ mod tests {
         File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
         let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
 
-        // mores test
+        // more test
         // mocks:
         // - find test_data/simple -amin +1
         // - find test_data/simple -cmin +1
@@ -733,7 +733,7 @@ mod tests {
             );
         });
 
-        // lesses test
+        // less test
         // mocks:
         // - find test_data/simple -amin -1
         // - find test_data/simple -cmin -1
