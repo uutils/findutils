@@ -600,14 +600,14 @@ mod tests {
 
         // modified time test
         let modified_matcher = NewerTimeMatcher::new(NewerOptionType::Modified, time);
-        let mut buffer = [0; 10];
+        let buffer = [0; 10];
         {
             let mut file = OpenOptions::new()
                 .read(true)
                 .write(true)
                 .open(&foo_path)
                 .expect("open temp file");
-            let _ = file.write(&mut buffer);
+            let _ = file.write(&buffer);
         }
         assert!(
             modified_matcher.matches(&file_info, &mut deps.new_matcher_io()),

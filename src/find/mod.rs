@@ -996,7 +996,7 @@ mod tests {
         use std::{path::Path, process::Command};
 
         let path = Path::new("./test_data/no_permission");
-        let _result = fs::create_dir(&path);
+        let _result = fs::create_dir(path);
         // Generate files without permissions.
         // std::fs cannot change file permissions to 000 in normal user state,
         // so use chmod via Command to change permissions.
@@ -1016,7 +1016,7 @@ mod tests {
         uucore::error::set_exit_code(0);
 
         if path.exists() {
-            let _result = fs::create_dir(&path);
+            let _result = fs::create_dir(path);
             // Remove the unreadable and writable status of the file to avoid affecting other tests.
             let _output = Command::new("chmod")
                 .arg("+rwx")
