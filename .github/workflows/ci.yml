@@ -86,7 +86,7 @@ jobs:
       - run: rustup component add clippy
       - name: cargo clippy
         run: |
-          cargo clippy -- -D warnings
+          cargo clippy --all-targets -- -D warnings
 
   grcov:
     name: Code coverage
