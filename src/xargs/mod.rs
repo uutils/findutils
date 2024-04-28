@@ -406,14 +406,9 @@ impl CommandBuilder<'_> {
         let mut command = Command::new(entry_point);
 
         if let Some(replace_str) = &self.options.replace {
-            // we replace the first instance of the replacement string with
-            // the extra args, and then replace all instances of the replacement
-            let replacement = self
-                .extra_args
-                .iter()
-                .map(|s| s.to_string_lossy())
-                .collect::<Vec<_>>()
-                .join(" ");
+            // Replace all occurrences in initial args with the extra arg,
+            // Thanks to `MaxArgsCommandSizeLimiter`, we only process a single extra arg here.
+            let replacement = self.extra_args[0].to_string_lossy();
             let initial_args: Vec<OsString> = initial_args
                 .iter()
                 .map(|arg| {
@@ -797,7 +792,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .long(options::MAX_ARGS)
                 .help(
                     "Set the max number of arguments read from stdin to be passed \
-                    to each command invocation (mutually exclusive with -L)",
+                    to each command invocation (mutually exclusive with -L and -I/-i)",
                 )
                 .value_parser(validate_positive_usize),
         )
@@ -807,7 +802,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .long(options::MAX_LINES)
                 .help(
                     "Set the max number of lines from stdin to be passed to each \
-                    command invocation (mutually exclusive with -n)",
+                    command invocation (mutually exclusive with -n and -I/-i)",
                 )
                 .value_parser(validate_positive_usize),
         )
@@ -857,17 +852,17 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .require_equals(true)
                 .value_parser(clap::value_parser!(String))
                 .value_name("R")
-                .help(
-                    "Replace R in INITIAL-ARGS with names read from standard input; \
-                    if R is unspecified, assume {}",
-                ),
+                .help("If R is specified, the same as -I R; otherwise, the same as -I {}"),
         )
         .arg(
             Arg::new(options::REPLACE_I)
                 .short('I')
                 .num_args(1)
-                .help("same as --replace=R")
                 .value_name("R")
+                .help(
+                    "Replace R in initial arguments with names read from standard input \
+                    (mutually exclusive with -L and -n)",
+                )
                 .overrides_with(options::REPLACE)
                 .value_parser(clap::value_parser!(String)),
         )
@@ -926,23 +921,37 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
 
     let mut limiters = LimiterCollection::new();
 
-    match (options.max_args, options.max_lines) {
-        (Some(max_args), Some(max_lines)) => {
+    match (options.max_args, options.max_lines, &options.replace) {
+        // These 3 options are mutually exclusive.
+        // But `max_args=1` and `replace` do not actually conflict, so no warning.
+        (None | Some(1), None, Some(_)) => {
+            // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
+            // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
+            // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
+            limiters.add(MaxArgsCommandSizeLimiter::new(1))
+        }
+        (Some(max_args), None, None) => limiters.add(MaxArgsCommandSizeLimiter::new(max_args)),
+        (None, Some(max_lines), None) => limiters.add(MaxLinesCommandSizeLimiter::new(max_lines)),
+        (None, None, None) => (),
+        _ => {
             eprintln!(
-                "WARNING: Both --{} and -L were given; last option will be used",
-                options::MAX_ARGS,
+                "WARNING: -L, -n and -I/-i are mutually exclusive, but more than one were given; \
+                only the last option will be used"
             );
-            if matches.indices_of(options::MAX_LINES).unwrap().last()
-                > matches.indices_of(options::MAX_ARGS).unwrap().last()
-            {
-                limiters.add(MaxLinesCommandSizeLimiter::new(max_lines));
-            } else {
-                limiters.add(MaxArgsCommandSizeLimiter::new(max_args));
+            let lines_index = matches
+                .indices_of(options::MAX_LINES)
+                .and_then(|v| v.last());
+            let args_index = matches.indices_of(options::MAX_ARGS).and_then(|v| v.last());
+            let replace_index = [options::REPLACE, options::REPLACE_I]
+                .iter()
+                .flat_map(|o| matches.indices_of(o).and_then(|v| v.last()))
+                .max();
+            if lines_index > args_index && lines_index > replace_index {
+                limiters.add(MaxLinesCommandSizeLimiter::new(options.max_lines.unwrap()));
+            } else if args_index > lines_index && args_index > replace_index {
+                limiters.add(MaxArgsCommandSizeLimiter::new(options.max_args.unwrap()));
             }
         }
-        (Some(max_args), None) => limiters.add(MaxArgsCommandSizeLimiter::new(max_args)),
-        (None, Some(max_lines)) => limiters.add(MaxLinesCommandSizeLimiter::new(max_lines)),
-        (None, None) => (),
     }
 
     if let Some(max_chars) = options.max_chars {
