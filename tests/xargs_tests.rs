@@ -502,3 +502,33 @@ fn xargs_replace() {
         .failure()
         .stderr(predicate::str::contains("Error: Command not found"));
 }
+
+#[test]
+fn xargs_replace_multiple_lines() {
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-I", "_", "echo", "[_]"])
+        .write_stdin("abc\ndef\ng")
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff("[abc]\n[def]\n[g]\n"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-I", "{}", "echo", "{} {} foo"])
+        .write_stdin("bar\nbaz")
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff("bar bar foo\nbaz baz foo\n"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        .args(["-I", "non-exist", "echo"])
+        .write_stdin("abc\ndef\ng")
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff("\n\n\n"));
+}
