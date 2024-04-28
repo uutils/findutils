@@ -860,7 +860,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .num_args(1)
                 .value_name("R")
                 .help(
-                    "Replace R in initial arguments with names read from standard input \
+                    "Replace R in initial arguments with names read from standard input; \
+                    also, the input is split at newlines only
                     (mutually exclusive with -L and -n)",
                 )
                 .overrides_with(options::REPLACE)
@@ -908,7 +909,9 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }
         (Some(delimiter), false) => Some(delimiter),
         (None, true) => Some(b'\0'),
-        (None, false) => None,
+        // If `replace` and no delimiter specified, each line of stdin turns into a line of stdout,
+        // so the input should be split at newlines only.
+        (None, false) => options.replace.as_ref().map(|_| b'\n'),
     };
 
     let action = match matches.get_many::<OsString>(options::COMMAND) {
