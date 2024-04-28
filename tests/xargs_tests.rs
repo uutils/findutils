@@ -141,6 +141,16 @@ fn xargs_max_args_lines_conflict() {
 
     Command::cargo_bin("xargs")
         .expect("found binary")
+        // -n2 is last, so it should be given priority.
+        .args(["-I=_", "-n2", "echo", "_"])
+        .write_stdin("ab   cd ef\ngh i\njkl")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("WARNING"))
+        .stdout(predicate::str::diff("_ ab cd\n_ ef gh\n_ i jkl\n"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
         // -L2 is last, so it should be given priority.
         .args(["-n2", "-L2"])
         .write_stdin("ab cd\nef\ngh i\n\njkl\n")
@@ -148,6 +158,28 @@ fn xargs_max_args_lines_conflict() {
         .success()
         .stderr(predicate::str::contains("WARNING"))
         .stdout(predicate::str::diff("ab cd ef\ngh i jkl\n"));
+
+    Command::cargo_bin("xargs")
+        .expect("found binary")
+        // -L2 is last, so it should be given priority.
+        .args(["-I=_", "-L2", "echo", "_"])
+        .write_stdin("ab cd\nef\ngh i\n\njkl\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("WARNING"))
+        .stdout(predicate::str::diff("_ ab cd ef\n_ gh i jkl\n"));
+
+    for redundant_arg in ["-L2", "-n2"] {
+        Command::cargo_bin("xargs")
+            .expect("found binary")
+            // -I={} is last, so it should be given priority.
+            .args([redundant_arg, "-I={}", "echo", "{} bar"])
+            .write_stdin("ab  cd ef\ngh i\njkl")
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("WARNING"))
+            .stdout(predicate::str::diff("ab  cd ef bar\ngh i bar\njkl bar\n"));
+    }
 }
 
 #[test]
@@ -508,11 +540,11 @@ fn xargs_replace_multiple_lines() {
     Command::cargo_bin("xargs")
         .expect("found binary")
         .args(["-I", "_", "echo", "[_]"])
-        .write_stdin("abc\ndef\ng")
+        .write_stdin("ab c\nd  ef\ng")
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::diff("[abc]\n[def]\n[g]\n"));
+        .stdout(predicate::str::diff("[ab c]\n[d  ef]\n[g]\n"));
 
     Command::cargo_bin("xargs")
         .expect("found binary")
