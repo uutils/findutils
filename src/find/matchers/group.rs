@@ -2,6 +2,7 @@ use super::Matcher;
 
 #[cfg(unix)]
 use nix::unistd::Group;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
@@ -40,7 +41,7 @@ impl Matcher for GroupMatcher {
     }
 
     #[cfg(windows)]
-    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+    fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
         // The user group acquisition function for Windows systems is not implemented in MetadataExt,
         // so it is somewhat difficult to implement it. :(
         true
