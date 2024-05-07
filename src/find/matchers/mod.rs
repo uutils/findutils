@@ -481,6 +481,11 @@ fn build_matcher_tree(
                 }
 
                 let user = args[i + 1];
+
+                if user.is_empty() {
+                    return Err(From::from("The argument to -user should not be empty"));
+                }
+
                 let reverse = args[i] == "-nouser";
                 i += 1;
                 Some(UserMatcher::new(user.to_string(), reverse).into_box())
@@ -491,6 +496,13 @@ fn build_matcher_tree(
                 }
 
                 let group = args[i + 1];
+
+                if group.is_empty() {
+                    return Err(From::from(
+                        "Argument to -group is empty, but should be a group name",
+                    ));
+                }
+
                 let reverse = args[i] == "-nogroup";
                 i += 1;
                 Some(GroupMatcher::new(group.to_string(), reverse).into_box())

@@ -33,7 +33,11 @@ impl Matcher for GroupMatcher {
         };
 
         let Some(group) = group else {
-            return false;
+            // This if branch is to determine whether a certain group exists in the system.
+            // If a certain group does not exist in the system,
+            // the result will need to be returned according to
+            // the flag bit of whether to invert the result.
+            return self.reverse;
         };
 
         let gid = group.gid.as_raw();
@@ -89,18 +93,6 @@ mod tests {
         assert!(
             !matcher_reverse.matches(&file_info, &mut matcher_io),
             "group should not match in reverse predicate"
-        );
-
-        let empty_group_name_matcher = super::GroupMatcher::new("".to_string(), false);
-        assert!(
-            !empty_group_name_matcher.matches(&file_info, &mut matcher_io),
-            "empty group name should not match"
-        );
-
-        let empty_group_name_matcher_reverse = super::GroupMatcher::new("".to_string(), true);
-        assert!(
-            !empty_group_name_matcher_reverse.matches(&file_info, &mut matcher_io),
-            "empty group name should not match in reverse predicate"
         );
     }
 }

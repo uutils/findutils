@@ -1064,6 +1064,7 @@ mod tests {
         assert_eq!(deps.get_output_as_string(), "");
 
         // test -nogroup
+        let deps = FakeDependencies::new();
         let rc = find_main(
             &["find", "./test_data/simple/subdir", "-nogroup", "nobody"],
             &deps,
@@ -1074,5 +1075,15 @@ mod tests {
             deps.get_output_as_string(),
             "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"
         );
+
+        // test empty user name and group name
+        ["-user", "-nouser", "-group", "-nogroup"]
+            .iter()
+            .for_each(|&arg| {
+                let deps = FakeDependencies::new();
+                let rc = find_main(&["find", "./test_data/simple/subdir", arg, ""], &deps);
+
+                assert_eq!(rc, 1);
+            });
     }
 }

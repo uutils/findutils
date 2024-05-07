@@ -33,7 +33,11 @@ impl Matcher for UserMatcher {
         };
 
         let Some(user) = user else {
-            return false;
+            // This if branch is to determine whether a certain user exists in the system.
+            // If a certain user does not exist in the system,
+            // the result will need to be returned according to
+            // the flag bit of whether to invert the result.
+            return self.reverse;
         };
 
         let uid = user.uid.as_raw();
@@ -89,18 +93,6 @@ mod tests {
         assert!(
             !matcher_reverse.matches(&file_info, &mut matcher_io),
             "user should not be the same"
-        );
-
-        let empty_user_name_matcher = UserMatcher::new("".to_string(), false);
-        assert!(
-            !empty_user_name_matcher.matches(&file_info, &mut matcher_io),
-            "empty user name should not match"
-        );
-
-        let empty_user_name_matcher_reverse = UserMatcher::new("".to_string(), true);
-        assert!(
-            !empty_user_name_matcher_reverse.matches(&file_info, &mut matcher_io),
-            "empty user name should not match in reverse predicate"
         );
     }
 }
