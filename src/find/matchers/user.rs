@@ -57,23 +57,23 @@ mod tests {
     fn test_user_matcher() {
         use std::fs::File;
 
-        use nix::unistd::{Uid, User};
-        use tempfile::Builder;
-        use std::os::unix::fs::MetadataExt;
         use crate::find::matchers::{tests::get_dir_entry_for, user::UserMatcher, Matcher};
+        use nix::unistd::{Uid, User};
+        use std::os::unix::fs::MetadataExt;
+        use tempfile::Builder;
 
         let deps = FakeDependencies::new();
         let mut matcher_io = deps.new_matcher_io();
 
-        let temp_dir = Builder::new()
-            .prefix("user_matcher")
-            .tempdir()
-            .unwrap();
+        let temp_dir = Builder::new().prefix("user_matcher").tempdir().unwrap();
         let foo_path = temp_dir.path().join("foo");
-        let _ = File::create(&foo_path).expect("create temp file");
+        let _ = File::create(foo_path).expect("create temp file");
         let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
         let file_uid = file_info.path().metadata().unwrap().uid();
-        let file_user = User::from_uid(Uid::from_raw(file_uid)).unwrap().unwrap().name;
+        let file_user = User::from_uid(Uid::from_raw(file_uid))
+            .unwrap()
+            .unwrap()
+            .name;
 
         let matcher = UserMatcher::new(file_user.clone(), false);
         assert!(

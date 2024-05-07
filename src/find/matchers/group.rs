@@ -57,45 +57,45 @@ mod tests {
     fn test_group_matcher() {
         use std::fs::File;
 
-        use nix::unistd::{Gid, Group};
-        use tempfile::Builder;
-        use std::os::unix::fs::MetadataExt;
         use crate::find::matchers::{tests::get_dir_entry_for, Matcher};
+        use nix::unistd::{Gid, Group};
+        use std::os::unix::fs::MetadataExt;
+        use tempfile::Builder;
 
         let deps = FakeDependencies::new();
         let mut matcher_io = deps.new_matcher_io();
 
-        let temp_dir = Builder::new()
-            .prefix("group_matcher")
-            .tempdir()
-            .unwrap();
+        let temp_dir = Builder::new().prefix("group_matcher").tempdir().unwrap();
         let foo_path = temp_dir.path().join("foo");
-        let _ = File::create(&foo_path).expect("create temp file");
+        let _ = File::create(foo_path).expect("create temp file");
         let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
         let file_gid = file_info.path().metadata().unwrap().gid();
-        let file_group = Group::from_gid(Gid::from_raw(file_gid)).unwrap().unwrap().name;
+        let file_group = Group::from_gid(Gid::from_raw(file_gid))
+            .unwrap()
+            .unwrap()
+            .name;
 
         let matcher = super::GroupMatcher::new(file_group.clone(), false);
         assert!(
-            matcher.matches(&file_info, &mut matcher_io), 
+            matcher.matches(&file_info, &mut matcher_io),
             "group should match"
         );
 
-        let matcher_reverse = super::GroupMatcher::new(file_group.clone(), true);        
+        let matcher_reverse = super::GroupMatcher::new(file_group.clone(), true);
         assert!(
-            !matcher_reverse.matches(&file_info, &mut matcher_io), 
+            !matcher_reverse.matches(&file_info, &mut matcher_io),
             "group should not match in reverse predicate"
         );
 
         let empty_group_name_matcher = super::GroupMatcher::new("".to_string(), false);
         assert!(
-            !empty_group_name_matcher.matches(&file_info, &mut matcher_io), 
+            !empty_group_name_matcher.matches(&file_info, &mut matcher_io),
             "empty group name should not match"
         );
 
         let empty_group_name_matcher_reverse = super::GroupMatcher::new("".to_string(), true);
         assert!(
-            !empty_group_name_matcher_reverse.matches(&file_info, &mut matcher_io), 
+            !empty_group_name_matcher_reverse.matches(&file_info, &mut matcher_io),
             "empty group name should not match in reverse predicate"
         );
     }
