@@ -1025,4 +1025,36 @@ mod tests {
                 .expect("cannot set file permission");
         }
     }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_user_predicate() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-user", "nobody"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+
+        // test -nouser
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-nouser", "nobody"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_group_predicate() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-group", "nobody"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+
+        // test -nogroup
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-nogroup", "nobody"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n");
+    }
 }

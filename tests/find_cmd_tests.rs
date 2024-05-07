@@ -518,3 +518,23 @@ fn expression_empty_parentheses() {
         ))
         .stdout(predicate::str::is_empty());
 }
+
+#[test]
+fn find_with_user_predicate() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-user", "root"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+fn find_with_group_predicate() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-group", "root"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}

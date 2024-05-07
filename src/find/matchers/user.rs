@@ -47,3 +47,56 @@ impl Matcher for UserMatcher {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::find::tests::FakeDependencies;
+
+    #[test]
+    #[cfg(unix)]
+    fn test_user_matcher() {
+        use std::fs::File;
+
+        use nix::unistd::{Uid, User};
+        use tempfile::Builder;
+        use std::os::unix::fs::MetadataExt;
+        use crate::find::matchers::{tests::get_dir_entry_for, user::UserMatcher, Matcher};
+
+        let deps = FakeDependencies::new();
+        let mut matcher_io = deps.new_matcher_io();
+
+        let temp_dir = Builder::new()
+            .prefix("user_matcher")
+            .tempdir()
+            .unwrap();
+        let foo_path = temp_dir.path().join("foo");
+        let _ = File::create(&foo_path).expect("create temp file");
+        let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
+        let file_uid = file_info.path().metadata().unwrap().uid();
+        let file_user = User::from_uid(Uid::from_raw(file_uid)).unwrap().unwrap().name;
+
+        let matcher = UserMatcher::new(file_user.clone(), false);
+        assert!(
+            matcher.matches(&file_info, &mut matcher_io),
+            "user should be the same"
+        );
+
+        let matcher_reverse = UserMatcher::new(file_user.clone(), true);
+        assert!(
+            !matcher_reverse.matches(&file_info, &mut matcher_io),
+            "user should not be the same"
+        );
+
+        let empty_user_name_matcher = UserMatcher::new("".to_string(), false);
+        assert!(
+            !empty_user_name_matcher.matches(&file_info, &mut matcher_io),
+            "empty user name should not match"
+        );
+
+        let empty_user_name_matcher_reverse = UserMatcher::new("".to_string(), true);
+        assert!(
+            !empty_user_name_matcher_reverse.matches(&file_info, &mut matcher_io),
+            "empty user name should not match in reverse predicate"
+        );
+    }
+}
