@@ -4,8 +4,6 @@ use super::Matcher;
 use nix::unistd::User;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 
 pub struct UserMatcher {
     reverse: bool,
@@ -36,7 +34,7 @@ impl UserMatcher {
 
     #[cfg(windows)]
     pub fn new(user: String, reverse: bool) -> UserMatcher {
-        UserMatcher { reverse, None }
+        UserMatcher { reverse, uid: None }
     }
 
     pub fn uid(&self) -> &Option<u32> {

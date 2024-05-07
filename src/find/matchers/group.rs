@@ -4,8 +4,6 @@ use super::Matcher;
 use nix::unistd::Group;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 
 pub struct GroupMatcher {
     reverse: bool,
@@ -36,7 +34,7 @@ impl GroupMatcher {
 
     #[cfg(windows)]
     pub fn new(group: String, reverse: bool) -> GroupMatcher {
-        GroupMatcher { reverse, None }
+        GroupMatcher { reverse, gid: None }
     }
 
     pub fn gid(&self) -> &Option<u32> {
