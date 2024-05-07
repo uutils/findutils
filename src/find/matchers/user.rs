@@ -21,7 +21,11 @@ impl UserMatcher {
 impl Matcher for UserMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        let file_uid = file_info.path().metadata().unwrap().uid();
+        let Ok(metadata) = file_info.path().metadata() else {
+            return false;
+        };
+
+        let file_uid = metadata.uid();
 
         // get uid from user name
         let Ok(user) = User::from_name(self.user.as_str()) else {

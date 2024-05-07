@@ -21,7 +21,11 @@ impl GroupMatcher {
 impl Matcher for GroupMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        let file_group = file_info.path().metadata().unwrap().gid();
+        let Ok(metadata) = file_info.path().metadata() else {
+            return false;
+        };
+
+        let file_gid = metadata.uid();
 
         // get gid from group name
         let Ok(group) = Group::from_name(self.group.as_str()) else {
@@ -34,9 +38,9 @@ impl Matcher for GroupMatcher {
 
         let gid = group.gid.as_raw();
         if self.reverse {
-            file_group != gid
+            file_gid != gid
         } else {
-            file_group == gid
+            file_gid == gid
         }
     }
 
