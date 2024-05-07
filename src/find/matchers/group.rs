@@ -25,7 +25,7 @@ impl Matcher for GroupMatcher {
             return false;
         };
 
-        let file_gid = metadata.uid();
+        let file_gid = metadata.gid();
 
         // get gid from group name
         let Ok(group) = Group::from_name(self.group.as_str()) else {
