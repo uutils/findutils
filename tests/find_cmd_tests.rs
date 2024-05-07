@@ -520,6 +520,7 @@ fn expression_empty_parentheses() {
 }
 
 #[test]
+#[serial(working_dir)]
 fn find_with_user_predicate() {
     Command::cargo_bin("find")
         .expect("found binary")
@@ -530,6 +531,7 @@ fn find_with_user_predicate() {
 }
 
 #[test]
+#[serial(working_dir)]
 fn find_with_group_predicate() {
     Command::cargo_bin("find")
         .expect("found binary")
