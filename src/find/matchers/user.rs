@@ -9,12 +9,38 @@ use std::os::windows::fs::MetadataExt;
 
 pub struct UserMatcher {
     reverse: bool,
-    user: String,
+    uid: Option<u32>,
 }
 
 impl UserMatcher {
+    #[cfg(unix)]
     pub fn new(user: String, reverse: bool) -> UserMatcher {
-        UserMatcher { reverse, user }
+        // get uid from user name
+        let Ok(user) = User::from_name(user.as_str()) else {
+            return UserMatcher { reverse, uid: None };
+        };
+
+        let Some(user) = user else {
+            // This if branch is to determine whether a certain user exists in the system.
+            // If a certain user does not exist in the system,
+            // the result will need to be returned according to
+            // the flag bit of whether to invert the result.
+            return UserMatcher { reverse, uid: None };
+        };
+
+        UserMatcher {
+            reverse,
+            uid: Some(user.uid.as_raw()),
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn new(user: String, reverse: bool) -> UserMatcher {
+        UserMatcher { reverse, None }
+    }
+
+    pub fn uid(&self) -> &Option<u32> {
+        &self.uid
     }
 }
 
@@ -26,25 +52,15 @@ impl Matcher for UserMatcher {
         };
 
         let file_uid = metadata.uid();
-
-        // get uid from user name
-        let Ok(user) = User::from_name(self.user.as_str()) else {
-            return false;
-        };
-
-        let Some(user) = user else {
-            // This if branch is to determine whether a certain user exists in the system.
-            // If a certain user does not exist in the system,
-            // the result will need to be returned according to
-            // the flag bit of whether to invert the result.
-            return self.reverse;
-        };
-
-        let uid = user.uid.as_raw();
-        if self.reverse {
-            file_uid != uid
-        } else {
-            file_uid == uid
+        match self.uid {
+            Some(uid) => {
+                if self.reverse {
+                    file_uid != uid
+                } else {
+                    file_uid == uid
+                }
+            }
+            None => false,
         }
     }
 

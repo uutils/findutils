@@ -536,6 +536,14 @@ fn find_with_user_predicate() {
         .failure()
         .stderr(predicate::str::contains("empty"))
         .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-user", " "])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is not the name of a known user"))
+        .stdout(predicate::str::is_empty());
 }
 
 #[test]
@@ -554,5 +562,15 @@ fn find_with_group_predicate() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("empty"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-group", " "])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "is not the name of an existing group",
+        ))
         .stdout(predicate::str::is_empty());
 }

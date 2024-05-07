@@ -9,12 +9,38 @@ use std::os::windows::fs::MetadataExt;
 
 pub struct GroupMatcher {
     reverse: bool,
-    group: String,
+    gid: Option<u32>,
 }
 
 impl GroupMatcher {
+    #[cfg(unix)]
     pub fn new(group: String, reverse: bool) -> GroupMatcher {
-        GroupMatcher { reverse, group }
+        // get gid from group name
+        let Ok(group) = Group::from_name(group.as_str()) else {
+            return GroupMatcher { reverse, gid: None };
+        };
+
+        let Some(group) = group else {
+            // This if branch is to determine whether a certain group exists in the system.
+            // If a certain group does not exist in the system,
+            // the result will need to be returned according to
+            // the flag bit of whether to invert the result.
+            return GroupMatcher { reverse, gid: None };
+        };
+
+        GroupMatcher {
+            reverse,
+            gid: Some(group.gid.as_raw()),
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn new(group: String, reverse: bool) -> GroupMatcher {
+        GroupMatcher { reverse, None }
+    }
+
+    pub fn gid(&self) -> &Option<u32> {
+        &self.gid
     }
 }
 
@@ -26,25 +52,15 @@ impl Matcher for GroupMatcher {
         };
 
         let file_gid = metadata.gid();
-
-        // get gid from group name
-        let Ok(group) = Group::from_name(self.group.as_str()) else {
-            return false;
-        };
-
-        let Some(group) = group else {
-            // This if branch is to determine whether a certain group exists in the system.
-            // If a certain group does not exist in the system,
-            // the result will need to be returned according to
-            // the flag bit of whether to invert the result.
-            return self.reverse;
-        };
-
-        let gid = group.gid.as_raw();
-        if self.reverse {
-            file_gid != gid
-        } else {
-            file_gid == gid
+        match self.gid {
+            Some(gid) => {
+                if self.reverse {
+                    file_gid != gid
+                } else {
+                    file_gid == gid
+                }
+            }
+            None => false,
         }
     }
 

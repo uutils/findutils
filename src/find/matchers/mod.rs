@@ -488,7 +488,16 @@ fn build_matcher_tree(
 
                 let reverse = args[i] == "-nouser";
                 i += 1;
-                Some(UserMatcher::new(user.to_string(), reverse).into_box())
+                let matcher = UserMatcher::new(user.to_string(), reverse);
+                match matcher.uid() {
+                    Some(_) => Some(matcher.into_box()),
+                    None => {
+                        return Err(From::from(format!(
+                            "{} is not the name of a known user",
+                            user
+                        )))
+                    }
+                }
             }
             "-group" | "-nogroup" => {
                 if i >= args.len() - 1 {
@@ -505,7 +514,16 @@ fn build_matcher_tree(
 
                 let reverse = args[i] == "-nogroup";
                 i += 1;
-                Some(GroupMatcher::new(group.to_string(), reverse).into_box())
+                let matcher = GroupMatcher::new(group.to_string(), reverse);
+                match matcher.gid() {
+                    Some(_) => Some(matcher.into_box()),
+                    None => {
+                        return Err(From::from(format!(
+                            "{} is not the name of an existing group",
+                            group
+                        )))
+                    }
+                }
             }
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
