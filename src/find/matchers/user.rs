@@ -48,10 +48,11 @@ impl Matcher for UserMatcher {
         };
 
         let file_uid = metadata.uid();
-        match self.uid {
-            Some(uid) => file_uid == uid,
-            None => false,
-        }
+
+        // When matching the -user parameter in find/matcher/mod.rs,
+        // it has been judged that the user does not exist and an error is returned.
+        // So use unwarp() directly here.
+        self.uid.unwrap() == file_uid
     }
 
     #[cfg(windows)]
@@ -102,6 +103,7 @@ mod tests {
         use std::fs::File;
 
         use crate::find::matchers::{tests::get_dir_entry_for, user::UserMatcher, Matcher};
+        use chrono::Local;
         use nix::unistd::{Uid, User};
         use std::os::unix::fs::MetadataExt;
         use tempfile::Builder;
@@ -123,6 +125,15 @@ mod tests {
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "user should be the same"
+        );
+
+        // Testing a non-existent group name
+        let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
+        let matcher = UserMatcher::new(time_string.clone());
+        assert!(
+            matcher.uid().is_none(),
+            "user {} should not be the same",
+            time_string
         );
     }
 }

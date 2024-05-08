@@ -48,10 +48,11 @@ impl Matcher for GroupMatcher {
         };
 
         let file_gid = metadata.gid();
-        match self.gid {
-            Some(gid) => file_gid == gid,
-            None => false,
-        }
+
+        // When matching the -group parameter in find/matcher/mod.rs,
+        // it has been judged that the group does not exist and an error is returned.
+        // So use unwarp() directly here.
+        self.gid.unwrap() == file_gid
     }
 
     #[cfg(windows)]
@@ -103,7 +104,8 @@ mod tests {
     fn test_group_matcher() {
         use std::fs::File;
 
-        use crate::find::matchers::{tests::get_dir_entry_for, Matcher};
+        use crate::find::matchers::{group::GroupMatcher, tests::get_dir_entry_for, Matcher};
+        use chrono::Local;
         use nix::unistd::{Gid, Group};
         use std::os::unix::fs::MetadataExt;
         use tempfile::Builder;
@@ -125,6 +127,15 @@ mod tests {
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "group should match"
+        );
+
+        // Testing a non-existent group name
+        let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
+        let matcher = GroupMatcher::new(time_string.clone());
+        assert!(
+            matcher.gid().is_none(),
+            "group name {} should not exist",
+            time_string
         );
     }
 }
