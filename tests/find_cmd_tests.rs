@@ -548,6 +548,18 @@ fn find_with_user_predicate() {
 
 #[test]
 #[serial(working_dir)]
+fn find_with_nouser_predicate() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-nouser"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
 fn find_with_group_predicate() {
     Command::cargo_bin("find")
         .expect("found binary")
@@ -573,4 +585,16 @@ fn find_with_group_predicate() {
             "is not the name of an existing group",
         ))
         .stdout(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_with_nogroup_predicate() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-nogroup"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
 }

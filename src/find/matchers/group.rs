@@ -126,11 +126,5 @@ mod tests {
             matcher.matches(&file_info, &mut matcher_io),
             "group should match"
         );
-
-        let matcher_reverse = super::GroupMatcher::new(file_group.clone());
-        assert!(
-            !matcher_reverse.matches(&file_info, &mut matcher_io),
-            "group should not match in reverse predicate"
-        );
     }
 }

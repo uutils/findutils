@@ -124,11 +124,5 @@ mod tests {
             matcher.matches(&file_info, &mut matcher_io),
             "user should be the same"
         );
-
-        let matcher_reverse = UserMatcher::new(file_user.clone());
-        assert!(
-            !matcher_reverse.matches(&file_info, &mut matcher_io),
-            "user should not be the same"
-        );
     }
 }

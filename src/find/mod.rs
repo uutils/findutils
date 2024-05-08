@@ -1065,6 +1065,16 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "linux")]
+    fn test_nouser_predicate() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-nouser"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
     fn test_group_predicate() {
         use std::{os::unix::fs::MetadataExt, path::Path};
 
@@ -1098,5 +1108,15 @@ mod tests {
 
             assert_eq!(rc, 1);
         });
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_nogroup_predicate() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-nogroup"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
     }
 }
