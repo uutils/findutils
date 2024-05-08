@@ -6,16 +6,15 @@ use nix::unistd::User;
 use std::os::unix::fs::MetadataExt;
 
 pub struct UserMatcher {
-    reverse: bool,
     uid: Option<u32>,
 }
 
 impl UserMatcher {
     #[cfg(unix)]
-    pub fn new(user: String, reverse: bool) -> UserMatcher {
+    pub fn new(user: String) -> UserMatcher {
         // get uid from user name
         let Ok(user) = User::from_name(user.as_str()) else {
-            return UserMatcher { reverse, uid: None };
+            return UserMatcher { uid: None };
         };
 
         let Some(user) = user else {
@@ -23,18 +22,17 @@ impl UserMatcher {
             // If a certain user does not exist in the system,
             // the result will need to be returned according to
             // the flag bit of whether to invert the result.
-            return UserMatcher { reverse, uid: None };
+            return UserMatcher { uid: None };
         };
 
         UserMatcher {
-            reverse,
             uid: Some(user.uid.as_raw()),
         }
     }
 
     #[cfg(windows)]
-    pub fn new(user: String, reverse: bool) -> UserMatcher {
-        UserMatcher { reverse, uid: None }
+    pub fn new(user: String) -> UserMatcher {
+        UserMatcher { uid: None }
     }
 
     pub fn uid(&self) -> &Option<u32> {
@@ -51,21 +49,45 @@ impl Matcher for UserMatcher {
 
         let file_uid = metadata.uid();
         match self.uid {
-            Some(uid) => {
-                if self.reverse {
-                    file_uid != uid
-                } else {
-                    file_uid == uid
-                }
-            }
+            Some(uid) => file_uid == uid,
             None => false,
         }
     }
 
     #[cfg(windows)]
     fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        // The user group acquisition function for Windows systems is not implemented in MetadataExt,
-        // so it is somewhat difficult to implement it. :(
+        true
+    }
+}
+
+pub struct NoUserMatcher {}
+
+impl Matcher for NoUserMatcher {
+    #[cfg(unix)]
+    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+        use nix::unistd::Uid;
+
+        if file_info.path().is_symlink() {
+            return false;
+        }
+
+        let Ok(metadata) = file_info.path().metadata() else {
+            return true;
+        };
+
+        let Ok(uid) = User::from_uid(Uid::from_raw(metadata.uid())) else {
+            return true;
+        };
+
+        let Some(_user) = uid else {
+            return true;
+        };
+
+        false
+    }
+
+    #[cfg(windows)]
+    fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
         true
     }
 }
@@ -97,13 +119,13 @@ mod tests {
             .unwrap()
             .name;
 
-        let matcher = UserMatcher::new(file_user.clone(), false);
+        let matcher = UserMatcher::new(file_user.clone());
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "user should be the same"
         );
 
-        let matcher_reverse = UserMatcher::new(file_user.clone(), true);
+        let matcher_reverse = UserMatcher::new(file_user.clone());
         assert!(
             !matcher_reverse.matches(&file_info, &mut matcher_io),
             "user should not be the same"

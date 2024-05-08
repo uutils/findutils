@@ -37,7 +37,7 @@ use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
 use self::exec::SingleExecMatcher;
-use self::group::GroupMatcher;
+use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
     AndMatcherBuilder, FalseMatcher, ListMatcherBuilder, NotMatcher, TrueMatcher,
@@ -57,7 +57,7 @@ use self::time::{
     NewerTimeMatcher,
 };
 use self::type_matcher::TypeMatcher;
-use self::user::UserMatcher;
+use self::user::{NoUserMatcher, UserMatcher};
 
 use super::{Config, Dependencies};
 
@@ -475,7 +475,7 @@ fn build_matcher_tree(
                 i += 1;
                 Some(LinksMatcher::new(inum)?.into_box())
             }
-            "-user" | "-nouser" => {
+            "-user" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
@@ -486,9 +486,8 @@ fn build_matcher_tree(
                     return Err(From::from("The argument to -user should not be empty"));
                 }
 
-                let reverse = args[i] == "-nouser";
                 i += 1;
-                let matcher = UserMatcher::new(user.to_string(), reverse);
+                let matcher = UserMatcher::new(user.to_string());
                 match matcher.uid() {
                     Some(_) => Some(matcher.into_box()),
                     None => {
@@ -499,7 +498,8 @@ fn build_matcher_tree(
                     }
                 }
             }
-            "-group" | "-nogroup" => {
+            "-nouser" => Some(NoUserMatcher {}.into_box()),
+            "-group" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
@@ -512,9 +512,8 @@ fn build_matcher_tree(
                     ));
                 }
 
-                let reverse = args[i] == "-nogroup";
                 i += 1;
-                let matcher = GroupMatcher::new(group.to_string(), reverse);
+                let matcher = GroupMatcher::new(group.to_string());
                 match matcher.gid() {
                     Some(_) => Some(matcher.into_box()),
                     None => {
@@ -525,6 +524,7 @@ fn build_matcher_tree(
                     }
                 }
             }
+            "-nogroup" => Some(NoGroupMatcher {}.into_box()),
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
                 if i >= args.len() - 1 {

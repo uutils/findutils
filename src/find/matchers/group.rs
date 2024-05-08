@@ -6,16 +6,15 @@ use nix::unistd::Group;
 use std::os::unix::fs::MetadataExt;
 
 pub struct GroupMatcher {
-    reverse: bool,
     gid: Option<u32>,
 }
 
 impl GroupMatcher {
     #[cfg(unix)]
-    pub fn new(group: String, reverse: bool) -> GroupMatcher {
+    pub fn new(group: String) -> GroupMatcher {
         // get gid from group name
         let Ok(group) = Group::from_name(group.as_str()) else {
-            return GroupMatcher { reverse, gid: None };
+            return GroupMatcher { gid: None };
         };
 
         let Some(group) = group else {
@@ -23,18 +22,17 @@ impl GroupMatcher {
             // If a certain group does not exist in the system,
             // the result will need to be returned according to
             // the flag bit of whether to invert the result.
-            return GroupMatcher { reverse, gid: None };
+            return GroupMatcher { gid: None };
         };
 
         GroupMatcher {
-            reverse,
             gid: Some(group.gid.as_raw()),
         }
     }
 
     #[cfg(windows)]
-    pub fn new(group: String, reverse: bool) -> GroupMatcher {
-        GroupMatcher { reverse, gid: None }
+    pub fn new(group: String) -> GroupMatcher {
+        GroupMatcher { gid: None }
     }
 
     pub fn gid(&self) -> &Option<u32> {
@@ -51,13 +49,7 @@ impl Matcher for GroupMatcher {
 
         let file_gid = metadata.gid();
         match self.gid {
-            Some(gid) => {
-                if self.reverse {
-                    file_gid != gid
-                } else {
-                    file_gid == gid
-                }
-            }
+            Some(gid) => file_gid == gid,
             None => false,
         }
     }
@@ -66,6 +58,38 @@ impl Matcher for GroupMatcher {
     fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
         // The user group acquisition function for Windows systems is not implemented in MetadataExt,
         // so it is somewhat difficult to implement it. :(
+        true
+    }
+}
+
+pub struct NoGroupMatcher {}
+
+impl Matcher for NoGroupMatcher {
+    #[cfg(unix)]
+    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+        use nix::unistd::Gid;
+
+        if file_info.path().is_symlink() {
+            return false;
+        }
+
+        let Ok(metadata) = file_info.path().metadata() else {
+            return true;
+        };
+
+        let Ok(gid) = Group::from_gid(Gid::from_raw(metadata.gid())) else {
+            return true;
+        };
+
+        let Some(_group) = gid else {
+            return true;
+        };
+
+        false
+    }
+
+    #[cfg(windows)]
+    fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
         true
     }
 }
@@ -97,13 +121,13 @@ mod tests {
             .unwrap()
             .name;
 
-        let matcher = super::GroupMatcher::new(file_group.clone(), false);
+        let matcher = super::GroupMatcher::new(file_group.clone());
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "group should match"
         );
 
-        let matcher_reverse = super::GroupMatcher::new(file_group.clone(), true);
+        let matcher_reverse = super::GroupMatcher::new(file_group.clone());
         assert!(
             !matcher_reverse.matches(&file_info, &mut matcher_io),
             "group should not match in reverse predicate"
