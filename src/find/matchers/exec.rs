@@ -66,24 +66,6 @@ impl Matcher for SingleExecMatcher {
             file_info.path().to_path_buf()
         };
 
-        // support interactive exec
-        if self.interactive {
-            let tips = format!(
-                "{} ... {} > ? [y/n]: ",
-                self.executable,
-                path_to_file.to_string_lossy()
-            );
-            #[allow(clippy::explicit_write)]
-            write!(stdout(), "{}", tips).unwrap();
-            stdout().flush().unwrap();
-
-            let mut input = String::new();
-            let _result = stdin().read_line(&mut input).unwrap();
-            if !input.trim().contains('y') {
-                return false;
-            }
-        }
-
         for arg in &self.args {
             match *arg {
                 Arg::LiteralArg(ref a) => command.arg(a.as_os_str()),
@@ -104,6 +86,25 @@ impl Matcher for SingleExecMatcher {
                 }
             }
         }
+
+        // support interactive exec
+        if self.interactive {
+            let tips = format!(
+                "{} ... {} > ? [y/n]: ",
+                self.executable,
+                path_to_file.to_string_lossy()
+            );
+            #[allow(clippy::explicit_write)]
+            write!(stdout(), "{}", tips).unwrap();
+            stdout().flush().unwrap();
+
+            let mut input = String::new();
+            let _result = stdin().read_line(&mut input).unwrap();
+            if !input.trim().contains('y') {
+                return false;
+            }
+        }
+
         match command.status() {
             Ok(status) => status.success(),
             Err(e) => {
