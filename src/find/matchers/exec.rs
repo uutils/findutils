@@ -6,7 +6,7 @@
 
 use std::error::Error;
 use std::ffi::OsString;
-use std::io::{stderr, stdin, Write};
+use std::io::{stderr, stdin, stdout, Write};
 use std::path::Path;
 use std::process::Command;
 
@@ -73,12 +73,13 @@ impl Matcher for SingleExecMatcher {
                 self.executable,
                 path_to_file.to_string_lossy()
             );
-            print!("{}", tips);
+            write!(stdout(), "{}", tips).unwrap();
+            stdout().flush().unwrap();
 
             let mut input = String::new();
             let _result = stdin().read_line(&mut input).unwrap();
-            if input.trim().eq("n") {
-                return true;
+            if !input.trim().contains("y") {
+                return false;
             }
         }
 
