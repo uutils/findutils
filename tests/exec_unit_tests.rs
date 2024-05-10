@@ -34,6 +34,7 @@ fn matching_executes_code() {
         &path_to_testing_commandline(),
         &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         false,
+        false,
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
@@ -65,6 +66,7 @@ fn matching_executes_code_in_files_directory() {
         &path_to_testing_commandline(),
         &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         true,
+        false,
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
@@ -96,6 +98,7 @@ fn matching_embedded_filename() {
         &path_to_testing_commandline(),
         &[temp_dir_path.as_ref(), "abc{}x{}yz"],
         false,
+        false
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
@@ -129,6 +132,7 @@ fn execdir_in_current_directory() {
         &path_to_testing_commandline(),
         &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         true,
+        false,
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
@@ -167,6 +171,7 @@ fn execdir_in_root_directory() {
         &path_to_testing_commandline(),
         &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
         true,
+        false,
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
@@ -205,6 +210,7 @@ fn matching_fails_if_executable_fails() {
             "xyz",
         ],
         true,
+        false,
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
