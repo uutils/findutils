@@ -98,7 +98,7 @@ fn matching_embedded_filename() {
         &path_to_testing_commandline(),
         &[temp_dir_path.as_ref(), "abc{}x{}yz"],
         false,
-        false
+        false,
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();

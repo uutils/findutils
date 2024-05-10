@@ -619,8 +619,13 @@ fn build_matcher_tree(
                 let interactive = expression == "-ok" || expression == "-okdir";
                 i = arg_index;
                 Some(
-                    SingleExecMatcher::new(executable, exec_args, expression == "-execdir", interactive)?
-                        .into_box(),
+                    SingleExecMatcher::new(
+                        executable,
+                        exec_args,
+                        expression == "-execdir",
+                        interactive,
+                    )?
+                    .into_box(),
                 )
             }
             #[cfg(unix)]
