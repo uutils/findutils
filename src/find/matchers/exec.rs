@@ -73,12 +73,13 @@ impl Matcher for SingleExecMatcher {
                 self.executable,
                 path_to_file.to_string_lossy()
             );
+            #[allow(clippy::explicit_write)]
             write!(stdout(), "{}", tips).unwrap();
             stdout().flush().unwrap();
 
             let mut input = String::new();
             let _result = stdin().read_line(&mut input).unwrap();
-            if !input.trim().contains("y") {
+            if !input.trim().contains('y') {
                 return false;
             }
         }
