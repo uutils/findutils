@@ -527,25 +527,29 @@ fn find_age_range() {
         "\"-60\"", "\"-120\"", "\"-240\"", "\"-60\"", "\"-120\"", "\"-240\"",
     ];
 
-    for (arg, time) in args.iter().zip(times.iter()) {
-        Command::cargo_bin("find")
-            .expect("the time should match")
-            .args(["test_data/simple", arg, time])
-            .assert()
-            .success()
-            .code(0);
+    for arg in args.iter() {
+        for time in times.iter() {
+            Command::cargo_bin("find")
+                .expect("the time should match")
+                .args(["test_data/simple", arg, time])
+                .assert()
+                .success()
+                .code(0);
+        }
     }
 
-    for (arg, time_string) in args.iter().zip(time_strings.iter()) {
-        Command::cargo_bin("find")
-            .expect("the except time should not match")
-            .args(["test_data/simple", arg, time_string])
-            .assert()
-            .failure()
-            .code(1)
-            .stderr(predicate::str::contains(
-                "Error: Expected a decimal integer (with optional + or - prefix) argument to",
-            ))
-            .stdout(predicate::str::is_empty());
+    for arg in args.iter() {
+        for time_string in time_strings.iter() {
+            Command::cargo_bin("find")
+                .expect("the except time should not match")
+                .args(["test_data/simple", arg, time_string])
+                .assert()
+                .failure()
+                .code(1)
+                .stderr(predicate::str::contains(
+                    "Error: Expected a decimal integer (with optional + or - prefix) argument to",
+                ))
+                .stdout(predicate::str::is_empty());
+        }
     }
 }
