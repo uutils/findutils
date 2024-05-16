@@ -220,7 +220,7 @@ fn convert_arg_to_comparable_value(
     option_name: &str,
     value_as_string: &str,
 ) -> Result<ComparableValue, Box<dyn Error>> {
-    let re = Regex::new(r"([+-]?)(\d+)$")?;
+    let re = Regex::new(r"^([+-]?)(\d+)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok(match &groups[1] {
@@ -1257,6 +1257,20 @@ mod tests {
             assert!(e.to_string().contains("missing argument"));
         } else {
             panic!("-perm with no mode pattern should fail");
+        }
+    }
+
+    #[test]
+    fn convert_exception_arg_to_comparable_value_test() {
+        let exception_args = ["1%2", "1%2%3", "1a2", "1%2a", "abc", "-", "+", "%"];
+
+        for arg in exception_args {
+            let comparable = convert_arg_to_comparable_value("test", arg);
+            assert!(
+                comparable.is_err(),
+                "{} should be parse to Comparable correctly",
+                arg
+            );
         }
     }
 

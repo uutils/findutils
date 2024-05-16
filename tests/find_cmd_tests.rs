@@ -507,6 +507,32 @@ fn find_accessible() {
 }
 
 #[test]
+fn find_time() {
+    let args = ["1", "+1", "-1"];
+    let exception_args = ["1%2", "1%2%3", "1a2", "1%2a", "abc", "-", "+", "%"];
+
+    ["-ctime", "-atime", "-mtime"].iter().for_each(|flag| {
+        args.iter().for_each(|arg| {
+            Command::cargo_bin("find")
+                .expect("found binary")
+                .args([".", flag, arg])
+                .assert()
+                .success()
+                .stderr(predicate::str::is_empty());
+        });
+
+        exception_args.iter().for_each(|arg| {
+            Command::cargo_bin("find")
+                .expect("found binary")
+                .args([".", flag, arg])
+                .assert()
+                .failure()
+                .stdout(predicate::str::is_empty());
+        });
+    });
+}
+
+#[test]
 fn expression_empty_parentheses() {
     Command::cargo_bin("find")
         .expect("found binary")
