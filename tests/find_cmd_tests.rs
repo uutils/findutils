@@ -518,3 +518,50 @@ fn expression_empty_parentheses() {
         ))
         .stdout(predicate::str::is_empty());
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_newer_xy() {
+    #[cfg(target_os = "linux")]
+    let x_options = ["a", "c", "m"];
+    #[cfg(not(target_os = "linux"))]
+    let x_options = ["a", "B", "c", "m"];
+    #[cfg(target_os = "linux")]
+    let y_options = ["a", "c", "m"];
+    #[cfg(not(target_os = "linux"))]
+    let y_options = ["a", "B", "c", "m"];
+
+    for &x in &x_options {
+        for &y in &y_options {
+            let arg = &format!("-newer{x}{y}").to_string();
+            Command::cargo_bin("find")
+                .expect("found binary")
+                .args([
+                    "./test_data/simple/subdir",
+                    arg,
+                    "./test_data/simple/subdir/ABBBC",
+                ])
+                .assert()
+                .success()
+                .stderr(predicate::str::is_empty());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    let args = ["-newerat", "-newerct", "-newermt"];
+    #[cfg(not(target_os = "linux"))]
+    let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+    let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
+
+    for &arg in &args {
+        for &time in &times {
+            let arg = &format!("{arg}{time}").to_string();
+            Command::cargo_bin("find")
+                .expect("found binary")
+                .args(["./test_data/simple/subdir", arg, time])
+                .assert()
+                .success()
+                .stderr(predicate::str::is_empty());
+        }
+    }
+}
