@@ -916,9 +916,13 @@ mod tests {
     fn test_find_newer_xy_before_created_time() {
         // normal - before the created time
         #[cfg(target_os = "linux")]
-        let args = ["-newerat", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         #[cfg(not(target_os = "linux"))]
-        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerBt", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
 
         for (arg, time) in args.iter().zip(times.iter()) {
@@ -937,9 +941,13 @@ mod tests {
     fn test_find_newer_xy_after_created_time() {
         // normal - after the created time
         #[cfg(target_os = "linux")]
-        let args = ["-newerat", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         #[cfg(not(target_os = "linux"))]
-        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerBt", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         let times = ["jan 01, 2037", "jan 01, 2037 00:00:00"];
 
         for (arg, time) in args.iter().zip(times.iter()) {
@@ -958,9 +966,13 @@ mod tests {
         // Therefore, the files checkout of the git repository while
         // this test was running are likely to be newer than the default time.
         #[cfg(target_os = "linux")]
-        let args = ["-newerat", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         #[cfg(not(target_os = "linux"))]
-        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerBt", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         let time = "";
 
         for &arg in &args {
@@ -977,9 +989,13 @@ mod tests {
     fn test_find_newer_xy_error_time() {
         // Catch a parsing error.
         #[cfg(target_os = "linux")]
-        let args = ["-newerat", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         #[cfg(not(target_os = "linux"))]
-        let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+        let args = [
+            "-newerat", "-newerBt", "-newerct", "-newermt", "-newer", "-anewer", "-cnewer",
+        ];
         let time = "2037, jan 01";
 
         for &arg in &args {

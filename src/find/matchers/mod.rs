@@ -1306,6 +1306,10 @@ mod tests {
 
     #[test]
     fn parse_str_to_newer_args_test() {
+        // test for error case
+        let arg = parse_str_to_newer_args("");
+        assert!(arg.is_none());
+
         // test for short options
         // -newer equivalent to -newermm
         let arg = parse_str_to_newer_args("-newer").unwrap();
