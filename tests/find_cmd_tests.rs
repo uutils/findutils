@@ -527,9 +527,9 @@ fn find_newer_xy() {
     #[cfg(not(target_os = "linux"))]
     let options = ["a", "B", "c", "m"];
 
-    for &x in &options {
-        for &y in &options {
-            let arg = &format!("-newer{x}{y}").to_string();
+    for x in options {
+        for y in options {
+            let arg = &format!("-newer{x}{y}");
             Command::cargo_bin("find")
                 .expect("found binary")
                 .args([
@@ -549,9 +549,9 @@ fn find_newer_xy() {
     let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
     let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
 
-    for &arg in &args {
-        for &time in &times {
-            let arg = &format!("{arg}{time}").to_string();
+    for arg in args {
+        for time in times {
+            let arg = &format!("{arg}{time}");
             Command::cargo_bin("find")
                 .expect("found binary")
                 .args(["./test_data/simple/subdir", arg, time])

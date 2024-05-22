@@ -510,8 +510,8 @@ mod tests {
         #[cfg(not(target_os = "linux"))]
         let options = ["a", "B", "c", "m"];
 
-        for x_option in &options {
-            for y_option in &options {
+        for x_option in options {
+            for y_option in options {
                 let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
                 let temp_dir_path = temp_dir.path().to_string_lossy();
                 let new_file_name = "newFile";
