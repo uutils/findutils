@@ -523,16 +523,12 @@ fn expression_empty_parentheses() {
 #[serial(working_dir)]
 fn find_newer_xy() {
     #[cfg(target_os = "linux")]
-    let x_options = ["a", "c", "m"];
+    let options = ["a", "c", "m"];
     #[cfg(not(target_os = "linux"))]
-    let x_options = ["a", "B", "c", "m"];
-    #[cfg(target_os = "linux")]
-    let y_options = ["a", "c", "m"];
-    #[cfg(not(target_os = "linux"))]
-    let y_options = ["a", "B", "c", "m"];
+    let options = ["a", "B", "c", "m"];
 
-    for &x in &x_options {
-        for &y in &y_options {
+    for &x in &options {
+        for &y in &options {
             let arg = &format!("-newer{x}{y}").to_string();
             Command::cargo_bin("find")
                 .expect("found binary")

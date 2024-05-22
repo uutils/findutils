@@ -506,16 +506,12 @@ mod tests {
     #[test]
     fn newer_option_matcher() {
         #[cfg(target_os = "linux")]
-        let x_options = ["a", "c", "m"];
+        let options = ["a", "c", "m"];
         #[cfg(not(target_os = "linux"))]
-        let x_options = ["a", "B", "c", "m"];
-        #[cfg(target_os = "linux")]
-        let y_options = ["a", "c", "m"];
-        #[cfg(not(target_os = "linux"))]
-        let y_options = ["a", "B", "c", "m"];
+        let options = ["a", "B", "c", "m"];
 
-        for x_option in &x_options {
-            for y_option in &y_options {
+        for x_option in &options {
+            for y_option in &options {
                 let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
                 let temp_dir_path = temp_dir.path().to_string_lossy();
                 let new_file_name = "newFile";
