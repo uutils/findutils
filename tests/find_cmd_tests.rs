@@ -597,8 +597,8 @@ fn find_age_range() {
         "\"-60\"", "\"-120\"", "\"-240\"", "\"-60\"", "\"-120\"", "\"-240\"",
     ];
 
-    for arg in args.iter() {
-        for time in times.iter() {
+    for arg in args {
+        for time in times {
             Command::cargo_bin("find")
                 .expect("the time should match")
                 .args(["test_data/simple", arg, time])
@@ -608,10 +608,10 @@ fn find_age_range() {
         }
     }
 
-    for arg in args.iter() {
-        for time_string in time_strings.iter() {
+    for arg in args {
+        for time_string in time_strings {
             Command::cargo_bin("find")
-                .expect("the except time should not match")
+                .expect("the time should not match")
                 .args(["test_data/simple", arg, time_string])
                 .assert()
                 .failure()

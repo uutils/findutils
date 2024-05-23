@@ -751,11 +751,13 @@ mod tests {
         let args = ["-amin", "-cmin", "-mmin"];
         let times = ["-60", "-120", "-240", "+60", "+120", "+240"];
 
-        for (arg, time) in args.iter().zip(times.iter()) {
-            let deps = FakeDependencies::new();
-            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+        for arg in args {
+            for time in times {
+                let deps = FakeDependencies::new();
+                let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
-            assert_eq!(rc, 0);
+                assert_eq!(rc, 0);
+            }
         }
     }
 
