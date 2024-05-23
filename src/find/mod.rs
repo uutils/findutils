@@ -944,15 +944,17 @@ mod tests {
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
         let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
 
-        for (arg, time) in args.iter().zip(times.iter()) {
-            let deps = FakeDependencies::new();
-            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+        for arg in args {
+            for time in times {
+                let deps = FakeDependencies::new();
+                let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
-            assert_eq!(rc, 0);
-            assert_eq!(
-                deps.get_output_as_string(),
-                fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"),
-            );
+                assert_eq!(rc, 0);
+                assert_eq!(
+                    deps.get_output_as_string(),
+                    fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"),
+                );
+            }
         }
     }
 
@@ -965,12 +967,14 @@ mod tests {
         let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
         let times = ["jan 01, 2037", "jan 01, 2037 00:00:00"];
 
-        for (arg, time) in args.iter().zip(times.iter()) {
-            let deps = FakeDependencies::new();
-            let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+        for arg in args {
+            for time in times {
+                let deps = FakeDependencies::new();
+                let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
-            assert_eq!(rc, 0);
-            assert_eq!(deps.get_output_as_string(), "");
+                assert_eq!(rc, 0);
+                assert_eq!(deps.get_output_as_string(), "");
+            }
         }
     }
 
@@ -1019,7 +1023,7 @@ mod tests {
         use std::{path::Path, process::Command};
 
         let path = Path::new("./test_data/no_permission");
-        let _result = fs::create_dir(&path);
+        let _result = fs::create_dir(path);
         // Generate files without permissions.
         // std::fs cannot change file permissions to 000 in normal user state,
         // so use chmod via Command to change permissions.
@@ -1039,7 +1043,7 @@ mod tests {
         uucore::error::set_exit_code(0);
 
         if path.exists() {
-            let _result = fs::create_dir(&path);
+            let _result = fs::create_dir(path);
             // Remove the unreadable and writable status of the file to avoid affecting other tests.
             let _output = Command::new("chmod")
                 .arg("+rwx")

@@ -220,7 +220,7 @@ fn convert_arg_to_comparable_value(
     option_name: &str,
     value_as_string: &str,
 ) -> Result<ComparableValue, Box<dyn Error>> {
-    let re = Regex::new(r"([+-]?)(\d+)$")?;
+    let re = Regex::new(r"^([+-]?)(\d+)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok(match &groups[1] {
@@ -296,7 +296,29 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
 /// X and Y from the -newerXY string.
 /// X and Y are constrained to a/B/c/m and t.
 /// such as: "-neweraB" -> Some(a, B) "-neweraD" -> None
+///
+/// Additionally, there is support for the -anewer and -cnewer short arguments. as follows:
+/// 1. -anewer is equivalent to -neweram
+/// 2. -cnewer is equivalent to - newercm
+///
+/// If -newer is used it will be resolved to -newermm.
 fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
+    if input.is_empty() {
+        return None;
+    }
+
+    if input == "-newer" {
+        return Some(("m".to_string(), "m".to_string()));
+    }
+
+    if input == "-anewer" {
+        return Some(("a".to_string(), "m".to_string()));
+    }
+
+    if input == "-cnewer" {
+        return Some(("c".to_string(), "m".to_string()));
+    }
+
     let re = Regex::new(r"-newer([aBcm])([aBcmt])").unwrap();
     if let Some(captures) = re.captures(input) {
         let x = captures.get(1)?.as_str().to_string();
@@ -1275,6 +1297,20 @@ mod tests {
     }
 
     #[test]
+    fn convert_exception_arg_to_comparable_value_test() {
+        let exception_args = ["1%2", "1%2%3", "1a2", "1%2a", "abc", "-", "+", "%"];
+
+        for arg in exception_args {
+            let comparable = convert_arg_to_comparable_value("test", arg);
+            assert!(
+                comparable.is_err(),
+                "{} should be parse to Comparable correctly",
+                arg
+            );
+        }
+    }
+
+    #[test]
     fn parse_date_str_to_timestamps_test() {
         let full_date_timestamps = parse_date_str_to_timestamps("jan 01, 2025 00:00:01").unwrap();
         assert!(full_date_timestamps.to_string().contains("1735689601000"));
@@ -1298,6 +1334,23 @@ mod tests {
 
     #[test]
     fn parse_str_to_newer_args_test() {
+        // test for error case
+        let arg = parse_str_to_newer_args("");
+        assert!(arg.is_none());
+
+        // test for short options
+        // -newer equivalent to -newermm
+        let arg = parse_str_to_newer_args("-newer").unwrap();
+        assert_eq!(("m".to_string(), "m".to_string()), arg);
+
+        // -anewer equivalent to -neweram
+        let arg = parse_str_to_newer_args("-anewer").unwrap();
+        assert_eq!(("a".to_string(), "m".to_string()), arg);
+
+        // -cnewer equivalent to - newercm
+        let arg = parse_str_to_newer_args("-cnewer").unwrap();
+        assert_eq!(("c".to_string(), "m".to_string()), arg);
+
         let x_options = ["a", "B", "c", "m"];
         let y_options = ["a", "B", "c", "m", "t"];
 
