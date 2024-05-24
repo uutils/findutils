@@ -19,6 +19,7 @@ mod printf;
 mod prune;
 mod quit;
 mod regex;
+mod samefile;
 mod size;
 mod stat;
 mod time;
@@ -26,6 +27,7 @@ mod type_matcher;
 
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -47,6 +49,7 @@ use self::printf::Printf;
 use self::prune::PruneMatcher;
 use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
+use self::samefile::SameFileMatcher;
 use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
 use self::time::{
@@ -492,6 +495,17 @@ fn build_matcher_tree(
                 let inum = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
                 Some(LinksMatcher::new(inum)?.into_box())
+            }
+            "-samefile" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let path = fs::metadata(args[i + 1]);
+                i += 1;
+                match path {
+                    Ok(metadata) => Some(SameFileMatcher::new(metadata).into_box()),
+                    Err(err) => return Err(From::from(err)),
+                }
             }
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
