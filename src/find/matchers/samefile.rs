@@ -23,6 +23,11 @@ impl Matcher for SameFileMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &walkdir::DirEntry, _matcher_io: &mut super::MatcherIO) -> bool {
         let meta = file_info.metadata().unwrap();
+
+        if meta.dev() != self.metadata.dev() {
+            return false;
+        }
+
         meta.ino() == self.metadata.ino()
     }
 
