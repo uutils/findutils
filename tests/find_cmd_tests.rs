@@ -590,7 +590,7 @@ fn find_newer_xy() {
 
 #[test]
 #[serial(working_dir)]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn find_samefile() {
     use std::fs;
 
