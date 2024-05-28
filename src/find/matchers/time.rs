@@ -506,16 +506,12 @@ mod tests {
     #[test]
     fn newer_option_matcher() {
         #[cfg(target_os = "linux")]
-        let x_options = ["a", "c", "m"];
+        let options = ["a", "c", "m"];
         #[cfg(not(target_os = "linux"))]
-        let x_options = ["a", "B", "c", "m"];
-        #[cfg(target_os = "linux")]
-        let y_options = ["a", "c", "m"];
-        #[cfg(not(target_os = "linux"))]
-        let y_options = ["a", "B", "c", "m"];
+        let options = ["a", "B", "c", "m"];
 
-        for x_option in &x_options {
-            for y_option in &y_options {
+        for x_option in options {
+            for y_option in options {
                 let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
                 let temp_dir_path = temp_dir.path().to_string_lossy();
                 let new_file_name = "newFile";
@@ -526,8 +522,8 @@ mod tests {
                 let old_file = get_dir_entry_for("test_data", "simple");
                 let deps = FakeDependencies::new();
                 let matcher = NewerOptionMatcher::new(
-                    (*x_option).to_string(),
-                    (*y_option).to_string(),
+                    x_option.to_string(),
+                    y_option.to_string(),
                     &old_file.path().to_string_lossy(),
                 );
 
@@ -542,8 +538,8 @@ mod tests {
                 // thus causing the Matcher to generate an IO error after matching.
                 let _ = fs::remove_file(&*new_file.path().to_string_lossy());
                 let matcher = NewerOptionMatcher::new(
-                    (*x_option).to_string(),
-                    (*y_option).to_string(),
+                    x_option.to_string(),
+                    y_option.to_string(),
                     &old_file.path().to_string_lossy(),
                 );
                 assert!(
