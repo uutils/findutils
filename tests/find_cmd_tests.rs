@@ -626,6 +626,7 @@ fn find_with_nogroup_predicate() {
 }
 
 #[test]
+#[serial(working_dir)]
 fn find_newer_xy() {
     #[cfg(target_os = "linux")]
     let options = ["a", "c", "m"];
