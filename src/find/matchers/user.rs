@@ -36,7 +36,7 @@ impl UserMatcher {
     }
 
     #[cfg(windows)]
-    pub fn new(user: String) -> UserMatcher {
+    pub fn new(_user: String) -> UserMatcher {
         UserMatcher { uid: None }
     }
 

@@ -36,7 +36,7 @@ impl GroupMatcher {
     }
 
     #[cfg(windows)]
-    pub fn new(group: String) -> GroupMatcher {
+    pub fn new(_group: String) -> GroupMatcher {
         GroupMatcher { gid: None }
     }
 
@@ -102,16 +102,14 @@ impl Matcher for NoGroupMatcher {
 
 #[cfg(test)]
 mod tests {
-    use crate::find::tests::FakeDependencies;
-
     #[test]
     #[cfg(unix)]
     fn test_group_matcher() {
-        use std::fs::File;
-
         use crate::find::matchers::{group::GroupMatcher, tests::get_dir_entry_for, Matcher};
+        use crate::find::tests::FakeDependencies;
         use chrono::Local;
         use nix::unistd::{Gid, Group};
+        use std::fs::File;
         use std::os::unix::fs::MetadataExt;
         use tempfile::Builder;
 
