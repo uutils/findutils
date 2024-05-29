@@ -549,6 +549,9 @@ fn expression_empty_parentheses() {
 #[cfg(unix)]
 #[serial(working_dir)]
 fn find_with_user_predicate() {
+    // Considering the different test environments,
+    // the test code can only use a specific default user to perform the test,
+    // such as the root user on Linux.
     Command::cargo_bin("find")
         .expect("found binary")
         .args(["test_data", "-user", "root"])
@@ -588,9 +591,21 @@ fn find_with_nouser_predicate() {
 #[test]
 #[serial(working_dir)]
 fn find_with_group_predicate() {
+    // Considering the different test environments,
+    // the test code can only use a specific default user group for the test,
+    // such as the root user group on Linux.
+    #[cfg(target_os = "linux")]
     Command::cargo_bin("find")
         .expect("found binary")
         .args(["test_data", "-group", "root"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    #[cfg(target_os = "macos")]
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-group", "staff"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
