@@ -546,6 +546,7 @@ fn expression_empty_parentheses() {
 }
 
 #[test]
+#[cfg(unix)]
 #[serial(working_dir)]
 fn find_with_user_predicate() {
     Command::cargo_bin("find")

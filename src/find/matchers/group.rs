@@ -64,7 +64,7 @@ impl Matcher for GroupMatcher {
     fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
         // The user group acquisition function for Windows systems is not implemented in MetadataExt,
         // so it is somewhat difficult to implement it. :(
-        true
+        false
     }
 }
 
