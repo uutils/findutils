@@ -100,16 +100,14 @@ impl Matcher for NoUserMatcher {
 
 #[cfg(test)]
 mod tests {
-    use crate::find::tests::FakeDependencies;
-
     #[test]
     #[cfg(unix)]
     fn test_user_matcher() {
-        use std::fs::File;
-
         use crate::find::matchers::{tests::get_dir_entry_for, user::UserMatcher, Matcher};
+        use crate::find::tests::FakeDependencies;
         use chrono::Local;
         use nix::unistd::{Uid, User};
+        use std::fs::File;
         use std::os::unix::fs::MetadataExt;
         use tempfile::Builder;
 
