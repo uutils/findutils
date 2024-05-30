@@ -277,7 +277,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     #[cfg(windows)]
-    use std::os::windows::fs::{symlink_dir, symlink_file};
+    use std::os::windows::fs::symlink_file;
 
     use crate::find::matchers::MatcherIO;
 
