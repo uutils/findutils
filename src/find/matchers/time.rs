@@ -171,14 +171,17 @@ impl NewerTimeMatcher {
 
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
-        let timestamp = match this_time.duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(e) => e.duration(),
-        };
+        let timestamp = this_time
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|e| e.duration());
 
         // timestamp.as_millis() return u128 but time is i64
         // This may leave memory implications. :(
-        Ok(self.time <= timestamp.as_millis().try_into().unwrap())
+        Ok(self.time
+            <= timestamp
+                .as_millis()
+                .try_into()
+                .expect("timestamp memory implications"))
     }
 }
 
@@ -340,7 +343,7 @@ mod tests {
 
         // set "now" to 2 days after the file was modified.
         let mut deps = FakeDependencies::new();
-        deps.set_time(files_mtime + Duration::new(2 * super::SECONDS_PER_DAY as u64, 0));
+        deps.set_time(files_mtime + Duration::new(2 * SECONDS_PER_DAY as u64, 0));
         assert!(
             !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
             "2 day old file shouldn't match exactly 1 day old"
@@ -359,7 +362,7 @@ mod tests {
         );
 
         // set "now" to 1 day after the file was modified.
-        deps.set_time(files_mtime + Duration::new((3 * super::SECONDS_PER_DAY / 2) as u64, 0));
+        deps.set_time(files_mtime + Duration::new((3 * SECONDS_PER_DAY / 2) as u64, 0));
         assert!(
             exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
             "1 day old file should match exactly 1 day old"
@@ -536,18 +539,27 @@ mod tests {
 
                 // After the file is deleted, DirEntry will point to an empty file location,
                 // thus causing the Matcher to generate an IO error after matching.
+                //
+                // Note: This test is nondeterministic on Windows,
+                // because fs::remove_file may not actually remove the file from
+                // the file system even if it returns Ok.
+                // Therefore, this test will only be performed on Linux/Unix.
                 let _ = fs::remove_file(&*new_file.path().to_string_lossy());
-                let matcher = NewerOptionMatcher::new(
-                    x_option.to_string(),
-                    y_option.to_string(),
-                    &old_file.path().to_string_lossy(),
-                );
-                assert!(
-                    !matcher
-                        .unwrap()
-                        .matches(&new_file, &mut deps.new_matcher_io()),
-                    "The correct situation is that the file reading here cannot be successful."
-                );
+
+                #[cfg(unix)]
+                {
+                    let matcher = NewerOptionMatcher::new(
+                        x_option.to_string(),
+                        y_option.to_string(),
+                        &old_file.path().to_string_lossy(),
+                    );
+                    assert!(
+                        !matcher
+                            .unwrap()
+                            .matches(&new_file, &mut deps.new_matcher_io()),
+                        "The correct situation is that the file reading here cannot be successful."
+                    );
+                }
             }
         }
     }
@@ -597,14 +609,13 @@ mod tests {
         // modified time test
         let modified_matcher = NewerTimeMatcher::new(NewerOptionType::Modified, time);
         let buffer = [0; 10];
-        {
-            let mut file = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&foo_path)
-                .expect("open temp file");
-            let _ = file.write(&buffer);
-        }
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&foo_path)
+            .expect("open temp file");
+        let _ = file.write(&buffer);
+
         assert!(
             modified_matcher.matches(&file_info, &mut deps.new_matcher_io()),
             "file modified time should after 'time'"
@@ -627,20 +638,28 @@ mod tests {
 
         // After the file is deleted, DirEntry will point to an empty file location,
         // thus causing the Matcher to generate an IO error after matching.
+        //
+        // Note: This test is nondeterministic on Windows,
+        // because fs::remove_file may not actually remove the file from
+        // the file system even if it returns Ok.
+        // Therefore, this test will only be performed on Linux/Unix.
         let _ = fs::remove_file(&*file_info.path().to_string_lossy());
 
-        let matchers = [
-            &created_matcher,
-            &accessed_matcher,
-            &modified_matcher,
-            &inode_changed_matcher,
-        ];
+        #[cfg(unix)]
+        {
+            let matchers = [
+                &created_matcher,
+                &accessed_matcher,
+                &modified_matcher,
+                &inode_changed_matcher,
+            ];
 
-        for matcher in &matchers {
-            assert!(
-                !matcher.matches(&file_info, &mut deps.new_matcher_io()),
-                "The correct situation is that the file reading here cannot be successful."
-            );
+            for matcher in &matchers {
+                assert!(
+                    !matcher.matches(&file_info, &mut deps.new_matcher_io()),
+                    "The correct situation is that the file reading here cannot be successful."
+                );
+            }
         }
     }
 }

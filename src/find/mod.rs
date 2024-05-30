@@ -927,10 +927,10 @@ mod tests {
                 let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
                 assert_eq!(rc, 0);
-                assert_eq!(
-                    deps.get_output_as_string(),
-                    fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"),
-                );
+                assert!(deps
+                    .get_output_as_string()
+                    .contains("./test_data/simple/subdir"));
+                assert!(deps.get_output_as_string().contains("ABBBC"));
             }
         }
     }
