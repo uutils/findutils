@@ -736,6 +736,31 @@ mod tests {
         }
     }
 
+    // Because the time when files exist locally is different
+    // from the time when Github Actions pulls them,
+    // it is difficult to write tests that limit a certain time period.
+    //
+    // For example, a Github Action may pull files from a new git commit within a few minutes,
+    // causing the file time to be refreshed to the pull time.
+    // and The files on the local branch may be several days old.
+    //
+    // So this test may not be too accurate and can only ensure that
+    // the function can be correctly identified.
+    #[test]
+    fn find_amin_cmin_mmin() {
+        let args = ["-amin", "-cmin", "-mmin"];
+        let times = ["-60", "-120", "-240", "+60", "+120", "+240"];
+
+        for arg in args {
+            for time in times {
+                let deps = FakeDependencies::new();
+                let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
+
+                assert_eq!(rc, 0);
+            }
+        }
+    }
+
     #[test]
     fn find_size() {
         let deps = FakeDependencies::new();
