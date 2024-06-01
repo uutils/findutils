@@ -22,7 +22,7 @@ uucore = { version = "0.0.26", features = ["entries", "fs", "fsext", "mode"] }
 [dev-dependencies]
 assert_cmd = "2"
 filetime = "0.2"
-nix = { version = "0.28", features = ["fs"] }
+nix = { version = "0.29", features = ["fs"] }
 predicates = "3"
 serial_test = "3.1"
 tempfile = "3"

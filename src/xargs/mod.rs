@@ -306,6 +306,7 @@ impl CommandResult {
     }
 }
 
+#[allow(dead_code)] // `Killed` variant is never constructed on Windows
 #[derive(Debug)]
 enum CommandExecutionError {
     // exit code 255
