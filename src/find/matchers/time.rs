@@ -280,6 +280,54 @@ impl FileTimeMatcher {
     }
 }
 
+pub struct FileAgeRangeMatcher {
+    minutes: ComparableValue,
+    file_time_type: FileTimeType,
+}
+
+impl Matcher for FileAgeRangeMatcher {
+    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info, matcher_io.now()) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting {:?} time for {}: {}",
+                    self.file_time_type,
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
+        }
+    }
+}
+
+impl FileAgeRangeMatcher {
+    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+        let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
+        let mut is_negative = false;
+        let age = match now.duration_since(this_time) {
+            Ok(duration) => duration,
+            Err(e) => {
+                is_negative = true;
+                e.duration()
+            }
+        };
+        let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+        let age_in_minutes = age_in_seconds / 60 + if is_negative { -1 } else { 0 };
+        Ok(self.minutes.imatches(age_in_minutes))
+    }
+
+    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue) -> Self {
+        Self {
+            minutes,
+            file_time_type,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -661,5 +709,80 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn file_age_range_matcher() {
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let new_file_name = "newFile";
+        // this has just been created, so should be newer
+        File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
+        let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
+
+        // more test
+        // mocks:
+        // - find test_data/simple -amin +1
+        // - find test_data/simple -cmin +1
+        // - find test_data/simple -mmin +1
+        // Means to find files accessed / modified more than 1 minute ago.
+        [
+            FileTimeType::Accessed,
+            FileTimeType::Created,
+            FileTimeType::Modified,
+        ]
+        .iter()
+        .for_each(|time_type| {
+            let more_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1));
+            assert!(
+                !more_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+                "{}",
+                format!(
+                    "more minutes old file should match more than 1 minute old in {} test.",
+                    match *time_type {
+                        FileTimeType::Accessed => "accessed",
+                        FileTimeType::Created => "created",
+                        FileTimeType::Modified => "modified",
+                    }
+                )
+            );
+        });
+
+        // less test
+        // mocks:
+        // - find test_data/simple -amin -1
+        // - find test_data/simple -cmin -1
+        // - find test_data/simple -mmin -1
+        // Means to find files accessed / modified less than 1 minute ago.
+        [
+            FileTimeType::Accessed,
+            FileTimeType::Created,
+            FileTimeType::Modified,
+        ]
+        .iter()
+        .for_each(|time_type| {
+            let less_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1));
+            assert!(
+                less_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+                "{}",
+                format!(
+                    "less minutes old file should not match less than 1 minute old in {} test.",
+                    match *time_type {
+                        FileTimeType::Accessed => "accessed",
+                        FileTimeType::Created => "created",
+                        FileTimeType::Modified => "modified",
+                    }
+                )
+            );
+        });
+
+        // catch file error
+        let _ = fs::remove_file(&*new_file.path().to_string_lossy());
+        let matcher =
+            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+        assert!(
+            !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+            "The correct situation is that the file reading here cannot be successful."
+        );
     }
 }

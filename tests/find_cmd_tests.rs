@@ -587,3 +587,39 @@ fn find_newer_xy() {
         }
     }
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_age_range() {
+    let args = ["-amin", "-cmin", "-mmin"];
+    let times = ["-60", "-120", "-240", "+60", "+120", "+240"];
+    let time_strings = [
+        "\"-60\"", "\"-120\"", "\"-240\"", "\"-60\"", "\"-120\"", "\"-240\"",
+    ];
+
+    for arg in args {
+        for time in times {
+            Command::cargo_bin("find")
+                .expect("the time should match")
+                .args(["test_data/simple", arg, time])
+                .assert()
+                .success()
+                .code(0);
+        }
+    }
+
+    for arg in args {
+        for time_string in time_strings {
+            Command::cargo_bin("find")
+                .expect("the time should not match")
+                .args(["test_data/simple", arg, time_string])
+                .assert()
+                .failure()
+                .code(1)
+                .stderr(predicate::str::contains(
+                    "Error: Expected a decimal integer (with optional + or - prefix) argument to",
+                ))
+                .stdout(predicate::str::is_empty());
+        }
+    }
+}
