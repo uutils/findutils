@@ -1,0 +1,45 @@
+name: GnuComment
+
+on:
+  workflow_run:
+    workflows: ["External testsuites"]
+    types: [completed]
+
+permissions: {}
+jobs:
+  post-comment:
+    permissions:
+      actions: read #  to list workflow runs artifacts
+      pull-requests: write #  to comment on pr
+
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request' && ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: "List Annotations"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            var annotations = github.rest.checks.listAnnotations({
+              owner,
+              repo,
+              run_id: ${{ github.event.workflow_run.id }},
+            });
+            console.log(annotations.data);
+            var fs = require('fs');
+            fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations.data));
+      - name: "Comment on PR"
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            var fs = require('fs');
+            var annotations = JSON.parse(fs.readFileSync('${{ github.workspace }}/annotations.json', 'utf8'));
+            var annotationContent = annotations
+              .map(annotation => `${annotation.title}: ${annotation.message}`)
+              .join('\n');
+            github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: ${{ github.event.number }},
+              body: 'GNU testsuite comparison:\n```\n' + annotationContent + '```'
+            });
