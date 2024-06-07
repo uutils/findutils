@@ -144,3 +144,38 @@ jobs:
         run: |
           mv dl/bfs-result.json latest-bfs-result.json
           python findutils/util/compare_bfs_result.py
+
+  upload-pr-comment:
+    name: Upload PR comment
+    needs: [gnu-tests, bfs-tests]
+    runs-on: ubuntu-latest
+    if: github.event == 'pull_request'
+    steps:
+      - name: List Annotations
+        uses: actions/github-script@v7
+        with:
+          script: |
+            var annotations = github.rest.checks.listAnnotations({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            console.log(annotations.data);
+            var fs = require('fs');
+            fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations.data));
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            var fs = require('fs');
+            var annotations = JSON.parse(fs.readFileSync('${{ github.workspace }}/annotations.json', 'utf8'));
+            var annotationContent = annotations
+              .map(annotation => `${annotation.title}: ${annotation.message}`)
+              .join('\n');
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.number }},
+              body: 'GNU testsuite comparison:\n```\n' + annotationContent + '```'
+            });
