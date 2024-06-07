@@ -27,8 +27,7 @@ mod type_matcher;
 
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
-use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
 use walkdir::DirEntry;
@@ -514,12 +513,9 @@ fn build_matcher_tree(
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                let path = fs::metadata(args[i + 1]);
+                let path = args[i + 1];
                 i += 1;
-                match path {
-                    Ok(metadata) => Some(SameFileMatcher::new(metadata).into_box()),
-                    Err(err) => return Err(From::from(err)),
-                }
+                Some(SameFileMatcher::new(PathBuf::from(path)).into_box())
             }
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {

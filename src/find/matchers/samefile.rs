@@ -3,32 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::fs::Metadata;
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
 
 use super::Matcher;
 
 pub struct SameFileMatcher {
-    metadata: Metadata,
+    path: PathBuf,
 }
 
 impl SameFileMatcher {
-    pub fn new(metadata: Metadata) -> SameFileMatcher {
-        SameFileMatcher { metadata }
+    pub fn new(path: PathBuf) -> SameFileMatcher {
+        SameFileMatcher { path }
     }
 }
 
 impl Matcher for SameFileMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &walkdir::DirEntry, _matcher_io: &mut super::MatcherIO) -> bool {
-        let meta = file_info.metadata().unwrap();
-
-        if meta.dev() != self.metadata.dev() {
-            return false;
-        }
-
-        meta.ino() == self.metadata.ino()
+        uucore::fs::paths_refer_to_same_file(file_info.path(), &self.path, true)
     }
 
     #[cfg(not(unix))]
@@ -59,11 +51,8 @@ mod tests {
         fs::hard_link("test_data/links/abbbc", "test_data/links/hard_link").unwrap();
 
         let file = get_dir_entry_for("test_data/links", "abbbc");
-        let file_metadata = file
-            .metadata()
-            .expect("Failed to get original file metadata");
         let hard_link_file = get_dir_entry_for("test_data/links", "hard_link");
-        let matcher = SameFileMatcher::new(file_metadata);
+        let matcher = SameFileMatcher::new(file.into_path());
 
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&hard_link_file, &mut deps.new_matcher_io()));
