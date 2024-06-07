@@ -27,7 +27,7 @@ mod type_matcher;
 
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
 use walkdir::DirEntry;
@@ -513,9 +513,16 @@ fn build_matcher_tree(
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                let path = args[i + 1];
+                let path = Path::new(args[i + 1]).to_path_buf();
+                // check if path is not found
+                if !path.exists() {
+                    return Err(From::from(format!(
+                        "{}: No such file or directory",
+                        args[i + 1]
+                    )));
+                }
                 i += 1;
-                Some(SameFileMatcher::new(PathBuf::from(path)).into_box())
+                Some(SameFileMatcher::new(path).into_box())
             }
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
