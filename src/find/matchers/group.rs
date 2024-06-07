@@ -96,7 +96,7 @@ impl Matcher for NoGroupMatcher {
 
     #[cfg(windows)]
     fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        true
+        false
     }
 }
 

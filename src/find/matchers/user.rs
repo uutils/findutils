@@ -62,7 +62,7 @@ impl Matcher for UserMatcher {
 
     #[cfg(windows)]
     fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        true
+        false
     }
 }
 
@@ -94,7 +94,7 @@ impl Matcher for NoUserMatcher {
 
     #[cfg(windows)]
     fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        true
+        false
     }
 }
 
