@@ -29,7 +29,7 @@ impl Default for Config {
             same_file_system: false,
             depth_first: false,
             min_depth: 0,
-            max_depth: usize::max_value(),
+            max_depth: usize::MAX,
             sorted_output: false,
             help_requested: false,
             version_requested: false,
