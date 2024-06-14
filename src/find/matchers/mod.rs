@@ -1062,15 +1062,15 @@ mod tests {
             "0 should not be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).matches(0),
+            ComparableValue::LessThan(u64::MAX).matches(0),
             "0 should be less than max_value"
         );
         assert!(
-            !ComparableValue::LessThan(0).matches(u64::max_value()),
+            !ComparableValue::LessThan(0).matches(u64::MAX),
             "max_value should not be less than 0"
         );
         assert!(
-            !ComparableValue::LessThan(u64::max_value()).matches(u64::max_value()),
+            !ComparableValue::LessThan(u64::MAX).matches(u64::MAX),
             "max_value should not be less than max_value"
         );
 
@@ -1079,15 +1079,15 @@ mod tests {
             "0 should be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).matches(0),
+            !ComparableValue::EqualTo(u64::MAX).matches(0),
             "0 should not be equal to max_value"
         );
         assert!(
-            !ComparableValue::EqualTo(0).matches(u64::max_value()),
+            !ComparableValue::EqualTo(0).matches(u64::MAX),
             "max_value should not be equal to 0"
         );
         assert!(
-            ComparableValue::EqualTo(u64::max_value()).matches(u64::max_value()),
+            ComparableValue::EqualTo(u64::MAX).matches(u64::MAX),
             "max_value should be equal to max_value"
         );
 
@@ -1096,15 +1096,15 @@ mod tests {
             "0 should not be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).matches(0),
+            !ComparableValue::MoreThan(u64::MAX).matches(0),
             "0 should not be more than max_value"
         );
         assert!(
-            ComparableValue::MoreThan(0).matches(u64::max_value()),
+            ComparableValue::MoreThan(0).matches(u64::MAX),
             "max_value should be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).matches(u64::max_value()),
+            !ComparableValue::MoreThan(u64::MAX).matches(u64::MAX),
             "max_value should not be more than max_value"
         );
     }
@@ -1116,23 +1116,23 @@ mod tests {
             "0 should not be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).imatches(0),
+            ComparableValue::LessThan(u64::MAX).imatches(0),
             "0 should be less than max_value"
         );
         assert!(
-            !ComparableValue::LessThan(0).imatches(i64::max_value()),
+            !ComparableValue::LessThan(0).imatches(i64::MAX),
             "max_value should not be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).imatches(i64::max_value()),
+            ComparableValue::LessThan(u64::MAX).imatches(i64::MAX),
             "max_value should be less than max_value"
         );
         assert!(
-            ComparableValue::LessThan(0).imatches(i64::min_value()),
+            ComparableValue::LessThan(0).imatches(i64::MIN),
             "min_value should be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).imatches(i64::min_value()),
+            ComparableValue::LessThan(u64::MAX).imatches(i64::MIN),
             "min_value should be less than max_value"
         );
 
@@ -1141,27 +1141,27 @@ mod tests {
             "0 should be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).imatches(0),
+            !ComparableValue::EqualTo(u64::MAX).imatches(0),
             "0 should not be equal to max_value"
         );
         assert!(
-            !ComparableValue::EqualTo(0).imatches(i64::max_value()),
+            !ComparableValue::EqualTo(0).imatches(i64::MAX),
             "max_value should not be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).imatches(i64::max_value()),
+            !ComparableValue::EqualTo(u64::MAX).imatches(i64::MAX),
             "max_value should not be equal to i64::max_value"
         );
         assert!(
-            ComparableValue::EqualTo(i64::max_value() as u64).imatches(i64::max_value()),
+            ComparableValue::EqualTo(i64::MAX as u64).imatches(i64::MAX),
             "i64::max_value should be equal to i64::max_value"
         );
         assert!(
-            !ComparableValue::EqualTo(0).imatches(i64::min_value()),
+            !ComparableValue::EqualTo(0).imatches(i64::MIN),
             "min_value should not be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).imatches(i64::min_value()),
+            !ComparableValue::EqualTo(u64::MAX).imatches(i64::MIN),
             "min_value should not be equal to max_value"
         );
 
@@ -1170,23 +1170,23 @@ mod tests {
             "0 should not be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).imatches(0),
+            !ComparableValue::MoreThan(u64::MAX).imatches(0),
             "0 should not be more than max_value"
         );
         assert!(
-            ComparableValue::MoreThan(0).imatches(i64::max_value()),
+            ComparableValue::MoreThan(0).imatches(i64::MAX),
             "max_value should be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).imatches(i64::max_value()),
+            !ComparableValue::MoreThan(u64::MAX).imatches(i64::MAX),
             "max_value should not be more than max_value"
         );
         assert!(
-            !ComparableValue::MoreThan(0).imatches(i64::min_value()),
+            !ComparableValue::MoreThan(0).imatches(i64::MIN),
             "min_value should not be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).imatches(i64::min_value()),
+            !ComparableValue::MoreThan(u64::MAX).imatches(i64::MIN),
             "min_value should not be more than max_value"
         );
     }
