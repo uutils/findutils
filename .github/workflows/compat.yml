@@ -168,14 +168,21 @@ jobs:
               repo: context.repo.repo,
               ref: '${{ github.sha }}'
             });
+            console.log(runs);
+            console.log(runs.data);
+            console.log(runs.data.check_runs);
 
             let annotations = {data: []};
             runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => {
+              console.log(run);
+
               let result = github.rest.checks.listAnnotations({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 check_run_id: run.id
               });
+              console.log(result);
+              console.log(result.data);
 
               result.data.forEach(annotation => {
                 annotations.data.push({
