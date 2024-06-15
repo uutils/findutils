@@ -162,24 +162,36 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            var annotations = github.rest.checks.listAnnotations({
+            let names = ["Run GNU findutils tests", "Run BFS tests"];
+            let runs = github.rest.checks.listForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              run_id: ${{ github.run_id }},
+              ref: ${{ github.sha }},
             });
-            console.log(annotations.data);
-            var fs = require('fs');
+
+            let annotations = {data: []};
+            runs.check_runs.filter(check => names.includes(check.name)).forEach(run => {
+              annotations.data.push({
+                title: run.name,
+                message: run.output.text
+              });
+            });
+
+            let fs = require('fs');
             fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations.data));
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            var fs = require('fs');
-            var annotations = JSON.parse(fs.readFileSync('${{ github.workspace }}/annotations.json', 'utf8'));
-            var annotationContent = annotations
+            let fs = require('fs');
+            let annotations = JSON.parse(fs.readFileSync('${{ github.workspace }}/annotations.json', 'utf8'));
+
+            let annotationContent = annotations
+              .data
               .map(annotation => `${annotation.title}: ${annotation.message}`)
               .join('\n');
+
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
