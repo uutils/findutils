@@ -166,7 +166,7 @@ jobs:
             let runs = await github.rest.checks.listForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ github.sha }}'
+              ref: '${{ github.event.pull_request.head.sha }}'
             });
             console.log(runs);
             console.log(runs.data);
@@ -207,6 +207,8 @@ jobs:
               .data
               .map(annotation => `${annotation.run}: ${annotation.annotation.message}`)
               .join('\n');
+
+            console.log(annotationContent);
 
             github.rest.issues.createComment({
               owner: context.repo.owner,
