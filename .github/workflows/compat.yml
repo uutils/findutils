@@ -162,36 +162,31 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            let names = ['Run GNU findutils tests', 'Run BFS tests'];
             let runs = await github.rest.checks.listForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: '${{ github.event.pull_request.head.sha }}'
             });
-            console.log(runs);
-            console.log(runs.data);
-            console.log(runs.data.check_runs);
 
-            let annotations = {data: []};
-            runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => {
-              console.log(run);
+            let names = ['Run GNU findutils tests', 'Run BFS tests'];
+            let results = [];
+            runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => results.push(run));
 
-              github.rest.checks.listAnnotations({
+            let annotations = { data: [] };
+            for (let result of results) {
+              let run = await github.rest.checks.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                check_run_id: run.id
-              }).then(result => {
-                console.log(result);
-                console.log(result.data);
-
-                result.data.forEach(annotation => {
-                  annotations.data.push({
-                    run: run.name,
-                    annotation: annotation
-                  });
+                check_run_id: id
+              });
+              
+              run.data.forEach(data => {
+                annotations.push({
+                  run: result.name,
+                  annotation: data
                 });
               });
-            });
+            }
 
             let fs = require('fs');
             fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations));
