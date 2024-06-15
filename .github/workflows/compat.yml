@@ -166,19 +166,27 @@ jobs:
             let runs = github.rest.checks.listForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ github.sha }}',
+              ref: '${{ github.sha }}'
             });
 
             let annotations = {data: []};
-            runs.check_runs.filter(check => names.includes(check.name)).forEach(run => {
-              annotations.data.push({
-                title: run.name,
-                message: run.output.text
+            runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => {
+              let result = github.rest.checks.listAnnotations({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                check_run_id: run.id
+              });
+
+              result.data.forEach(annotation => {
+                annotations.data.push({
+                  run: run.name,
+                  annotation: annotation
+                });
               });
             });
 
             let fs = require('fs');
-            fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations.data));
+            fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations));
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
@@ -189,7 +197,7 @@ jobs:
 
             let annotationContent = annotations
               .data
-              .map(annotation => `${annotation.title}: ${annotation.message}`)
+              .map(annotation => `${annotation.run}: ${annotation.annotation.message}`)
               .join('\n');
 
             github.rest.issues.createComment({
