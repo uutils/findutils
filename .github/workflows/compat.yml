@@ -153,6 +153,10 @@ jobs:
     needs: [gnu-tests, bfs-tests]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      actions: read #  to list workflow runs artifacts
+      pull-requests: write #  to comment on pr
+
     steps:
       - name: List Annotations
         uses: actions/github-script@v7
