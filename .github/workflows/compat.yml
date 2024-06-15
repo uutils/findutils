@@ -176,18 +176,19 @@ jobs:
             runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => {
               console.log(run);
 
-              let result = await github.rest.checks.listAnnotations({
+              github.rest.checks.listAnnotations({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 check_run_id: run.id
-              });
-              console.log(result);
-              console.log(result.data);
+              }).then(result => {
+                console.log(result);
+                console.log(result.data);
 
-              result.data.forEach(annotation => {
-                annotations.data.push({
-                  run: run.name,
-                  annotation: annotation
+                result.data.forEach(annotation => {
+                  annotations.data.push({
+                    run: run.name,
+                    annotation: annotation
+                  });
                 });
               });
             });
