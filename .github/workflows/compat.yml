@@ -154,8 +154,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
-      actions: read #  to list workflow runs artifacts
-      pull-requests: write #  to comment on pr
+      actions: read
+      pull-requests: write
 
     steps:
       - name: List Annotations
@@ -165,7 +165,7 @@ jobs:
             var annotations = github.rest.checks.listAnnotations({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              run_id: ${{ github.event.workflow_run.id }},
+              run_id: ${{ github.run_id }},
             });
             console.log(annotations.data);
             var fs = require('fs');
