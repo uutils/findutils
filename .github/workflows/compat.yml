@@ -172,12 +172,12 @@ jobs:
             let results = [];
             runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => results.push(run));
 
-            let annotations = { data: [] };
+            let annotations = { data: []};
             for (let result of results) {
-              let run = await github.rest.checks.get({
+              let run = await github.rest.checks.listAnnotations({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                check_run_id: id
+                check_run_id: result.id
               });
               
               run.data.forEach(data => {
