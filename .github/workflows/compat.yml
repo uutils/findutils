@@ -181,7 +181,7 @@ jobs:
               });
               
               run.data.forEach(data => {
-                annotations.push({
+                annotations.data.push({
                   run: result.name,
                   annotation: data
                 });
