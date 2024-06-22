@@ -8,6 +8,7 @@ mod access;
 mod delete;
 mod empty;
 pub mod exec;
+mod fs;
 mod glob;
 mod lname;
 mod logical_matchers;
@@ -26,6 +27,7 @@ mod type_matcher;
 
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use fs::FileSystemMatcher;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -412,6 +414,13 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(TypeMatcher::new(args[i])?.into_box())
+            }
+            "-fstype" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(FileSystemMatcher::new(args[i].to_string()).into_box())
             }
             "-delete" => {
                 // -delete implicitly requires -depth
