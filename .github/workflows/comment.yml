@@ -1,6 +1,6 @@
 on:
     workflow_run:
-      workflows: [External testsuites]
+      workflows: [External-testsuites]
       types: [completed]
 
 name: Comment Test results on the PR
@@ -9,9 +9,7 @@ jobs:
   upload-pr-comment:
     name: Upload PR comment
     runs-on: ubuntu-latest
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.event == 'pull_request'
     permissions:
       actions: read
 
