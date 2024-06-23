@@ -9,6 +9,7 @@ mod delete;
 mod empty;
 pub mod exec;
 mod glob;
+mod group;
 mod lname;
 mod logical_matchers;
 mod name;
@@ -23,6 +24,7 @@ mod size;
 mod stat;
 mod time;
 mod type_matcher;
+mod user;
 
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
@@ -35,6 +37,7 @@ use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
 use self::exec::SingleExecMatcher;
+use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
     AndMatcherBuilder, FalseMatcher, ListMatcherBuilder, NotMatcher, TrueMatcher,
@@ -54,6 +57,7 @@ use self::time::{
     NewerOptionType, NewerTimeMatcher,
 };
 use self::type_matcher::TypeMatcher;
+use self::user::{NoUserMatcher, UserMatcher};
 
 use super::{Config, Dependencies};
 
@@ -507,6 +511,56 @@ fn build_matcher_tree(
                 i += 1;
                 Some(LinksMatcher::new(inum)?.into_box())
             }
+            "-user" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+
+                let user = args[i + 1];
+
+                if user.is_empty() {
+                    return Err(From::from("The argument to -user should not be empty"));
+                }
+
+                i += 1;
+                let matcher = UserMatcher::new(user.to_string());
+                match matcher.uid() {
+                    Some(_) => Some(matcher.into_box()),
+                    None => {
+                        return Err(From::from(format!(
+                            "{} is not the name of a known user",
+                            user
+                        )))
+                    }
+                }
+            }
+            "-nouser" => Some(NoUserMatcher {}.into_box()),
+            "-group" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+
+                let group = args[i + 1];
+
+                if group.is_empty() {
+                    return Err(From::from(
+                        "Argument to -group is empty, but should be a group name",
+                    ));
+                }
+
+                i += 1;
+                let matcher = GroupMatcher::new(group.to_string());
+                match matcher.gid() {
+                    Some(_) => Some(matcher.into_box()),
+                    None => {
+                        return Err(From::from(format!(
+                            "{} is not the name of an existing group",
+                            group
+                        )))
+                    }
+                }
+            }
+            "-nogroup" => Some(NoGroupMatcher {}.into_box()),
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
                 if i >= args.len() - 1 {
