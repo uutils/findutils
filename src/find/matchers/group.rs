@@ -16,9 +16,9 @@ pub struct GroupMatcher {
 
 impl GroupMatcher {
     #[cfg(unix)]
-    pub fn new(group: String) -> GroupMatcher {
+    pub fn from_group_name(group: &str) -> GroupMatcher {
         // get gid from group name
-        let Ok(group) = Group::from_name(group.as_str()) else {
+        let Ok(group) = Group::from_name(group) else {
             return GroupMatcher { gid: None };
         };
 
@@ -35,8 +35,18 @@ impl GroupMatcher {
         }
     }
 
+    #[cfg(unix)]
+    pub fn from_gid(gid: u32) -> GroupMatcher {
+        GroupMatcher { gid: Some(gid) }
+    }
+
     #[cfg(windows)]
-    pub fn new(_group: String) -> GroupMatcher {
+    pub fn from_group_name(_group: &str) -> GroupMatcher {
+        GroupMatcher { gid: None }
+    }
+
+    #[cfg(windows)]
+    pub fn from_gid(_gid: u32) -> GroupMatcher {
         GroupMatcher { gid: None }
     }
 
@@ -126,7 +136,7 @@ mod tests {
             .unwrap()
             .name;
 
-        let matcher = super::GroupMatcher::new(file_group.clone());
+        let matcher = super::GroupMatcher::from_group_name(file_group.as_str());
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "group should match"
@@ -134,11 +144,23 @@ mod tests {
 
         // Testing a non-existent group name
         let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
-        let matcher = GroupMatcher::new(time_string.clone());
+        let matcher = GroupMatcher::from_group_name(time_string.as_str());
         assert!(
             matcher.gid().is_none(),
             "group name {} should not exist",
             time_string
+        );
+
+        // Testing group id
+        let matcher = GroupMatcher::from_gid(file_gid);
+        assert!(
+            matcher.gid().is_some(),
+            "group id {} should exist",
+            file_gid
+        );
+        assert!(
+            matcher.matches(&file_info, &mut matcher_io),
+            "group id should match"
         );
     }
 }

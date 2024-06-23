@@ -589,6 +589,24 @@ fn find_with_nouser_predicate() {
 }
 
 #[test]
+#[cfg(unix)]
+#[serial(working_dir)]
+fn find_with_uid_predicate() {
+    use std::os::unix::fs::MetadataExt;
+    use std::path::Path;
+
+    let path = Path::new("./test_data");
+    let uid = path.metadata().unwrap().uid();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-uid", &uid.to_string()])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
 #[serial(working_dir)]
 fn find_with_group_predicate() {
     // Considering the different test environments,
@@ -638,6 +656,24 @@ fn find_with_nogroup_predicate() {
         .assert()
         .success()
         .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+#[serial(working_dir)]
+fn find_with_gid_predicate() {
+    use std::os::unix::fs::MetadataExt;
+    use std::path::Path;
+
+    let path = Path::new("./test_data");
+    let gid = path.metadata().unwrap().gid();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-gid", &gid.to_string()])
+        .assert()
+        .success()
         .stderr(predicate::str::is_empty());
 }
 
