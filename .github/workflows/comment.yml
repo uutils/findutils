@@ -27,10 +27,12 @@ jobs:
               run_id: ${{ github.event.workflow_run.id }},
             });
 
+            // List all artifacts
             let matchArtifact = artifacts.data.artifacts.filter((artifact) => {
               return artifact.name == "comment"
             })[0];
 
+            // Download the artifact to github.workspace
             let download = await github.rest.actions.downloadArtifact({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -58,6 +60,7 @@ jobs:
 
             console.log(annotationContent);
 
+            // Comment on the PR
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
