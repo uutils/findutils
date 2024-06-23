@@ -1,6 +1,6 @@
 on:
     workflow_run:
-      workflows: ["External testsuites"]
+      workflows: [External testsuites]
       types:
         - completed
 
