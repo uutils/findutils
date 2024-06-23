@@ -1,6 +1,6 @@
 on: [push, pull_request]
 
-name: External testsuites
+name: External-testsuites
 
 jobs:
   gnu-tests:
@@ -147,3 +147,54 @@ jobs:
         run: |
           mv dl/bfs-result.json latest-bfs-result.json
           python findutils/util/compare_bfs_result.py
+
+  upload-annotations:
+    name: Upload annotations
+    runs-on: ubuntu-latest
+    needs: [gnu-tests, bfs-tests]
+    if: ${{ github.event_name == 'pull_request' }}
+
+    steps:
+      - name: List Annotations
+        uses: actions/github-script@v7
+        
+        with:
+          script: |
+            let runs = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ github.event.pull_request.head.sha }}'
+            });
+
+            let names = ['Run GNU findutils tests', 'Run BFS tests'];
+            let results = [];
+            runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => results.push(run));
+
+            let annotations = { data: [], pull_request_number: '${{ github.event.number }}' };
+            for (let result of results) {
+              let run = await github.rest.checks.listAnnotations({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                check_run_id: result.id
+              });
+              
+              run.data.forEach(data => {
+                annotations.data.push({
+                  run: result.name,
+                  annotation: data
+                });
+              });
+            }
+
+            // Remove duplicate items.
+            annotations.data = annotations.data.filter((value, index, self) => 
+              self.findIndex(v => v.annotation.message === value.annotation.message) === index);
+
+            let fs = require('fs');
+            fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations));
+
+      - name: Upload annotations
+        uses: actions/upload-artifact@v4
+        with:
+          name: comment
+          path: annotations.json
