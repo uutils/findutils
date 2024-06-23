@@ -9,6 +9,7 @@ mod delete;
 mod empty;
 pub mod exec;
 mod glob;
+mod group;
 mod lname;
 mod logical_matchers;
 mod name;
@@ -23,6 +24,7 @@ mod size;
 mod stat;
 mod time;
 mod type_matcher;
+mod user;
 
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
@@ -35,6 +37,7 @@ use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
 use self::exec::SingleExecMatcher;
+use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
     AndMatcherBuilder, FalseMatcher, ListMatcherBuilder, NotMatcher, TrueMatcher,
@@ -54,6 +57,7 @@ use self::time::{
     NewerOptionType, NewerTimeMatcher,
 };
 use self::type_matcher::TypeMatcher;
+use self::user::{NoUserMatcher, UserMatcher};
 
 use super::{Config, Dependencies};
 
@@ -507,6 +511,56 @@ fn build_matcher_tree(
                 i += 1;
                 Some(LinksMatcher::new(inum)?.into_box())
             }
+            "-user" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+
+                let user = args[i + 1];
+
+                if user.is_empty() {
+                    return Err(From::from("The argument to -user should not be empty"));
+                }
+
+                i += 1;
+                let matcher = UserMatcher::new(user.to_string());
+                match matcher.uid() {
+                    Some(_) => Some(matcher.into_box()),
+                    None => {
+                        return Err(From::from(format!(
+                            "{} is not the name of a known user",
+                            user
+                        )))
+                    }
+                }
+            }
+            "-nouser" => Some(NoUserMatcher {}.into_box()),
+            "-group" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+
+                let group = args[i + 1];
+
+                if group.is_empty() {
+                    return Err(From::from(
+                        "Argument to -group is empty, but should be a group name",
+                    ));
+                }
+
+                i += 1;
+                let matcher = GroupMatcher::new(group.to_string());
+                match matcher.gid() {
+                    Some(_) => Some(matcher.into_box()),
+                    None => {
+                        return Err(From::from(format!(
+                            "{} is not the name of an existing group",
+                            group
+                        )))
+                    }
+                }
+            }
+            "-nogroup" => Some(NoGroupMatcher {}.into_box()),
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
                 if i >= args.len() - 1 {
@@ -1062,15 +1116,15 @@ mod tests {
             "0 should not be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).matches(0),
+            ComparableValue::LessThan(u64::MAX).matches(0),
             "0 should be less than max_value"
         );
         assert!(
-            !ComparableValue::LessThan(0).matches(u64::max_value()),
+            !ComparableValue::LessThan(0).matches(u64::MAX),
             "max_value should not be less than 0"
         );
         assert!(
-            !ComparableValue::LessThan(u64::max_value()).matches(u64::max_value()),
+            !ComparableValue::LessThan(u64::MAX).matches(u64::MAX),
             "max_value should not be less than max_value"
         );
 
@@ -1079,15 +1133,15 @@ mod tests {
             "0 should be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).matches(0),
+            !ComparableValue::EqualTo(u64::MAX).matches(0),
             "0 should not be equal to max_value"
         );
         assert!(
-            !ComparableValue::EqualTo(0).matches(u64::max_value()),
+            !ComparableValue::EqualTo(0).matches(u64::MAX),
             "max_value should not be equal to 0"
         );
         assert!(
-            ComparableValue::EqualTo(u64::max_value()).matches(u64::max_value()),
+            ComparableValue::EqualTo(u64::MAX).matches(u64::MAX),
             "max_value should be equal to max_value"
         );
 
@@ -1096,15 +1150,15 @@ mod tests {
             "0 should not be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).matches(0),
+            !ComparableValue::MoreThan(u64::MAX).matches(0),
             "0 should not be more than max_value"
         );
         assert!(
-            ComparableValue::MoreThan(0).matches(u64::max_value()),
+            ComparableValue::MoreThan(0).matches(u64::MAX),
             "max_value should be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).matches(u64::max_value()),
+            !ComparableValue::MoreThan(u64::MAX).matches(u64::MAX),
             "max_value should not be more than max_value"
         );
     }
@@ -1116,23 +1170,23 @@ mod tests {
             "0 should not be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).imatches(0),
+            ComparableValue::LessThan(u64::MAX).imatches(0),
             "0 should be less than max_value"
         );
         assert!(
-            !ComparableValue::LessThan(0).imatches(i64::max_value()),
+            !ComparableValue::LessThan(0).imatches(i64::MAX),
             "max_value should not be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).imatches(i64::max_value()),
+            ComparableValue::LessThan(u64::MAX).imatches(i64::MAX),
             "max_value should be less than max_value"
         );
         assert!(
-            ComparableValue::LessThan(0).imatches(i64::min_value()),
+            ComparableValue::LessThan(0).imatches(i64::MIN),
             "min_value should be less than 0"
         );
         assert!(
-            ComparableValue::LessThan(u64::max_value()).imatches(i64::min_value()),
+            ComparableValue::LessThan(u64::MAX).imatches(i64::MIN),
             "min_value should be less than max_value"
         );
 
@@ -1141,27 +1195,27 @@ mod tests {
             "0 should be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).imatches(0),
+            !ComparableValue::EqualTo(u64::MAX).imatches(0),
             "0 should not be equal to max_value"
         );
         assert!(
-            !ComparableValue::EqualTo(0).imatches(i64::max_value()),
+            !ComparableValue::EqualTo(0).imatches(i64::MAX),
             "max_value should not be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).imatches(i64::max_value()),
+            !ComparableValue::EqualTo(u64::MAX).imatches(i64::MAX),
             "max_value should not be equal to i64::max_value"
         );
         assert!(
-            ComparableValue::EqualTo(i64::max_value() as u64).imatches(i64::max_value()),
+            ComparableValue::EqualTo(i64::MAX as u64).imatches(i64::MAX),
             "i64::max_value should be equal to i64::max_value"
         );
         assert!(
-            !ComparableValue::EqualTo(0).imatches(i64::min_value()),
+            !ComparableValue::EqualTo(0).imatches(i64::MIN),
             "min_value should not be equal to 0"
         );
         assert!(
-            !ComparableValue::EqualTo(u64::max_value()).imatches(i64::min_value()),
+            !ComparableValue::EqualTo(u64::MAX).imatches(i64::MIN),
             "min_value should not be equal to max_value"
         );
 
@@ -1170,23 +1224,23 @@ mod tests {
             "0 should not be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).imatches(0),
+            !ComparableValue::MoreThan(u64::MAX).imatches(0),
             "0 should not be more than max_value"
         );
         assert!(
-            ComparableValue::MoreThan(0).imatches(i64::max_value()),
+            ComparableValue::MoreThan(0).imatches(i64::MAX),
             "max_value should be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).imatches(i64::max_value()),
+            !ComparableValue::MoreThan(u64::MAX).imatches(i64::MAX),
             "max_value should not be more than max_value"
         );
         assert!(
-            !ComparableValue::MoreThan(0).imatches(i64::min_value()),
+            !ComparableValue::MoreThan(0).imatches(i64::MIN),
             "min_value should not be more than 0"
         );
         assert!(
-            !ComparableValue::MoreThan(u64::max_value()).imatches(i64::min_value()),
+            !ComparableValue::MoreThan(u64::MAX).imatches(i64::MIN),
             "min_value should not be more than max_value"
         );
     }
