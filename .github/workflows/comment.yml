@@ -1,8 +1,7 @@
 on:
   workflow_run:
     workflows: [External-testsuites]
-    types:
-      - completed
+    types: [completed]
 
 name: Comment Test results on the PR
 
