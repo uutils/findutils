@@ -5,12 +5,16 @@ on:
 
 name: Comment Test results on the PR
 
+permissions: {}
 jobs:
   upload-pr-comment:
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    
     name: Upload PR comment
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      pull-requests: write
 
     steps:
       - name: List Annotations
