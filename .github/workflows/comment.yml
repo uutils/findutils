@@ -21,42 +21,35 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            console.log(github.event.workflow_run.event);
-            let runs = await github.rest.checks.listForRef({
+            let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ github.event.pull_request.head.sha }}'
+              run_id: ${{ github.event.workflow_run.id }},
             });
 
-            let names = ['Run GNU findutils tests', 'Run BFS tests'];
-            let results = [];
-            runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => results.push(run));
+            let matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "comment"
+            })[0];
 
-            let annotations = { data: []};
-            for (let result of results) {
-              let run = await github.rest.checks.listAnnotations({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                check_run_id: result.id
-              });
-              
-              run.data.forEach(data => {
-                annotations.data.push({
-                  run: result.name,
-                  annotation: data
-                });
-              });
-            }
+            let download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: matchArtifact.id,
+              archive_format: 'zip',
+            });
 
             let fs = require('fs');
-            fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations));
+            fs.writeFileSync('${{ github.workspace }}/comment.zip', Buffer.from(download.data));
+
+      - run: unzip comment.zip
+
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             let fs = require('fs');
-            let annotations = JSON.parse(fs.readFileSync('${{ github.workspace }}/annotations.json', 'utf8'));
+            let annotations = JSON.parse(fs.readFileSync('./annotations.json', 'utf8'));
 
             let annotationContent = annotations
               .data
@@ -68,6 +61,6 @@ jobs:
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: ${{ github.event.number }},
-              body: 'GNU testsuite comparison:\n```\n' + annotationContent + '```'
+              issue_number: annotations.pull_request_number,
+              body: 'GNU testsuite comparison:\n```\n' + annotationContent + '\n```\n'
             });
