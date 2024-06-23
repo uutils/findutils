@@ -21,7 +21,6 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            console.log(github.event.workflow_run.event);
             let runs = await github.rest.checks.listForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -60,6 +59,8 @@ jobs:
 
             let annotationContent = annotations
               .data
+              // Remove duplicate items.
+              .filter((value, index, self) => self.findIndex(v => v.annotation.message === value.annotation.message) === index)
               .map(annotation => `${annotation.run}: ${annotation.annotation.message}`)
               .join('\n');
 
@@ -69,5 +70,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: ${{ github.event.number }},
-              body: 'GNU testsuite comparison:\n```\n' + annotationContent + '```'
+              body: 'GNU testsuite comparison:\n```\n' + annotationContent + '\n```\n'
             });
