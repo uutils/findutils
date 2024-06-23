@@ -7,143 +7,143 @@ jobs:
     name: Run GNU findutils tests
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout findutils
-      uses: actions/checkout@v4
-      with:
-        path: findutils
-    - name: Checkout GNU findutils
-      uses: actions/checkout@v4
-      with:
-        repository: gnu-mirror-unofficial/findutils
-        path: findutils.gnu
-        ref: 5768a03ddfb5e18b1682e339d6cdd24ff721c510
-        submodules: true
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-        rustup default stable
-    - name: Install dependencies
-      shell: bash
-      run: |
-        # Enable sources & install dependencies
-        sudo find /etc/apt/sources.list* -type f -exec sed -i 'p; s/^deb /deb-src /' '{}' +
-        sudo apt-get update
-        sudo apt-get build-dep findutils
-    - name: Run GNU tests
-      shell: bash
-      run: |
-        cd findutils
-        bash util/build-gnu.sh ||:
-    - name: Extract testing info
-      shell: bash
-      run: |
-    - name: Upload gnu-test-report
-      uses: actions/upload-artifact@v4
-      with:
-        name: gnu-test-report
-        path: |
-          findutils.gnu/find/testsuite/*.log
-          findutils.gnu/xargs/testsuite/*.log
-          findutils.gnu/tests/**/*.log
-    - name: Upload gnu-result
-      uses: actions/upload-artifact@v4
-      with:
-        name: gnu-result
-        path: gnu-result.json
-    - name: Download the result
-      uses: dawidd6/action-download-artifact@v6
-      with:
-        workflow: compat.yml
-        workflow_conclusion: completed
-        name: gnu-result
-        repo: uutils/findutils
-        branch: main
-        path: dl
-    - name: Download the log
-      uses: dawidd6/action-download-artifact@v6
-      with:
-        workflow: compat.yml
-        workflow_conclusion: completed
-        name: gnu-test-report
-        repo: uutils/findutils
-        branch: main
-        path: dl
-    - name: Compare failing tests against master
-      shell: bash
-      run: |
-        ./findutils/util/diff-gnu.sh ./dl ./findutils.gnu
-    - name: Compare against main results
-      shell: bash
-      run: |
-        mv dl/gnu-result.json latest-gnu-result.json
-        python findutils/util/compare_gnu_result.py
+      - name: Checkout findutils
+        uses: actions/checkout@v4
+        with:
+          path: findutils
+      - name: Checkout GNU findutils
+        uses: actions/checkout@v4
+        with:
+          repository: gnu-mirror-unofficial/findutils
+          path: findutils.gnu
+          ref: 5768a03ddfb5e18b1682e339d6cdd24ff721c510
+          submodules: true
+      - name: Install `rust` toolchain
+        run: |
+          ## Install `rust` toolchain
+          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+          rustup default stable
+      - name: Install dependencies
+        shell: bash
+        run: |
+          # Enable sources & install dependencies
+          sudo find /etc/apt/sources.list* -type f -exec sed -i 'p; s/^deb /deb-src /' '{}' +
+          sudo apt-get update
+          sudo apt-get build-dep findutils
+      - name: Run GNU tests
+        shell: bash
+        run: |
+          cd findutils
+          bash util/build-gnu.sh ||:
+      - name: Extract testing info
+        shell: bash
+        run: |
+      - name: Upload gnu-test-report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnu-test-report
+          path: |
+            findutils.gnu/find/testsuite/*.log
+            findutils.gnu/xargs/testsuite/*.log
+            findutils.gnu/tests/**/*.log
+      - name: Upload gnu-result
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnu-result
+          path: gnu-result.json
+      - name: Download the result
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: compat.yml
+          workflow_conclusion: completed
+          name: gnu-result
+          repo: uutils/findutils
+          branch: main
+          path: dl
+      - name: Download the log
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: compat.yml
+          workflow_conclusion: completed
+          name: gnu-test-report
+          repo: uutils/findutils
+          branch: main
+          path: dl
+      - name: Compare failing tests against master
+        shell: bash
+        run: |
+          ./findutils/util/diff-gnu.sh ./dl ./findutils.gnu
+      - name: Compare against main results
+        shell: bash
+        run: |
+          mv dl/gnu-result.json latest-gnu-result.json
+          python findutils/util/compare_gnu_result.py
 
   bfs-tests:
     name: Run BFS tests
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout findutils
-      uses: actions/checkout@v4
-      with:
-        path: findutils
-    - name: Checkout BFS
-      uses: actions/checkout@v4
-      with:
-        repository: tavianator/bfs
-        path: bfs
-        ref: '3.1.3'
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-        rustup default stable
-    - name: Install dependencies
-      shell: bash
-      run: |
-        # Enable sources & install dependencies
-        sudo find /etc/apt/sources.list* -type f -exec sed -i 'p; s/^deb /deb-src /' '{}' +
-        sudo apt-get update
-        sudo apt-get build-dep bfs
-    - name: Run BFS tests
-      shell: bash
-      run: |
-        cd findutils
-        bash util/build-bfs.sh ||:
-    - name: Upload bfs-test-report
-      uses: actions/upload-artifact@v4
-      with:
-        name: bfs-test-report
-        path: bfs/tests.log
-    - name: Upload bfs-result
-      uses: actions/upload-artifact@v4
-      with:
-        name: bfs-result
-        path: bfs-result.json
-    - name: Download the result
-      uses: dawidd6/action-download-artifact@v6
-      with:
-        workflow: compat.yml
-        workflow_conclusion: completed
-        name: bfs-result
-        repo: uutils/findutils
-        branch: main
-        path: dl
-    - name: Download the log
-      uses: dawidd6/action-download-artifact@v6
-      with:
-        workflow: compat.yml
-        workflow_conclusion: completed
-        name: bfs-test-report
-        repo: uutils/findutils
-        branch: main
-        path: dl
-    - name: Compare failing tests against main
-      shell: bash
-      run: |
-        ./findutils/util/diff-bfs.sh dl/tests.log bfs/tests.log
-    - name: Compare against main results
-      shell: bash
-      run: |
-        mv dl/bfs-result.json latest-bfs-result.json
-        python findutils/util/compare_bfs_result.py
+      - name: Checkout findutils
+        uses: actions/checkout@v4
+        with:
+          path: findutils
+      - name: Checkout BFS
+        uses: actions/checkout@v4
+        with:
+          repository: tavianator/bfs
+          path: bfs
+          ref: "3.1.3"
+      - name: Install `rust` toolchain
+        run: |
+          ## Install `rust` toolchain
+          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+          rustup default stable
+      - name: Install dependencies
+        shell: bash
+        run: |
+          # Enable sources & install dependencies
+          sudo find /etc/apt/sources.list* -type f -exec sed -i 'p; s/^deb /deb-src /' '{}' +
+          sudo apt-get update
+          sudo apt-get build-dep bfs
+      - name: Run BFS tests
+        shell: bash
+        run: |
+          cd findutils
+          bash util/build-bfs.sh ||:
+      - name: Upload bfs-test-report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bfs-test-report
+          path: bfs/tests.log
+      - name: Upload bfs-result
+        uses: actions/upload-artifact@v4
+        with:
+          name: bfs-result
+          path: bfs-result.json
+      - name: Download the result
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: compat.yml
+          workflow_conclusion: completed
+          name: bfs-result
+          repo: uutils/findutils
+          branch: main
+          path: dl
+      - name: Download the log
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: compat.yml
+          workflow_conclusion: completed
+          name: bfs-test-report
+          repo: uutils/findutils
+          branch: main
+          path: dl
+      - name: Compare failing tests against main
+        shell: bash
+        run: |
+          ./findutils/util/diff-bfs.sh dl/tests.log bfs/tests.log
+      - name: Compare against main results
+        shell: bash
+        run: |
+          mv dl/bfs-result.json latest-bfs-result.json
+          python findutils/util/compare_bfs_result.py
