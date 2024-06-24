@@ -58,7 +58,14 @@ jobs:
               .map(annotation => `${annotation.run}: ${annotation.annotation.message}`)
               .join('\n');
 
-            console.log(annotationContent);
+            // check if no changes
+            let gnuTestReport = annotationsContent.includes('Run GNU findutils tests: Changes from main: PASS +0 / FAIL +0 / ERROR +0 / SKIP +0');
+            let bfsTestReport = annotationsContent.includes('Run BFS tests: Changes from main: PASS +0 / SKIP +0 / FAIL +0');
+
+            if (gnuTestReport && bfsTestReport) {
+              console.log('No changes');
+              return;
+            }
 
             // Comment on the PR
             github.rest.issues.createComment({
