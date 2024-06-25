@@ -72,5 +72,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: annotations.pull_request_number,
-              body: 'Commit ' + github.event.workflow_run.head_sha + ' has GNU testsuite comparison:\n```\n' + annotationContent + '\n```\n'
+              body: 'Commit ' + ${{ github.event.workflow_run.head_sha }} + ' has GNU testsuite comparison:\n```\n' + annotationContent + '\n```\n'
             });
