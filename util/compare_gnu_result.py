@@ -24,6 +24,10 @@ print(
     f"::warning ::Changes from main: PASS {pass_d:+d} / FAIL {fail_d:+d} / ERROR {error_d:+d} / SKIP {skip_d:+d} "
 )
 
+# Check if there are no changes.
+if pass_d == 0:
+    print("::warning ::Gnu tests No changes")
+
 # If results are worse fail the job to draw attention
 if pass_d < 0:
     sys.exit(1)
