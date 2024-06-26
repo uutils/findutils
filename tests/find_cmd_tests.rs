@@ -441,6 +441,18 @@ fn find_inum() {
         .stdout(predicate::str::contains("abbbc"));
 }
 
+#[cfg(not(unix))]
+#[test]
+fn find_inum() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-inum", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not available on this platform"))
+        .stdout(predicate::str::is_empty());
+}
+
 #[cfg(unix)]
 #[serial(working_dir)]
 #[test]
@@ -452,6 +464,18 @@ fn find_links() {
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc"));
+}
+
+#[cfg(not(unix))]
+#[test]
+fn find_links() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-links", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not available on this platform"))
+        .stdout(predicate::str::is_empty());
 }
 
 #[serial(working_dir)]
