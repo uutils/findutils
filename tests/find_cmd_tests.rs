@@ -623,3 +623,61 @@ fn find_age_range() {
         }
     }
 }
+
+#[test]
+#[cfg(unix)]
+#[serial(working_dir)]
+fn find_fs() {
+    use std::{os::unix::fs::MetadataExt, path::Path};
+
+    let path = Path::new("./test_data/simple/subdir");
+    let dev_id = path
+        .metadata()
+        .expect("Could not get metadata")
+        .dev()
+        .to_string();
+    let fs_list = uucore::fsext::read_fs_list().expect("Could not find the filesystem info");
+    let target_fs_type = fs_list
+        .into_iter()
+        .find(|fs| fs.dev_id == dev_id)
+        .map_or_else(String::new, |fs| fs.fs_type);
+
+    // match fs type
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-fstype", &target_fs_type])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./test_data/simple/subdir"))
+        .stderr(predicate::str::is_empty());
+
+    // not match fs type
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([
+            "./test_data/simple/subdir",
+            "-fstype",
+            format!("{} foo", target_fs_type).as_str(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    // not contain fstype text.
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-fstype"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::is_empty());
+
+    // void fstype
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-fstype", " "])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+}
