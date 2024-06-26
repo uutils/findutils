@@ -748,19 +748,11 @@ fn find_age_range() {
 #[cfg(unix)]
 #[serial(working_dir)]
 fn find_fs() {
-    use std::{os::unix::fs::MetadataExt, path::Path};
+    use findutils::find::matchers::fs::get_file_system_type;
+    use std::path::Path;
 
     let path = Path::new("./test_data/simple/subdir");
-    let dev_id = path
-        .metadata()
-        .expect("Could not get metadata")
-        .dev()
-        .to_string();
-    let fs_list = uucore::fsext::read_fs_list().expect("Could not find the filesystem info");
-    let target_fs_type = fs_list
-        .into_iter()
-        .find(|fs| fs.dev_id == dev_id)
-        .map_or_else(String::new, |fs| fs.fs_type);
+    let target_fs_type = get_file_system_type(path).unwrap();
 
     // match fs type
     Command::cargo_bin("find")

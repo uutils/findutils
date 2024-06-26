@@ -8,7 +8,7 @@ mod access;
 mod delete;
 mod empty;
 pub mod exec;
-mod fs;
+pub mod fs;
 mod glob;
 mod group;
 mod lname;
