@@ -441,6 +441,18 @@ fn find_inum() {
         .stdout(predicate::str::contains("abbbc"));
 }
 
+#[cfg(not(unix))]
+#[test]
+fn find_inum() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-inum", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not available on this platform"))
+        .stdout(predicate::str::is_empty());
+}
+
 #[cfg(unix)]
 #[serial(working_dir)]
 #[test]
@@ -452,6 +464,18 @@ fn find_links() {
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc"));
+}
+
+#[cfg(not(unix))]
+#[test]
+fn find_links() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-links", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not available on this platform"))
+        .stdout(predicate::str::is_empty());
 }
 
 #[serial(working_dir)]
@@ -543,6 +567,102 @@ fn expression_empty_parentheses() {
             "empty parentheses are not allowed",
         ))
         .stdout(predicate::str::is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+#[serial(working_dir)]
+fn find_with_user_predicate() {
+    // Considering the different test environments,
+    // the test code can only use a specific default user to perform the test,
+    // such as the root user on Linux.
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-user", "root"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-user", ""])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("empty"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-user", " "])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is not the name of a known user"))
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_with_nouser_predicate() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-nouser"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_with_group_predicate() {
+    // Considering the different test environments,
+    // the test code can only use a specific default user group for the test,
+    // such as the root user group on Linux.
+    #[cfg(target_os = "linux")]
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-group", "root"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    #[cfg(target_os = "macos")]
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-group", "staff"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-group", ""])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("empty"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-group", " "])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "is not the name of an existing group",
+        ))
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_with_nogroup_predicate() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data", "-nogroup"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
 }
 
 #[test]

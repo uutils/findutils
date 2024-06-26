@@ -1056,6 +1056,100 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    fn test_user_predicate() {
+        use std::{os::unix::fs::MetadataExt, path::Path};
+
+        use nix::unistd::{Uid, User};
+
+        let path = Path::new("./test_data/simple/subdir");
+        let uid = path.metadata().unwrap().uid();
+        let user = User::from_uid(Uid::from_raw(uid)).unwrap().unwrap().name;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &["find", "./test_data/simple/subdir", "-user", &user],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"
+        );
+
+        // test empty user name
+        ["-user", "-nouser"].iter().for_each(|&arg| {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, ""], &deps);
+
+            assert_eq!(rc, 1);
+
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, " "], &deps);
+
+            assert_eq!(rc, 1);
+        });
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_nouser_predicate() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-nouser"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_group_predicate() {
+        use std::{os::unix::fs::MetadataExt, path::Path};
+
+        use nix::unistd::{Gid, Group};
+
+        let path = Path::new("./test_data/simple/subdir");
+        let gid = path.metadata().unwrap().gid();
+        let group = Group::from_gid(Gid::from_raw(gid)).unwrap().unwrap().name;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &["find", "./test_data/simple/subdir", "-group", &group],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"
+        );
+
+        // test empty user name and group name
+        ["-group", "-nogroup"].iter().for_each(|&arg| {
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, ""], &deps);
+
+            assert_eq!(rc, 1);
+
+            let deps = FakeDependencies::new();
+            let rc = find_main(&["find", "./test_data/simple/subdir", arg, " "], &deps);
+
+            assert_eq!(rc, 1);
+        });
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_nogroup_predicate() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-nogroup"], &deps);
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_fs_matcher() {
         use crate::find::tests::FakeDependencies;
