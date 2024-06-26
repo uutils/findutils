@@ -17,15 +17,26 @@ impl FileSystemMatcher {
 
 impl Matcher for FileSystemMatcher {
     fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        let statfs = match nix::sys::statfs::statfs(file_info.path()) {
-            Ok(statfs) => statfs,
-            Err(_) => return false,
-        };
+        #[cfg(not(unix))]
+        {
+            false
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let dev_id = file_info
+                .metadata()
+                .expect("Could not get metadata")
+                .dev()
+                .to_string();
+            let fs_list =
+                uucore::fsext::read_fs_list().expect("Could not find the filesystem info");
 
-        // filesystem type id to name
-        let magic_number = statfs.filesystem_type();
-        let fs_type = uucore::fsext::pretty_fstype(magic_number.0);
-
-        fs_type == self.fs_text
+            fs_list
+                .into_iter()
+                .find(|fs| fs.dev_id == dev_id)
+                .map_or_else(String::new, |fs| fs.fs_type)
+                .contains(&self.fs_text)
+        }
     }
 }
