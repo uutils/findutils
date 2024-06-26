@@ -14,10 +14,10 @@ chrono = "0.4.38"
 clap = "4.5"
 faccess = "0.2.4"
 walkdir = "2.5"
-regex = "1.7"
+regex = "1.10"
 once_cell = "1.19"
 onig = { version = "6.4", default-features = false }
-uucore = { version = "0.0.26", features = ["entries", "fs", "fsext", "mode"] }
+uucore = { version = "0.0.27", features = ["entries", "fs", "fsext", "mode"] }
 nix = { version = "0.29", features = ["user"] }
 
 [dev-dependencies]

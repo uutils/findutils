@@ -22,6 +22,7 @@ mod quit;
 mod regex;
 mod samefile;
 mod size;
+#[cfg(unix)]
 mod stat;
 mod time;
 mod type_matcher;
@@ -53,6 +54,7 @@ use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
 use self::samefile::SameFileMatcher;
 use self::size::SizeMatcher;
+#[cfg(unix)]
 use self::stat::{InodeMatcher, LinksMatcher};
 use self::time::{
     FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
@@ -497,21 +499,33 @@ fn build_matcher_tree(
                         .into_box(),
                 )
             }
+            #[cfg(unix)]
             "-inum" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let inum = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(InodeMatcher::new(inum)?.into_box())
+                Some(InodeMatcher::new(inum).into_box())
             }
+            #[cfg(not(unix))]
+            "-inum" => {
+                return Err(From::from(
+                    "Inode numbers are not available on this platform",
+                ));
+            }
+            #[cfg(unix)]
             "-links" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let inum = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(LinksMatcher::new(inum)?.into_box())
+                Some(LinksMatcher::new(inum).into_box())
+            }
+            #[cfg(not(unix))]
+            "-links" => {
+                return Err(From::from("Link counts are not available on this platform"));
             }
             "-samefile" => {
                 if i >= args.len() - 1 {
