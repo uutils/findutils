@@ -781,7 +781,9 @@ fn find_samefile() {
         .args([".", "-samefile", "./test_data/links/abbbc"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(fix_up_slashes("./test_data/links/abbbc")))
+        .stdout(predicate::str::contains(fix_up_slashes(
+            "./test_data/links/abbbc",
+        )))
         .stderr(predicate::str::is_empty());
 
     // test not exist file
