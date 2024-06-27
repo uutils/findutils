@@ -1078,6 +1078,29 @@ mod tests {
             "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"
         );
 
+        // test uid
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-uid",
+                &uid.to_string(),
+            ],
+            &deps,
+        );
+        assert_eq!(rc, 0);
+
+        // test empty uid
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-uid", ""], &deps);
+        assert_eq!(rc, 1);
+
+        // test not a number
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-uid", "a"], &deps);
+        assert_eq!(rc, 1);
+
         // test empty user name
         ["-user", "-nouser"].iter().for_each(|&arg| {
             let deps = FakeDependencies::new();
@@ -1124,6 +1147,29 @@ mod tests {
             deps.get_output_as_string(),
             "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"
         );
+
+        // test gid
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-gid",
+                gid.to_string().as_str(),
+            ],
+            &deps,
+        );
+        assert_eq!(rc, 0);
+
+        // test empty gid
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-gid", ""], &deps);
+        assert_eq!(rc, 1);
+
+        // test not a number
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-gid", "a"], &deps);
+        assert_eq!(rc, 1);
 
         // test empty user name and group name
         ["-group", "-nogroup"].iter().for_each(|&arg| {

@@ -16,9 +16,9 @@ pub struct UserMatcher {
 
 impl UserMatcher {
     #[cfg(unix)]
-    pub fn new(user: String) -> UserMatcher {
+    pub fn from_user_name(user: &str) -> UserMatcher {
         // get uid from user name
-        let Ok(user) = User::from_name(user.as_str()) else {
+        let Ok(user) = User::from_name(user) else {
             return UserMatcher { uid: None };
         };
 
@@ -35,8 +35,18 @@ impl UserMatcher {
         }
     }
 
+    #[cfg(unix)]
+    pub fn from_uid(uid: u32) -> UserMatcher {
+        UserMatcher { uid: Some(uid) }
+    }
+
     #[cfg(windows)]
-    pub fn new(_user: String) -> UserMatcher {
+    pub fn from_user_name(_user: &str) -> UserMatcher {
+        UserMatcher { uid: None }
+    }
+
+    #[cfg(windows)]
+    pub fn from_uid(_uid: u32) -> UserMatcher {
         UserMatcher { uid: None }
     }
 
@@ -124,7 +134,7 @@ mod tests {
             .unwrap()
             .name;
 
-        let matcher = UserMatcher::new(file_user.clone());
+        let matcher = UserMatcher::from_user_name(file_user.as_str());
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "user should be the same"
@@ -132,11 +142,19 @@ mod tests {
 
         // Testing a non-existent group name
         let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
-        let matcher = UserMatcher::new(time_string.clone());
+        let matcher = UserMatcher::from_user_name(time_string.as_str());
         assert!(
             matcher.uid().is_none(),
             "user {} should not be the same",
             time_string
+        );
+
+        // Testing user id
+        let matcher = UserMatcher::from_uid(file_uid);
+        assert!(matcher.uid().is_some(), "user id {} should exist", file_uid);
+        assert!(
+            matcher.matches(&file_info, &mut matcher_io),
+            "user id should match"
         );
     }
 }

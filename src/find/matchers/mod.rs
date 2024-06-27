@@ -21,6 +21,7 @@ mod printf;
 mod prune;
 mod quit;
 mod regex;
+mod samefile;
 mod size;
 #[cfg(unix)]
 mod stat;
@@ -53,6 +54,7 @@ use self::printf::Printf;
 use self::prune::PruneMatcher;
 use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
+use self::samefile::SameFileMatcher;
 use self::size::SizeMatcher;
 #[cfg(unix)]
 use self::stat::{InodeMatcher, LinksMatcher};
@@ -534,6 +536,21 @@ fn build_matcher_tree(
             "-links" => {
                 return Err(From::from("Link counts are not available on this platform"));
             }
+            "-samefile" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let path = Path::new(args[i + 1]).to_path_buf();
+                // check if path is not found
+                if !path.exists() {
+                    return Err(From::from(format!(
+                        "{}: No such file or directory",
+                        args[i + 1]
+                    )));
+                }
+                i += 1;
+                Some(SameFileMatcher::new(path).into_box())
+            }
             "-user" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
@@ -546,7 +563,7 @@ fn build_matcher_tree(
                 }
 
                 i += 1;
-                let matcher = UserMatcher::new(user.to_string());
+                let matcher = UserMatcher::from_user_name(user);
                 match matcher.uid() {
                     Some(_) => Some(matcher.into_box()),
                     None => {
@@ -558,6 +575,18 @@ fn build_matcher_tree(
                 }
             }
             "-nouser" => Some(NoUserMatcher {}.into_box()),
+            "-uid" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                // check if the argument is a number
+                let uid = args[i + 1].parse::<u32>();
+                if uid.is_err() {
+                    return Err(From::from(format!("{} is not a number", args[i + 1])));
+                }
+                i += 1;
+                Some(UserMatcher::from_uid(uid.unwrap()).into_box())
+            }
             "-group" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
@@ -572,7 +601,7 @@ fn build_matcher_tree(
                 }
 
                 i += 1;
-                let matcher = GroupMatcher::new(group.to_string());
+                let matcher = GroupMatcher::from_group_name(group);
                 match matcher.gid() {
                     Some(_) => Some(matcher.into_box()),
                     None => {
@@ -584,6 +613,21 @@ fn build_matcher_tree(
                 }
             }
             "-nogroup" => Some(NoGroupMatcher {}.into_box()),
+            "-gid" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                // check if the argument is a number
+                let gid = args[i + 1].parse::<u32>();
+                if gid.is_err() {
+                    return Err(From::from(format!(
+                        "find: invalid argument `{}' to `-gid'",
+                        args[i + 1]
+                    )));
+                }
+                i += 1;
+                Some(GroupMatcher::from_gid(gid.unwrap()).into_box())
+            }
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
                 if i >= args.len() - 1 {
