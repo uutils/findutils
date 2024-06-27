@@ -540,16 +540,10 @@ fn build_matcher_tree(
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                let path = Path::new(args[i + 1]).to_path_buf();
-                // check if path is not found
-                if !path.exists() {
-                    return Err(From::from(format!(
-                        "{}: No such file or directory",
-                        args[i + 1]
-                    )));
-                }
                 i += 1;
-                Some(SameFileMatcher::new(path).into_box())
+                let path = args[i];
+                let matcher = SameFileMatcher::new(path).map_err(|e| format!("{path}: {e}"))?;
+                Some(matcher.into_box())
             }
             "-user" => {
                 if i >= args.len() - 1 {
