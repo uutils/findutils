@@ -779,3 +779,55 @@ fn find_age_range() {
         }
     }
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_samefile() {
+    use std::fs;
+
+    // remove file if hard link file exist.
+    // But you can't delete a file that doesn't exist,
+    // so ignore the error returned here.
+    let _ = fs::remove_file("test_data/links/hard_link");
+    fs::hard_link("test_data/links/abbbc", "test_data/links/hard_link").unwrap();
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([
+            "./test_data/links/abbbc",
+            "-samefile",
+            "./test_data/links/hard_link",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./test_data/links/abbbc"))
+        .stderr(predicate::str::is_empty());
+
+    // test . path
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([".", "-samefile", "."])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("."))
+        .stderr(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([".", "-samefile", "./test_data/links/abbbc"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(fix_up_slashes(
+            "./test_data/links/abbbc",
+        )))
+        .stderr(predicate::str::is_empty());
+
+    // test not exist file
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([".", "-samefile", "./test_data/links/not-exist-file"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(""))
+        .stderr(predicate::str::contains("No such file or directory"));
+}

@@ -20,6 +20,7 @@ mod printf;
 mod prune;
 mod quit;
 mod regex;
+mod samefile;
 mod size;
 #[cfg(unix)]
 mod stat;
@@ -51,6 +52,7 @@ use self::printf::Printf;
 use self::prune::PruneMatcher;
 use self::quit::QuitMatcher;
 use self::regex::RegexMatcher;
+use self::samefile::SameFileMatcher;
 use self::size::SizeMatcher;
 #[cfg(unix)]
 use self::stat::{InodeMatcher, LinksMatcher};
@@ -524,6 +526,21 @@ fn build_matcher_tree(
             #[cfg(not(unix))]
             "-links" => {
                 return Err(From::from("Link counts are not available on this platform"));
+            }
+            "-samefile" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let path = Path::new(args[i + 1]).to_path_buf();
+                // check if path is not found
+                if !path.exists() {
+                    return Err(From::from(format!(
+                        "{}: No such file or directory",
+                        args[i + 1]
+                    )));
+                }
+                i += 1;
+                Some(SameFileMatcher::new(path).into_box())
             }
             "-user" => {
                 if i >= args.len() - 1 {
