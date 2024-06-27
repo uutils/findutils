@@ -105,7 +105,7 @@ mod tests {
         let _ = File::create(foo_path).expect("create temp file");
         let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
 
-        let target_fs_type = get_file_system_type(&file_info.path()).unwrap();
+        let target_fs_type = get_file_system_type(file_info.path()).unwrap();
 
         // should match fs type
         let matcher = super::FileSystemMatcher::new(target_fs_type.clone());
