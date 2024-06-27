@@ -1194,4 +1194,29 @@ mod tests {
         assert_eq!(rc, 0);
         assert_eq!(deps.get_output_as_string(), "");
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_fs_matcher() {
+        use crate::find::tests::FakeDependencies;
+        use matchers::fs::get_file_system_type;
+        use std::path::Path;
+
+        let path = Path::new("./test_data/simple/subdir");
+        let target_fs_type = get_file_system_type(path).unwrap();
+
+        // should match fs type
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-fstype",
+                &target_fs_type,
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+    }
 }
