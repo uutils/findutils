@@ -18,17 +18,8 @@ impl SameFileMatcher {
 }
 
 impl Matcher for SameFileMatcher {
-    #[cfg(unix)]
     fn matches(&self, file_info: &walkdir::DirEntry, _matcher_io: &mut super::MatcherIO) -> bool {
         uucore::fs::paths_refer_to_same_file(file_info.path(), &self.path, true)
-    }
-
-    #[cfg(not(unix))]
-    fn matches(&self, _file_info: &walkdir::DirEntry, _matcher_io: &mut super::MatcherIO) -> bool {
-        // FIXME
-        // MetadataExt under Windows system does not have an interface for obtaining inode,
-        // so the implementation of this function needs to introduce other libraries or use unsafe code.
-        false
     }
 }
 
@@ -37,7 +28,6 @@ mod tests {
     use std::fs;
 
     #[test]
-    #[cfg(unix)]
     fn test_samefile() {
         use crate::find::{
             matchers::{samefile::SameFileMatcher, tests::get_dir_entry_for, Matcher},
