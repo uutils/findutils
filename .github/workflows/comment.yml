@@ -58,12 +58,19 @@ jobs:
               .map(annotation => `${annotation.run}: ${annotation.annotation.message}`)
               .join('\n');
 
-            console.log(annotationContent);
+            // check if no changes
+            let gnuTestReport = annotationContent.includes('Run GNU findutils tests: Gnu tests No changes');
+            let bfsTestReport = annotationContent.includes('Run BFS tests: BFS tests No changes');
+
+            if (gnuTestReport && bfsTestReport) {
+              console.log('No changes');
+              return;
+            }
 
             // Comment on the PR
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: annotations.pull_request_number,
-              body: 'GNU testsuite comparison:\n```\n' + annotationContent + '\n```\n'
+              body: 'Commit ${{ github.event.workflow_run.head_sha }} has GNU testsuite comparison:\n```\n' + annotationContent + '\n```\n'
             });
