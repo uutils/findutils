@@ -878,6 +878,6 @@ fn find_samefile() {
         .args([".", "-samefile", "./test_data/links/not-exist-file"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains(""))
-        .stderr(predicate::str::contains("No such file or directory"));
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("not-exist-file"));
 }
