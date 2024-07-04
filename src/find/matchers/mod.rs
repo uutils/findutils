@@ -692,6 +692,14 @@ fn build_matcher_tree(
 
                 return Ok((i, top_level_matcher.build()));
             }
+            "-ignore_readdir_race" => {
+                config.ignore_readdir_race = true;
+                None
+            }
+            "-noignore_readdir_race" => {
+                config.ignore_readdir_race = false;
+                None
+            }
             "-d" | "-depth" => {
                 // TODO add warning if it appears after actual testing criterion
                 config.depth_first = true;
