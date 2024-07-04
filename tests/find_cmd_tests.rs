@@ -881,3 +881,27 @@ fn find_samefile() {
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("not-exist-file"));
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_ignore_readdir_race() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-ignore_readdir_race"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./test_data/simple/subdir"))
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_noignore_readdir_race() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-noignore_readdir_race"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./test_data/simple/subdir"))
+        .stderr(predicate::str::is_empty());
+}

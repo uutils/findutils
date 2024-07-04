@@ -1221,4 +1221,35 @@ mod tests {
 
         assert_eq!(rc, 0);
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_ignore_readdir_race() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &["find", "./test_data/simple/subdir", "-ignore_readdir_race"],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn test_noignore_readdir_race() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-noignore_readdir_race",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+    }
 }
