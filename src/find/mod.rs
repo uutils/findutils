@@ -158,9 +158,9 @@ fn process_dir<'a>(
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
-                // Subdirectory search optimization, 
-                // skipping directories if the directory entry has 
-                // only two hard links (. and .. on Linux file systems) or 
+                // Subdirectory search optimization,
+                // skipping directories if the directory entry has
+                // only two hard links (. and .. on Linux file systems) or
                 // less than two hard links (on Windows systems).
                 if config.no_leaf_dirs && entry.file_type().is_dir() {
                     #[cfg(unix)]

@@ -692,6 +692,10 @@ fn build_matcher_tree(
 
                 return Ok((i, top_level_matcher.build()));
             }
+            "-noleaf" => {
+                config.no_leaf_dirs = true;
+                None
+            }
             "-d" | "-depth" => {
                 // TODO add warning if it appears after actual testing criterion
                 config.depth_first = true;
