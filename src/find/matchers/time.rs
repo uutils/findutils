@@ -277,12 +277,21 @@ impl FileTimeMatcher {
             }
         };
         let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+
         // rust division truncates towards zero (see
         // https://github.com/rust-lang/rust/blob/master/src/libcore/ops.rs#L580 )
         // so a simple age_in_seconds / SECONDS_PER_DAY gives the wrong answer
         // for negative ages: a file whose age is 1 second in the future needs to
         // count as -1 day old, not 0.
-        let age_in_days = age_in_seconds / SECONDS_PER_DAY + if is_negative { -1 } else { 0 };
+        // If today_start is true, we should count it as 0 days old.
+        // because today is 00:00:00, so we need to subtract 1 day.
+        let negative_offset = if is_negative && !self.today_start {
+            -1
+        } else {
+            0
+        };
+
+        let age_in_days = age_in_seconds / SECONDS_PER_DAY + negative_offset;
         Ok(self.days.imatches(age_in_days))
     }
 
