@@ -226,6 +226,7 @@ impl FileTimeType {
 pub struct FileTimeMatcher {
     days: ComparableValue,
     file_time_type: FileTimeType,
+    today_start: bool,
 }
 
 impl Matcher for FileTimeMatcher {
@@ -272,10 +273,11 @@ impl FileTimeMatcher {
         Ok(self.days.imatches(age_in_days))
     }
 
-    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> Self {
+    pub fn new(file_time_type: FileTimeType, days: ComparableValue, today_start: bool) -> Self {
         Self {
             days,
             file_time_type,
+            today_start,
         }
     }
 }
@@ -283,6 +285,7 @@ impl FileTimeMatcher {
 pub struct FileAgeRangeMatcher {
     minutes: ComparableValue,
     file_time_type: FileTimeType,
+    today_start: bool,
 }
 
 impl Matcher for FileAgeRangeMatcher {
@@ -320,10 +323,11 @@ impl FileAgeRangeMatcher {
         Ok(self.minutes.imatches(age_in_minutes))
     }
 
-    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue) -> Self {
+    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue, today_start: bool) -> Self {
         Self {
             minutes,
             file_time_type,
+            today_start,
         }
     }
 }
@@ -381,13 +385,13 @@ mod tests {
         let files_mtime = file.metadata().unwrap().modified().unwrap();
 
         let exactly_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1), false);
         let more_than_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), false);
         let less_than_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1), false);
         let zero_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0), false);
 
         // set "now" to 2 days after the file was modified.
         let mut deps = FakeDependencies::new();
@@ -537,7 +541,7 @@ mod tests {
         file_time_type: FileTimeType,
     ) {
         {
-            let matcher = FileTimeMatcher::new(file_time_type, ComparableValue::EqualTo(0));
+            let matcher = FileTimeMatcher::new(file_time_type, ComparableValue::EqualTo(0), false);
 
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time);
@@ -733,7 +737,8 @@ mod tests {
         ]
         .iter()
         .for_each(|time_type| {
-            let more_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1));
+            let more_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1), false);
             assert!(
                 !more_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
                 "{}",
@@ -761,7 +766,8 @@ mod tests {
         ]
         .iter()
         .for_each(|time_type| {
-            let less_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1));
+            let less_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1), false);
             assert!(
                 less_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
                 "{}",
@@ -779,7 +785,7 @@ mod tests {
         // catch file error
         let _ = fs::remove_file(&*new_file.path().to_string_lossy());
         let matcher =
-            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), false);
         assert!(
             !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
             "The correct situation is that the file reading here cannot be successful."

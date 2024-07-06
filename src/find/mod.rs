@@ -21,6 +21,7 @@ pub struct Config {
     sorted_output: bool,
     help_requested: bool,
     version_requested: bool,
+    today_start: bool,
 }
 
 impl Default for Config {
@@ -33,6 +34,7 @@ impl Default for Config {
             sorted_output: false,
             help_requested: false,
             version_requested: false,
+            today_start: false,
         }
     }
 }
