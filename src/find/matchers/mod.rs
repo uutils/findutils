@@ -692,11 +692,11 @@ fn build_matcher_tree(
 
                 return Ok((i, top_level_matcher.build()));
             }
-            // In our implementation, including the `-exec` parameter, 
-            // it is always run in a single thread. 
+            // In our implementation, including the `-exec` parameter,
+            // it is always run in a single thread.
             // Therefore, there is no race condition for now.
             // and we currently only add the corresponding fields in Config.
-            // 
+            //
             // Related: https://github.com/uutils/findutils/pull/411#issuecomment-2210638686
             "-ignore_readdir_race" => {
                 config.ignore_readdir_race = true;
