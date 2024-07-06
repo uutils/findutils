@@ -881,3 +881,28 @@ fn find_samefile() {
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("not-exist-file"));
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_ignore_readdir_race() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-daystart", "-mtime", "0"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    // twice -daystart should be matched
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([
+            "./test_data/simple/subdir",
+            "-daystart",
+            "-daystart",
+            "-mtime",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}

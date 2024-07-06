@@ -1221,4 +1221,40 @@ mod tests {
 
         assert_eq!(rc, 0);
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_daystart() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-daystart",
+                "-mtime",
+                "0",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+
+        // twice -daystart should be matched
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-daystart",
+                "-daystart",
+                "-mtime",
+                "1",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+    }
 }

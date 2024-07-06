@@ -508,6 +508,101 @@ mod tests {
     }
 
     #[test]
+    fn file_time_matcher_with_daystart() {
+        // this file should already exist
+        let file = get_dir_entry_for("test_data", "simple");
+
+        let files_mtime = file.metadata().unwrap().modified().unwrap();
+
+        let exactly_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1), true);
+        let more_than_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), true);
+        let less_than_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1), true);
+        let zero_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0), true);
+
+        // set "now" to 2 days after the file was modified.
+        let mut deps = FakeDependencies::new();
+        deps.set_time(files_mtime + Duration::new(2 * SECONDS_PER_DAY as u64, 0));
+        assert!(
+            exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file should match more than 1 day old"
+        );
+        assert!(
+            !less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file shouldn't match less than 1 day old"
+        );
+        assert!(
+            !zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "2 day old file shouldn't match exactly 0 days old"
+        );
+
+        // set "now" to 1 day after the file was modified.
+        deps.set_time(files_mtime + Duration::new((3 * SECONDS_PER_DAY / 2) as u64, 0));
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file should match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file shouldn't match more than 1 day old"
+        );
+        assert!(
+            less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file shouldn't match less than 1 day old"
+        );
+        assert!(
+            zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "1 day old file shouldn't match exactly 0 days old"
+        );
+
+        // set "now" to exactly the same time file was modified.
+        deps.set_time(files_mtime);
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file shouldn't match more than 1 day old"
+        );
+        assert!(
+            less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file should match less than 1 day old"
+        );
+        assert!(
+            zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file should match exactly 0 days old"
+        );
+
+        // set "now" to a second before the file was modified (e.g. the file was
+        // modified after find started running
+        deps.set_time(files_mtime - Duration::new(1_u64, 0));
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn't match more than 1 day old"
+        );
+        assert!(
+            less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file should match less than 1 day old"
+        );
+        assert!(
+            zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn't match exactly 0 days old"
+        );
+    }
+
+    #[test]
     fn file_time_matcher_modified_created_accessed() {
         let temp_dir = Builder::new()
             .prefix("file_time_matcher_modified_created_accessed")
@@ -821,6 +916,83 @@ mod tests {
         let _ = fs::remove_file(&*new_file.path().to_string_lossy());
         let matcher =
             FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), false);
+        assert!(
+            !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+            "The correct situation is that the file reading here cannot be successful."
+        );
+    }
+
+    #[test]
+    fn file_age_range_matcher_with_daystart() {
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let new_file_name = "newFile";
+        // this has just been created, so should be newer
+        File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
+        let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
+
+        // more test
+        // mocks:
+        // - find test_data/simple -amin +1
+        // - find test_data/simple -cmin +1
+        // - find test_data/simple -mmin +1
+        // Means to find files accessed / modified more than 1 minute ago.
+        [
+            FileTimeType::Accessed,
+            FileTimeType::Created,
+            FileTimeType::Modified,
+        ]
+        .iter()
+        .for_each(|time_type| {
+            let more_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1), true);
+            assert!(
+                !more_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+                "{}",
+                format!(
+                    "more minutes old file should match more than 1 minute old in {} test.",
+                    match *time_type {
+                        FileTimeType::Accessed => "accessed",
+                        FileTimeType::Created => "created",
+                        FileTimeType::Modified => "modified",
+                    }
+                )
+            );
+        });
+
+        // less test
+        // mocks:
+        // - find test_data/simple -amin -1
+        // - find test_data/simple -cmin -1
+        // - find test_data/simple -mmin -1
+        // Means to find files accessed / modified less than 1 minute ago.
+        [
+            FileTimeType::Accessed,
+            FileTimeType::Created,
+            FileTimeType::Modified,
+        ]
+        .iter()
+        .for_each(|time_type| {
+            let less_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1), true);
+            assert!(
+                less_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
+                "{}",
+                format!(
+                    "less minutes old file should not match less than 1 minute old in {} test.",
+                    match *time_type {
+                        FileTimeType::Accessed => "accessed",
+                        FileTimeType::Created => "created",
+                        FileTimeType::Modified => "modified",
+                    }
+                )
+            );
+        });
+
+        // catch file error
+        let _ = fs::remove_file(&*new_file.path().to_string_lossy());
+        let matcher =
+            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), true);
         assert!(
             !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
             "The correct situation is that the file reading here cannot be successful."
