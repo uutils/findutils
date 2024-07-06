@@ -7,7 +7,7 @@
 use std::error::Error;
 use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use walkdir::DirEntry;
 
 use super::{ComparableValue, Matcher, MatcherIO};
@@ -231,7 +231,16 @@ pub struct FileTimeMatcher {
 
 impl Matcher for FileTimeMatcher {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        match self.matches_impl(file_info, matcher_io.now()) {
+        let time = if self.today_start {
+            // the time at 00:00:00 of today
+            let duration = matcher_io.now().duration_since(UNIX_EPOCH).unwrap();
+            let seconds = duration.as_secs();
+            let midnight_seconds = seconds - (seconds % 86400);
+            UNIX_EPOCH + Duration::from_secs(midnight_seconds)
+        } else {
+            matcher_io.now()
+        };
+        match self.matches_impl(file_info, time) {
             Err(e) => {
                 writeln!(
                     &mut stderr(),
@@ -251,12 +260,16 @@ impl Matcher for FileTimeMatcher {
 impl FileTimeMatcher {
     /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
-    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(
+        &self,
+        file_info: &DirEntry,
+        start_time: SystemTime,
+    ) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
         let mut is_negative = false;
         // durations can't be negative. So duration_since returns a duration
         // wrapped in an error if now < this_time.
-        let age = match now.duration_since(this_time) {
+        let age = match start_time.duration_since(this_time) {
             Ok(duration) => duration,
             Err(e) => {
                 is_negative = true;
@@ -290,7 +303,16 @@ pub struct FileAgeRangeMatcher {
 
 impl Matcher for FileAgeRangeMatcher {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        match self.matches_impl(file_info, matcher_io.now()) {
+        let time = if self.today_start {
+            // the time at 00:00:00 of today
+            let duration = matcher_io.now().duration_since(UNIX_EPOCH).unwrap();
+            let seconds = duration.as_secs();
+            let midnight_seconds = seconds - (seconds % 86400);
+            UNIX_EPOCH + Duration::from_secs(midnight_seconds)
+        } else {
+            matcher_io.now()
+        };
+        match self.matches_impl(file_info, time) {
             Err(e) => {
                 writeln!(
                     &mut stderr(),
@@ -308,10 +330,14 @@ impl Matcher for FileAgeRangeMatcher {
 }
 
 impl FileAgeRangeMatcher {
-    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(
+        &self,
+        file_info: &DirEntry,
+        start_time: SystemTime,
+    ) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
         let mut is_negative = false;
-        let age = match now.duration_since(this_time) {
+        let age = match start_time.duration_since(this_time) {
             Ok(duration) => duration,
             Err(e) => {
                 is_negative = true;
