@@ -34,6 +34,9 @@ impl Default for Config {
             sorted_output: false,
             help_requested: false,
             version_requested: false,
+            // Directory information and traversal are done by walkdir,
+            // and this configuration field will exist as
+            // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
         }
     }
@@ -158,31 +161,6 @@ fn process_dir<'a>(
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
-                // Subdirectory search optimization,
-                // skipping directories if the directory entry has
-                // only two hard links (. and .. on Linux file systems) or
-                // less than two hard links (on Windows systems).
-                if config.no_leaf_dirs && entry.file_type().is_dir() {
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::MetadataExt;
-                        let metadata = entry.metadata().unwrap();
-                        if metadata.nlink() <= 2 {
-                            it.skip_current_dir();
-                            continue;
-                        }
-                    }
-
-                    #[cfg(windows)]
-                    {
-                        use std::os::windows::fs::MetadataExt;
-                        let metadata = entry.metadata().unwrap();
-                        if metadata.file_attributes() & 0x10 == 0x10 {
-                            it.skip_current_dir();
-                            continue;
-                        }
-                    }
-                }
 
                 if matcher.matches(&entry, &mut matcher_io) {
                     found_count += 1;
@@ -1244,6 +1222,17 @@ mod tests {
             ],
             &deps,
         );
+
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_noleaf() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-noleaf"], &deps);
 
         assert_eq!(rc, 0);
     }
