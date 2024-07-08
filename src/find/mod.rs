@@ -34,6 +34,7 @@ impl Default for Config {
             sorted_output: false,
             help_requested: false,
             version_requested: false,
+            // For compat: doesn't change anything
             ignore_readdir_race: false,
         }
     }
