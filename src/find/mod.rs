@@ -22,6 +22,7 @@ pub struct Config {
     help_requested: bool,
     version_requested: bool,
     today_start: bool,
+    no_leaf_dirs: bool,
 }
 
 impl Default for Config {
@@ -35,6 +36,10 @@ impl Default for Config {
             help_requested: false,
             version_requested: false,
             today_start: false,
+            // Directory information and traversal are done by walkdir,
+            // and this configuration field will exist as
+            // a compatibility item for GNU findutils.
+            no_leaf_dirs: false,
         }
     }
 }
@@ -158,6 +163,7 @@ fn process_dir<'a>(
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
+
                 if matcher.matches(&entry, &mut matcher_io) {
                     found_count += 1;
                 }
@@ -1254,6 +1260,15 @@ mod tests {
             ],
             &deps,
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_noleaf() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-noleaf"], &deps);
 
         assert_eq!(rc, 0);
     }
