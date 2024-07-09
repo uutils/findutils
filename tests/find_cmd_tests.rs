@@ -904,6 +904,7 @@ fn find_ignore_readdir_race() {
         ])
         .assert()
         .success()
+        .stderr(predicate::str::is_empty());
 }
 
 #[test]
