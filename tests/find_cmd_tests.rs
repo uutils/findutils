@@ -881,3 +881,15 @@ fn find_samefile() {
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("not-exist-file"));
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_noleaf() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data/simple/subdir", "-noleaf"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test_data/simple/subdir"))
+        .stderr(predicate::str::is_empty());
+}
