@@ -285,6 +285,7 @@ mod tests {
     #[cfg(windows)]
     use std::os::windows::fs::symlink_file;
 
+    use crate::find::matchers::time::ChangeTime;
     use crate::find::matchers::MatcherIO;
 
     use super::*;
@@ -673,7 +674,7 @@ mod tests {
         let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
 
         // metadata can return errors like StringError("creation time is not available on this platform currently")
-        // so skip tests that won't pass due to shortcomings in std:;fs.
+        // so skip tests that won't pass due to shortcomings in std::fs.
         if let Ok(file_time) = meta.modified() {
             file_time_helper(file_time, "-mtime");
         }
@@ -684,8 +685,8 @@ mod tests {
         let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
 
         // metadata can return errors like StringError("creation time is not available on this platform currently")
-        // so skip tests that won't pass due to shortcomings in std:;fs.
-        if let Ok(file_time) = meta.created() {
+        // so skip tests that won't pass due to shortcomings in std::fs.
+        if let Ok(file_time) = meta.changed() {
             file_time_helper(file_time, "-ctime");
         }
     }
@@ -695,7 +696,7 @@ mod tests {
         let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
 
         // metadata can return errors like StringError("creation time is not available on this platform currently")
-        // so skip tests that won't pass due to shortcomings in std:;fs.
+        // so skip tests that won't pass due to shortcomings in std::fs.
         if let Ok(file_time) = meta.accessed() {
             file_time_helper(file_time, "-atime");
         }
@@ -943,9 +944,10 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
-    fn test_find_newer_xy_before_created_time() {
-        // normal - before the created time
+    fn test_find_newer_xy_before_changed_time() {
+        // normal - before the changed time
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
         #[cfg(not(target_os = "linux"))]
@@ -967,8 +969,8 @@ mod tests {
     }
 
     #[test]
-    fn test_find_newer_xy_after_created_time() {
-        // normal - after the created time
+    fn test_find_newer_xy_after_changed_time() {
+        // normal - after the changed time
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
         #[cfg(not(target_os = "linux"))]
