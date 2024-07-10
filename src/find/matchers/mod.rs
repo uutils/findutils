@@ -347,7 +347,7 @@ fn build_matcher_tree(
     args: &[&str],
     config: &mut Config,
     arg_index: usize,
-    expecting_bracket: bool,
+    mut expecting_bracket: bool,
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
     let mut top_level_matcher = ListMatcherBuilder::new();
 
@@ -772,6 +772,12 @@ fn build_matcher_tree(
                 }
             }
         };
+        i += 1;
+        if config.help_requested || config.version_requested {
+            // Ignore anything, even invalid expressions, after -help/-version
+            expecting_bracket = false;
+            break;
+        }
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
                 top_level_matcher.new_and_condition(NotMatcher::new(submatcher));
@@ -780,7 +786,6 @@ fn build_matcher_tree(
                 top_level_matcher.new_and_condition(submatcher);
             }
         }
-        i += 1;
     }
     if expecting_bracket {
         return Err(From::from(
@@ -1489,5 +1494,21 @@ mod tests {
         build_top_level_matcher(&["-maxdepth", "0", "-a", "-print"], &mut config)
             .expect("logical operators like -a should work with options");
         assert_eq!(config.max_depth, 0);
+    }
+
+    #[test]
+    fn build_top_level_matcher_help_invalid() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["(", "-help", "-a"], &mut config)
+            .expect("-help should stop parsing");
+        assert!(config.help_requested);
+    }
+
+    #[test]
+    fn build_top_level_matcher_version_invalid() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["(", "-version", "-o", ")", ")"], &mut config)
+            .expect("-version should stop parsing");
+        assert!(config.version_requested);
     }
 }
