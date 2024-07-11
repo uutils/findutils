@@ -896,7 +896,7 @@ fn find_noleaf() {
 
 #[test]
 #[serial(working_dir)]
-fn find_ignore_readdir_race() {
+fn find_daystart() {
     Command::cargo_bin("find")
         .expect("found binary")
         .args(["./test_data/simple/subdir", "-daystart", "-mtime", "0"])
