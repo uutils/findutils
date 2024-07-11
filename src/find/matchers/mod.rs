@@ -347,7 +347,7 @@ fn build_matcher_tree(
     args: &[&str],
     config: &mut Config,
     arg_index: usize,
-    expecting_bracket: bool,
+    mut expecting_bracket: bool,
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
     let mut top_level_matcher = ListMatcherBuilder::new();
 
@@ -400,7 +400,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 regex_type = regex::RegexType::from_str(args[i])?;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-regex" => {
                 if i >= args.len() - 1 {
@@ -702,22 +702,22 @@ fn build_matcher_tree(
             "-noleaf" => {
                 // No change of behavior
                 config.no_leaf_dirs = true;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-d" | "-depth" => {
                 // TODO add warning if it appears after actual testing criterion
                 config.depth_first = true;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-mount" | "-xdev" => {
                 // TODO add warning if it appears after actual testing criterion
                 config.same_file_system = true;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-sorted" => {
                 // TODO add warning if it appears after actual testing criterion
                 config.sorted_output = true;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-maxdepth" => {
                 if i >= args.len() - 1 {
@@ -725,7 +725,7 @@ fn build_matcher_tree(
                 }
                 config.max_depth = convert_arg_to_number(args[i], args[i + 1])?;
                 i += 1;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-mindepth" => {
                 if i >= args.len() - 1 {
@@ -733,7 +733,7 @@ fn build_matcher_tree(
                 }
                 config.min_depth = convert_arg_to_number(args[i], args[i + 1])?;
                 i += 1;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-help" | "--help" => {
                 config.help_requested = true;
@@ -779,6 +779,12 @@ fn build_matcher_tree(
                 }
             }
         };
+        i += 1;
+        if config.help_requested || config.version_requested {
+            // Ignore anything, even invalid expressions, after -help/-version
+            expecting_bracket = false;
+            break;
+        }
         if let Some(submatcher) = possible_submatcher {
             if invert_next_matcher {
                 top_level_matcher.new_and_condition(NotMatcher::new(submatcher));
@@ -787,7 +793,6 @@ fn build_matcher_tree(
                 top_level_matcher.new_and_condition(submatcher);
             }
         }
-        i += 1;
     }
     if expecting_bracket {
         return Err(From::from(
@@ -1488,5 +1493,29 @@ mod tests {
                 assert_eq!(eq, arg);
             }
         }
+    }
+
+    #[test]
+    fn build_top_level_matcher_option_logical() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["-maxdepth", "0", "-a", "-print"], &mut config)
+            .expect("logical operators like -a should work with options");
+        assert_eq!(config.max_depth, 0);
+    }
+
+    #[test]
+    fn build_top_level_matcher_help_invalid() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["(", "-help", "-a"], &mut config)
+            .expect("-help should stop parsing");
+        assert!(config.help_requested);
+    }
+
+    #[test]
+    fn build_top_level_matcher_version_invalid() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["(", "-version", "-o", ")", ")"], &mut config)
+            .expect("-version should stop parsing");
+        assert!(config.version_requested);
     }
 }
