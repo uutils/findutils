@@ -884,6 +884,18 @@ fn find_samefile() {
 
 #[test]
 #[serial(working_dir)]
+fn find_noleaf() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data/simple/subdir", "-noleaf"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test_data/simple/subdir"))
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
 fn find_ignore_readdir_race() {
     Command::cargo_bin("find")
         .expect("found binary")
@@ -904,17 +916,5 @@ fn find_ignore_readdir_race() {
         ])
         .assert()
         .success()
-        .stderr(predicate::str::is_empty());
-}
-
-#[test]
-#[serial(working_dir)]
-fn find_noleaf() {
-    Command::cargo_bin("find")
-        .expect("found binary")
-        .args(["test_data/simple/subdir", "-noleaf"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("test_data/simple/subdir"))
         .stderr(predicate::str::is_empty());
 }

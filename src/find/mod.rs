@@ -1230,6 +1230,17 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn test_noleaf() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-noleaf"], &deps);
+
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn test_daystart() {
         use crate::find::tests::FakeDependencies;
 
@@ -1260,15 +1271,6 @@ mod tests {
             ],
             &deps,
         );
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_noleaf() {
-        use crate::find::tests::FakeDependencies;
-
-        let deps = FakeDependencies::new();
-        let rc = find_main(&["find", "./test_data/simple/subdir", "-noleaf"], &deps);
 
         assert_eq!(rc, 0);
     }
