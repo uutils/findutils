@@ -37,7 +37,9 @@ pub fn get_file_system_type(
 ) -> Result<String, Box<dyn Error>> {
     use std::os::unix::fs::MetadataExt;
 
-    let metadata = match path.metadata() {
+    // use symlink_metadata (lstat under the hood) instead of metadata (stat) to make sure that it
+    // does not return an error when there is a (broken) symlink; this is aligned with GNU find.
+    let metadata = match path.symlink_metadata() {
         Ok(metadata) => metadata,
         Err(err) => Err(err)?,
     };
