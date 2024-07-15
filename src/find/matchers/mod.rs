@@ -712,6 +712,21 @@ fn build_matcher_tree(
 
                 return Ok((i, top_level_matcher.build()));
             }
+            "-follow" => {
+                // This option affects multiple matchers.
+                // 1. It will use noleaf by default. (but -noleaf No change of behavior)
+                // Unless -L or -H is specified:
+                // 2. changes the behaviour of the -newer predicate.
+                // 3. consideration applies to -newerXY, -anewer and -cnewer
+                // 4. -type predicate will always match against the type of
+                //    the file that a symbolic link points to rather than the link itself.
+                //
+                // 5. causes the -lname and -ilname predicates always to return false.
+                //    (unless they happen to match broken symbolic links)
+                config.follow = true;
+                config.no_leaf_dirs = true;
+                Some(TrueMatcher.into_box())
+            }
             "-daystart" => {
                 config.today_start = true;
                 Some(TrueMatcher.into_box())
@@ -1202,6 +1217,15 @@ mod tests {
         } else {
             panic!("parsing argument list with empty parentheses in an expression should fail");
         }
+    }
+
+    #[test]
+    fn build_top_level_matcher_follow_config() {
+        let mut config = Config::default();
+
+        build_top_level_matcher(&["-follow"], &mut config).unwrap();
+
+        assert!(config.follow);
     }
 
     #[test]
