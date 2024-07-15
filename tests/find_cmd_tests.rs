@@ -539,7 +539,7 @@ fn find_time() {
         args.iter().for_each(|arg| {
             Command::cargo_bin("find")
                 .expect("found binary")
-                .args([".", flag, arg])
+                .args(["./test_data/simple", flag, arg])
                 .assert()
                 .success()
                 .stderr(predicate::str::is_empty());
