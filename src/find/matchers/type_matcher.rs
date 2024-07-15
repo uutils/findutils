@@ -78,7 +78,7 @@ impl Matcher for TypeMatcher {
 
         let file_type = if self.follow && file_info.file_type().is_symlink() {
             let path = file_info.path();
-            let file_type = match path.symlink_metadata() {
+            match path.symlink_metadata() {
                 Ok(file_type) => file_type.file_type(),
                 Err(_) => {
                     writeln!(
@@ -90,8 +90,7 @@ impl Matcher for TypeMatcher {
 
                     return false;
                 }
-            };
-            file_type
+            }
         } else {
             file_info.file_type()
         };
