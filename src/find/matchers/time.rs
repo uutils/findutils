@@ -14,23 +14,39 @@ use super::{ComparableValue, Matcher, MatcherIO};
 
 const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 
+fn get_file_metadata(file_info: &DirEntry, follow_symlinks: bool) -> std::io::Result<fs::Metadata> {
+    let path = file_info.path();
+    if follow_symlinks && path.is_symlink() {
+        fs::symlink_metadata(path)
+    } else {
+        path.metadata()
+    }
+}
+
 /// This matcher checks whether a file is newer than the file the matcher is initialized with.
 pub struct NewerMatcher {
     given_modification_time: SystemTime,
+    follow: bool,
 }
 
 impl NewerMatcher {
-    pub fn new(path_to_file: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new(path_to_file: &str, follow: bool) -> Result<Self, Box<dyn Error>> {
         let metadata = fs::metadata(path_to_file)?;
         Ok(Self {
             given_modification_time: metadata.modified()?,
+            follow,
         })
     }
 
     /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
-        let this_time = file_info.metadata()?.modified()?;
+        let path = file_info.path();
+        let this_time = if self.follow && path.is_symlink() {
+            fs::symlink_metadata(path)?.modified()?
+        } else {
+            file_info.metadata()?.modified()?
+        };
         // duration_since returns an Ok duration if this_time <= given_modification_time
         // and returns an Err (with a duration) otherwise. So if this_time >
         // given_modification_time (in which case we want to return true) then
@@ -84,7 +100,7 @@ impl NewerOptionType {
         }
     }
 
-    fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
+    fn get_file_time(self, metadata: &Metadata) -> std::io::Result<SystemTime> {
         match self {
             NewerOptionType::Accessed => metadata.accessed(),
             NewerOptionType::Birthed => metadata.created(),
@@ -101,6 +117,7 @@ pub struct NewerOptionMatcher {
     x_option: NewerOptionType,
     y_option: NewerOptionType,
     given_modification_time: SystemTime,
+    follow: bool,
 }
 
 impl NewerOptionMatcher {
@@ -108,6 +125,7 @@ impl NewerOptionMatcher {
         x_option: String,
         y_option: String,
         path_to_file: &str,
+        follow: bool,
     ) -> Result<Self, Box<dyn Error>> {
         let metadata = fs::metadata(path_to_file)?;
         let x_option = NewerOptionType::from_str(x_option.as_str());
@@ -116,12 +134,14 @@ impl NewerOptionMatcher {
             x_option,
             y_option,
             given_modification_time: metadata.modified()?,
+            follow,
         })
     }
 
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
-        let x_option_time = self.x_option.get_file_time(file_info.metadata()?)?;
-        let y_option_time = self.y_option.get_file_time(file_info.metadata()?)?;
+        let metadata = get_file_metadata(file_info, self.follow)?;
+        let x_option_time = self.x_option.get_file_time(&metadata)?;
+        let y_option_time = self.y_option.get_file_time(&metadata)?;
 
         Ok(self
             .given_modification_time
@@ -159,18 +179,21 @@ impl Matcher for NewerOptionMatcher {
 pub struct NewerTimeMatcher {
     time: i64,
     newer_time_type: NewerOptionType,
+    follow: bool,
 }
 
 impl NewerTimeMatcher {
-    pub fn new(newer_time_type: NewerOptionType, time: i64) -> Self {
+    pub fn new(newer_time_type: NewerOptionType, time: i64, follow: bool) -> Self {
         Self {
             time,
             newer_time_type,
+            follow,
         }
     }
 
     fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
-        let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
+        let metadata = get_file_metadata(file_info, self.follow)?;
+        let this_time = self.newer_time_type.get_file_time(&metadata)?;
         let timestamp = this_time
             .duration_since(UNIX_EPOCH)
             .unwrap_or_else(|e| e.duration());
@@ -212,7 +235,7 @@ pub enum FileTimeType {
 }
 
 impl FileTimeType {
-    fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
+    fn get_file_time(self, metadata: &Metadata) -> std::io::Result<SystemTime> {
         match self {
             FileTimeType::Accessed => metadata.accessed(),
             FileTimeType::Created => metadata.created(),
@@ -226,6 +249,7 @@ impl FileTimeType {
 pub struct FileTimeMatcher {
     days: ComparableValue,
     file_time_type: FileTimeType,
+    follow: bool,
 }
 
 impl Matcher for FileTimeMatcher {
@@ -251,7 +275,8 @@ impl FileTimeMatcher {
     /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
     fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
-        let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
+        let metadata = get_file_metadata(file_info, self.follow)?;
+        let this_time = self.file_time_type.get_file_time(&metadata)?;
         let mut is_negative = false;
         // durations can't be negative. So duration_since returns a duration
         // wrapped in an error if now < this_time.
@@ -272,10 +297,11 @@ impl FileTimeMatcher {
         Ok(self.days.imatches(age_in_days))
     }
 
-    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> Self {
+    pub fn new(file_time_type: FileTimeType, days: ComparableValue, follow: bool) -> Self {
         Self {
             days,
             file_time_type,
+            follow,
         }
     }
 }
@@ -283,6 +309,7 @@ impl FileTimeMatcher {
 pub struct FileAgeRangeMatcher {
     minutes: ComparableValue,
     file_time_type: FileTimeType,
+    follow: bool,
 }
 
 impl Matcher for FileAgeRangeMatcher {
@@ -306,7 +333,8 @@ impl Matcher for FileAgeRangeMatcher {
 
 impl FileAgeRangeMatcher {
     fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
-        let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
+        let metadata = get_file_metadata(file_info, self.follow)?;
+        let this_time = self.file_time_type.get_file_time(&metadata)?;
         let mut is_negative = false;
         let age = match now.duration_since(this_time) {
             Ok(duration) => duration,
@@ -320,10 +348,11 @@ impl FileAgeRangeMatcher {
         Ok(self.minutes.imatches(age_in_minutes))
     }
 
-    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue) -> Self {
+    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue, follow: bool) -> Self {
         Self {
             minutes,
             file_time_type,
+            follow,
         }
     }
 }
@@ -354,9 +383,12 @@ mod tests {
 
         let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
 
-        let matcher_for_new =
-            NewerMatcher::new(&temp_dir.path().join(new_file_name).to_string_lossy()).unwrap();
-        let matcher_for_old = NewerMatcher::new(&old_file.path().to_string_lossy()).unwrap();
+        let matcher_for_new = NewerMatcher::new(
+            &temp_dir.path().join(new_file_name).to_string_lossy(),
+            false,
+        )
+        .unwrap();
+        let matcher_for_old = NewerMatcher::new(&old_file.path().to_string_lossy(), false).unwrap();
         let deps = FakeDependencies::new();
 
         assert!(
@@ -381,13 +413,13 @@ mod tests {
         let files_mtime = file.metadata().unwrap().modified().unwrap();
 
         let exactly_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1), false);
         let more_than_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), false);
         let less_than_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1), false);
         let zero_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0), false);
 
         // set "now" to 2 days after the file was modified.
         let mut deps = FakeDependencies::new();
@@ -537,7 +569,7 @@ mod tests {
         file_time_type: FileTimeType,
     ) {
         {
-            let matcher = FileTimeMatcher::new(file_time_type, ComparableValue::EqualTo(0));
+            let matcher = FileTimeMatcher::new(file_time_type, ComparableValue::EqualTo(0), false);
 
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time);
@@ -576,6 +608,7 @@ mod tests {
                     x_option.to_string(),
                     y_option.to_string(),
                     &old_file.path().to_string_lossy(),
+                    false,
                 );
 
                 assert!(
@@ -600,6 +633,7 @@ mod tests {
                         x_option.to_string(),
                         y_option.to_string(),
                         &old_file.path().to_string_lossy(),
+                        false,
                     );
                     assert!(
                         !matcher
@@ -624,7 +658,7 @@ mod tests {
             .try_into()
             .unwrap();
 
-        let created_matcher = NewerTimeMatcher::new(NewerOptionType::Birthed, time);
+        let created_matcher = NewerTimeMatcher::new(NewerOptionType::Birthed, time, false);
 
         thread::sleep(Duration::from_millis(100));
         let temp_dir = Builder::new()
@@ -643,7 +677,7 @@ mod tests {
         );
 
         // accessed time test
-        let accessed_matcher = NewerTimeMatcher::new(NewerOptionType::Accessed, time);
+        let accessed_matcher = NewerTimeMatcher::new(NewerOptionType::Accessed, time, false);
         let mut buffer = [0; 10];
         {
             let mut file = File::open(&foo_path).expect("open temp file");
@@ -655,7 +689,7 @@ mod tests {
         );
 
         // modified time test
-        let modified_matcher = NewerTimeMatcher::new(NewerOptionType::Modified, time);
+        let modified_matcher = NewerTimeMatcher::new(NewerOptionType::Modified, time, false);
         let buffer = [0; 10];
         let mut file = OpenOptions::new()
             .read(true)
@@ -669,7 +703,7 @@ mod tests {
             "file modified time should after 'time'"
         );
 
-        let inode_changed_matcher = NewerTimeMatcher::new(NewerOptionType::Changed, time);
+        let inode_changed_matcher = NewerTimeMatcher::new(NewerOptionType::Changed, time, false);
         // Steps to change inode:
         // 1. Copy and rename the file
         // 2. Delete the old file
@@ -733,7 +767,8 @@ mod tests {
         ]
         .iter()
         .for_each(|time_type| {
-            let more_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1));
+            let more_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1), false);
             assert!(
                 !more_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
                 "{}",
@@ -761,7 +796,8 @@ mod tests {
         ]
         .iter()
         .for_each(|time_type| {
-            let less_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1));
+            let less_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1), false);
             assert!(
                 less_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
                 "{}",
@@ -779,7 +815,7 @@ mod tests {
         // catch file error
         let _ = fs::remove_file(&*new_file.path().to_string_lossy());
         let matcher =
-            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), false);
         assert!(
             !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
             "The correct situation is that the file reading here cannot be successful."

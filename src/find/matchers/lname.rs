@@ -37,17 +37,23 @@ fn read_link_target(file_info: &DirEntry) -> Option<PathBuf> {
 /// pattern. See `glob::Pattern` for details on the exact syntax.
 pub struct LinkNameMatcher {
     pattern: Pattern,
+    follow: bool,
 }
 
 impl LinkNameMatcher {
-    pub fn new(pattern_string: &str, caseless: bool) -> LinkNameMatcher {
+    pub fn new(pattern_string: &str, caseless: bool, follow: bool) -> LinkNameMatcher {
         let pattern = Pattern::new(pattern_string, caseless);
-        Self { pattern }
+        Self { pattern, follow }
     }
 }
 
 impl Matcher for LinkNameMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+        // -follow: causes the -lname and -ilname predicates always to return false.
+        if self.follow {
+            return false;
+        }
+
         if let Some(target) = read_link_target(file_info) {
             self.pattern.matches(&target.to_string_lossy())
         } else {
@@ -92,7 +98,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = LinkNameMatcher::new("ab?bc", false);
+        let matcher = LinkNameMatcher::new("ab?bc", false, false);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
@@ -102,7 +108,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = LinkNameMatcher::new("AbB?c", true);
+        let matcher = LinkNameMatcher::new("AbB?c", true, false);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
