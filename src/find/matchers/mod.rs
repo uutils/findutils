@@ -421,7 +421,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(TypeMatcher::new(args[i])?.into_box())
+                Some(TypeMatcher::new(args[i], config.follow)?.into_box())
             }
             "-fstype" => {
                 if i >= args.len() - 1 {
@@ -691,6 +691,19 @@ fn build_matcher_tree(
                 }
 
                 return Ok((i, top_level_matcher.build()));
+            }
+            "-follow" => {
+                // This option affects multiple matchers.
+                // 1. It will use noleaf by default. (but -noleaf No change of behavior)
+                // Unless -L or -H is specified:
+                // 2. changes the behaviour of the -newer predicate.
+                // 3. consideration applies to -newerXY, -anewer and -cnewer
+                // 4. -type predicate will always match against the type of
+                //    the file that a symbolic link points to rather than the link itself.
+                // 5. causes the -lname and -ilname predicates always to return false.
+                config.follow = true;
+                config.no_leaf_dirs = true;
+                Some(TrueMatcher.into_box())
             }
             "-noleaf" => {
                 // No change of behavior

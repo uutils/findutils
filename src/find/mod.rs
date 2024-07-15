@@ -22,6 +22,7 @@ pub struct Config {
     help_requested: bool,
     version_requested: bool,
     no_leaf_dirs: bool,
+    follow: bool,
 }
 
 impl Default for Config {
@@ -38,6 +39,7 @@ impl Default for Config {
             // and this configuration field will exist as
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
+            follow: false,
         }
     }
 }

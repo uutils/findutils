@@ -4,8 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::error::Error;
 use std::fs::FileType;
+use std::io::Write;
+use std::{error::Error, io::stderr};
 use walkdir::DirEntry;
 
 #[cfg(unix)]
@@ -16,10 +17,12 @@ use super::{Matcher, MatcherIO};
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
     file_type_fn: fn(&FileType) -> bool,
+    follow: bool,
+    follow_ignore_l_option: bool,
 }
 
 impl TypeMatcher {
-    pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new(type_string: &str, follow: bool) -> Result<Self, Box<dyn Error>> {
         #[cfg(unix)]
         let function = match type_string {
             "f" => FileType::is_file,
@@ -55,13 +58,45 @@ impl TypeMatcher {
         };
         Ok(Self {
             file_type_fn: function,
+            follow,
+            // -type l will not return any results because -follow will follow symbolic links
+            follow_ignore_l_option: type_string == "l" && follow,
         })
     }
 }
 
 impl Matcher for TypeMatcher {
     fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        (self.file_type_fn)(&file_info.file_type())
+        // Processing of -follow predicate:
+        // 1. -type f searches not only for regular files,
+        //    but also for files pointed to by symbolic links.
+        // 2. -type l will not return any results because -follow will follow symbolic links,
+        //    so the find command cannot find pure symbolic links.
+        if self.follow_ignore_l_option {
+            return false;
+        }
+
+        let file_type = if self.follow && file_info.file_type().is_symlink() {
+            let path = file_info.path();
+            let file_type = match path.symlink_metadata() {
+                Ok(file_type) => file_type.file_type(),
+                Err(_) => {
+                    writeln!(
+                        &mut stderr(),
+                        "Error getting file type for {}",
+                        file_info.path().to_string_lossy()
+                    )
+                    .unwrap();
+
+                    return false;
+                }
+            };
+            file_type
+        } else {
+            file_info.file_type()
+        };
+
+        (self.file_type_fn)(&file_type)
     }
 }
 
@@ -84,7 +119,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
         let deps = FakeDependencies::new();
 
-        let matcher = TypeMatcher::new("f").unwrap();
+        let matcher = TypeMatcher::new("f", false).unwrap();
         assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&file, &mut deps.new_matcher_io()));
     }
@@ -95,7 +130,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "simple");
         let deps = FakeDependencies::new();
 
-        let matcher = TypeMatcher::new("d").unwrap();
+        let matcher = TypeMatcher::new("d", false).unwrap();
         assert!(matcher.matches(&dir, &mut deps.new_matcher_io()));
         assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
     }
@@ -143,7 +178,7 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "links");
         let deps = FakeDependencies::new();
 
-        let matcher = TypeMatcher::new("l").unwrap();
+        let matcher = TypeMatcher::new("l", false).unwrap();
         assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
         assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
@@ -158,7 +193,7 @@ mod tests {
         let deps = FakeDependencies::new();
 
         for typ in &["b", "c", "p", "s"] {
-            let matcher = TypeMatcher::new(typ).unwrap();
+            let matcher = TypeMatcher::new(typ, false).unwrap();
             assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
             assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
         }
@@ -166,7 +201,7 @@ mod tests {
 
     #[test]
     fn cant_create_with_invalid_pattern() {
-        let result = TypeMatcher::new("xxx");
+        let result = TypeMatcher::new("xxx", false);
         assert!(result.is_err());
     }
 }
