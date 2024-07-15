@@ -16,11 +16,17 @@ const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 
 fn get_file_metadata(file_info: &DirEntry, follow_symlinks: bool) -> std::io::Result<fs::Metadata> {
     let path = file_info.path();
-    if follow_symlinks && path.is_symlink() {
-        fs::symlink_metadata(path)
+    
+    let metadata = if follow_symlinks && path.is_symlink() {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            // When the link file is damaged, return the link file itself.
+            Err(_) => return Ok(file_info.metadata()?),
+        }
     } else {
-        path.metadata()
-    }
+        file_info.metadata()?
+    };
+    Ok(metadata)
 }
 
 /// This matcher checks whether a file is newer than the file the matcher is initialized with.
