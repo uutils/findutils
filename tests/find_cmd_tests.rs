@@ -545,7 +545,7 @@ fn find_time() {
         args.iter().for_each(|arg| {
             Command::cargo_bin("find")
                 .expect("found binary")
-                .args([".", flag, arg])
+                .args(["./test_data/simple", flag, arg])
                 .assert()
                 .success()
                 .stderr(predicate::str::is_empty());
@@ -944,5 +944,17 @@ fn find_daystart() {
         ])
         .assert()
         .success()
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_follow() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data/links/link-f", "-follow"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test_data/links/link-f"))
         .stderr(predicate::str::is_empty());
 }

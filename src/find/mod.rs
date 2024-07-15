@@ -23,6 +23,7 @@ pub struct Config {
     version_requested: bool,
     today_start: bool,
     no_leaf_dirs: bool,
+    follow: bool,
 }
 
 impl Default for Config {
@@ -40,6 +41,7 @@ impl Default for Config {
             // and this configuration field will exist as
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
+            follow: false,
         }
     }
 }
@@ -147,7 +149,8 @@ fn process_dir(
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
         .min_depth(config.min_depth)
-        .same_file_system(config.same_file_system);
+        .same_file_system(config.same_file_system)
+        .follow_links(config.follow);
     if config.sorted_output {
         walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }
@@ -921,6 +924,20 @@ mod tests {
                 );
 
                 assert_eq!(rc, 0);
+
+                let arg = &format!("-follow -newer{x}{y}").to_string();
+                let deps = FakeDependencies::new();
+                let rc = find_main(
+                    &[
+                        "find",
+                        "./test_data/simple/subdir",
+                        arg,
+                        "./test_data/simple/subdir/ABBBC",
+                    ],
+                    &deps,
+                );
+
+                assert_eq!(rc, 0);
             }
         }
     }
@@ -1298,6 +1315,13 @@ mod tests {
             &deps,
         );
 
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn test_follow() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple", "-follow"], &deps);
         assert_eq!(rc, 0);
     }
 }
