@@ -1217,7 +1217,7 @@ mod tests {
 
         build_top_level_matcher(&["-follow"], &mut config).unwrap();
 
-        assert(config.follow);
+        assert!(config.follow);
     }
 
     #[test]
