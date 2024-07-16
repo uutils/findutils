@@ -77,18 +77,19 @@ impl Matcher for TypeMatcher {
         }
 
         let file_type = if self.follow && file_info.file_type().is_symlink() {
-            println!("Followed symbolic link {}", file_info.path().display());
+            // According to the documentation, resolving a file with
+            // `file_info.path()` will always return the underlying file.
             let path = file_info.path();
-            match path.symlink_metadata() {
-                Ok(file_type) => file_type.file_type(),
-                Err(_) => {
+            match path.metadata() {
+                Ok(metadata) => metadata.file_type(),
+                Err(e) => {
                     writeln!(
                         &mut stderr(),
-                        "Error getting file type for {}",
-                        file_info.path().to_string_lossy()
+                        "Error getting metadata for {}: {}",
+                        path.display(),
+                        e
                     )
                     .unwrap();
-
                     return false;
                 }
             }
@@ -196,6 +197,10 @@ mod tests {
                 assert!(matcher.matches(&link_d, &mut deps.new_matcher_io()));
             }
         });
+
+        // Tests whether linked files are recognized in the -follow case.
+        let matcher = TypeMatcher::new("f", true).unwrap();
+        assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
 
     #[cfg(unix)]
