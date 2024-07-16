@@ -1208,10 +1208,12 @@ mod tests {
     fn test_fs_matcher() {
         use crate::find::tests::FakeDependencies;
         use matchers::fs::get_file_system_type;
+        use std::cell::RefCell;
         use std::path::Path;
 
         let path = Path::new("./test_data/simple/subdir");
-        let target_fs_type = get_file_system_type(path).unwrap();
+        let empty_cache = RefCell::new(None);
+        let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
 
         // should match fs type
         let deps = FakeDependencies::new();
