@@ -189,8 +189,8 @@ mod tests {
 
             if *follow {
                 // Enabling the -follow option will make this matcher always return false for type l
-                assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
-                assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
+                assert!(!matcher.matches(&link_f, &mut deps.new_matcher_io()));
+                assert!(!matcher.matches(&link_d, &mut deps.new_matcher_io()));
             } else {
                 assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
                 assert!(matcher.matches(&link_d, &mut deps.new_matcher_io()));
