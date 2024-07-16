@@ -920,6 +920,20 @@ mod tests {
                 );
 
                 assert_eq!(rc, 0);
+
+                let arg = &format!("-follow -newer{x}{y}").to_string();
+                let deps = FakeDependencies::new();
+                let rc = find_main(
+                    &[
+                        "find",
+                        "./test_data/simple/subdir",
+                        arg,
+                        "./test_data/simple/subdir/ABBBC",
+                    ],
+                    &deps,
+                );
+
+                assert_eq!(rc, 0);
             }
         }
     }

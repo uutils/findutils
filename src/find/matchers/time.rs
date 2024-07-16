@@ -377,7 +377,6 @@ mod tests {
     use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::{ErrorKind, Read};
-    use std::os::unix::fs::symlink;
     use std::thread;
     use std::time::Duration;
     use tempfile::Builder;
@@ -912,6 +911,7 @@ mod tests {
     fn test_newer_matcher_with_follow_option() {
         #[cfg(unix)]
         {
+            use std::os::unix::fs::symlink;
             if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,
@@ -927,6 +927,8 @@ mod tests {
         };
         #[cfg(windows)]
         let _ = {
+            use std::os::windows::fs::symlink_dir;
+            use std::os::windows::fs::symlink_file;
             if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,
