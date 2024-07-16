@@ -1212,6 +1212,15 @@ mod tests {
     }
 
     #[test]
+    fn build_top_level_matcher_follow_config() {
+        let mut config = Config::default();
+
+        build_top_level_matcher(&["-follow"], &mut config).unwrap();
+
+        assert_eq!(config.follow, true);
+    }
+
+    #[test]
     fn comparable_value_matches() {
         assert!(
             !ComparableValue::LessThan(0).matches(0),

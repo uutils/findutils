@@ -112,4 +112,15 @@ mod tests {
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
+
+    #[test]
+    fn matches_with_follow_option() {
+        create_file_link();
+
+        let link_f = get_dir_entry_for("test_data/links", "link-f");
+        let matcher = LinkNameMatcher::new("ab?bc", false, true);
+        let deps = FakeDependencies::new();
+        // This matcher always returns false when the follow option is enabled.
+        assert!(!matcher.matches(&link_f, &mut deps.new_matcher_io()));
+    }
 }

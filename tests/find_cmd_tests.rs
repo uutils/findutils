@@ -908,3 +908,15 @@ fn find_noleaf() {
         .stdout(predicate::str::contains("test_data/simple/subdir"))
         .stderr(predicate::str::is_empty());
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_follow() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data/links/link-f", "-follow"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test_data/links/link-f"))
+        .stderr(predicate::str::is_empty());
+}

@@ -1262,4 +1262,11 @@ mod tests {
             fix_up_slashes("./test_data/depth\n")
         );
     }
+
+    #[test]
+    fn test_follow() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple", "-follow"], &deps);
+        assert_eq!(rc, 0);
+    }
 }
