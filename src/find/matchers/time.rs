@@ -376,7 +376,8 @@ impl FileAgeRangeMatcher {
 mod tests {
     use std::fs;
     use std::fs::{File, OpenOptions};
-    use std::io::Read;
+    use std::io::{ErrorKind, Read};
+    use std::os::unix::fs::symlink;
     use std::thread;
     use std::time::Duration;
     use tempfile::Builder;
@@ -857,5 +858,97 @@ mod tests {
                 "The correct situation is that the file reading here cannot be successful."
             );
         });
+    }
+
+    #[test]
+    fn test_get_file_metadata_with_follow_option() {
+        #[cfg(unix)]
+        {
+            if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {e:?}"
+                );
+            }
+            if let Err(e) = symlink("subdir", "test_data/links/link-d") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {e:?}"
+                );
+            }
+        };
+        #[cfg(windows)]
+        let _ = {
+            if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {:?}",
+                    e
+                );
+            }
+            if let Err(e) = symlink_dir("subdir", "test_data/links/link-d") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {:?}",
+                    e
+                );
+            }
+        };
+
+        let link_f = get_dir_entry_for("test_data/links", "link-f");
+        let file = get_dir_entry_for("test_data/links", "abbbc");
+
+        let metadata = get_file_metadata(&link_f, false).unwrap();
+        assert!(metadata.is_symlink());
+        let metadata = get_file_metadata(&link_f, true).unwrap();
+        assert!(!metadata.is_symlink());
+        let metadata = get_file_metadata(&file, false).unwrap();
+        assert!(!metadata.is_symlink());
+        let metadata = get_file_metadata(&file, true).unwrap();
+        assert!(!metadata.is_symlink());
+    }
+
+    #[test]
+    fn test_newer_matcher_with_follow_option() {
+        #[cfg(unix)]
+        {
+            if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {e:?}"
+                );
+            }
+            if let Err(e) = symlink("subdir", "test_data/links/link-d") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {e:?}"
+                );
+            }
+        };
+        #[cfg(windows)]
+        let _ = {
+            if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {:?}",
+                    e
+                );
+            }
+            if let Err(e) = symlink_dir("subdir", "test_data/links/link-d") {
+                assert!(
+                    e.kind() == ErrorKind::AlreadyExists,
+                    "Failed to create sym link: {:?}",
+                    e
+                );
+            }
+        };
+
+        let link_f = get_dir_entry_for("test_data/links", "link-f");
+        let file = get_dir_entry_for("test_data/links", "abbbc");
+
+        let matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1), true);
+        assert!(!matcher.matches(&link_f, &mut FakeDependencies::new().new_matcher_io()));
+        assert!(!matcher.matches(&file, &mut FakeDependencies::new().new_matcher_io()));
     }
 }
