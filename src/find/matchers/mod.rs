@@ -377,10 +377,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(
-                    LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i"), config.follow)
-                        .into_box(),
-                )
+                Some(LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-name" | "-iname" => {
                 if i >= args.len() - 1 {
@@ -703,7 +700,12 @@ fn build_matcher_tree(
                 // 3. consideration applies to -newerXY, -anewer and -cnewer
                 // 4. -type predicate will always match against the type of
                 //    the file that a symbolic link points to rather than the link itself.
+                //
                 // 5. causes the -lname and -ilname predicates always to return false.
+                // links: https://www.gnu.org/software/findutils/manual/html_node/find_html/Symbolic-Links.html
+                // The -lname and -iname parameters differ between the GNU version and the GNU documentation.
+                // The current implementation follows the actual behavior of the GNU version.
+                // which means that the specified directories are still traversed.
                 config.follow = true;
                 config.no_leaf_dirs = true;
                 Some(TrueMatcher.into_box())
