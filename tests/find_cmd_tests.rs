@@ -798,10 +798,12 @@ fn find_age_range() {
 #[serial(working_dir)]
 fn find_fs() {
     use findutils::find::matchers::fs::get_file_system_type;
+    use std::cell::RefCell;
     use std::path::Path;
 
     let path = Path::new("./test_data/simple/subdir");
-    let target_fs_type = get_file_system_type(path).unwrap();
+    let empty_cache = RefCell::new(None);
+    let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
 
     // match fs type
     Command::cargo_bin("find")
@@ -840,6 +842,19 @@ fn find_fs() {
         .assert()
         .success()
         .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    let path = Path::new("./test_data/links");
+    let empty_cache = RefCell::new(None);
+    let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
+
+    // working with broken links
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/links", "-fstype", &target_fs_type])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./test_data/links/link-missing"))
         .stderr(predicate::str::is_empty());
 }
 

@@ -1208,10 +1208,12 @@ mod tests {
     fn test_fs_matcher() {
         use crate::find::tests::FakeDependencies;
         use matchers::fs::get_file_system_type;
+        use std::cell::RefCell;
         use std::path::Path;
 
         let path = Path::new("./test_data/simple/subdir");
-        let target_fs_type = get_file_system_type(path).unwrap();
+        let empty_cache = RefCell::new(None);
+        let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
 
         // should match fs type
         let deps = FakeDependencies::new();
@@ -1237,5 +1239,27 @@ mod tests {
         let rc = find_main(&["find", "./test_data/simple/subdir", "-noleaf"], &deps);
 
         assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn find_maxdepth_and() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-maxdepth",
+                "0",
+                "-a",
+                "-print",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/depth\n")
+        );
     }
 }
