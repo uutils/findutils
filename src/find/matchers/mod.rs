@@ -25,7 +25,7 @@ mod samefile;
 mod size;
 #[cfg(unix)]
 mod stat;
-mod time;
+pub mod time;
 mod type_matcher;
 mod user;
 
@@ -448,7 +448,7 @@ fn build_matcher_tree(
                 }
                 let file_time_type = match args[i] {
                     "-atime" => FileTimeType::Accessed,
-                    "-ctime" => FileTimeType::Created,
+                    "-ctime" => FileTimeType::Changed,
                     "-mtime" => FileTimeType::Modified,
                     // This shouldn't be possible. We've already checked the value
                     // is one of those three values.
@@ -464,7 +464,7 @@ fn build_matcher_tree(
                 }
                 let file_time_type = match args[i] {
                     "-amin" => FileTimeType::Accessed,
-                    "-cmin" => FileTimeType::Created,
+                    "-cmin" => FileTimeType::Changed,
                     "-mmin" => FileTimeType::Modified,
                     _ => unreachable!("Encountered unexpected value {}", args[i]),
                 };
