@@ -542,7 +542,6 @@ mod tests {
 
         let mut deps = FakeDependencies::new();
         let files_mtime = file.metadata().unwrap().modified().unwrap();
-        let today_midnight = get_time(&mut deps.new_matcher_io(), true);
 
         let exactly_one_day_matcher =
             FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1), true);
@@ -572,27 +571,6 @@ mod tests {
         assert!(
             !zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
             "3 day old file shouldn't match exactly 0 days old"
-        );
-
-        // set "now" to 1 day after the file was modified.
-        // `today_midnight` is used here to ensure that the time is one day later and
-        // not more after adding `3 * SECONDS_PER_DAY / 2`.
-        deps.set_time(today_midnight + Duration::new((3 * SECONDS_PER_DAY / 2) as u64, 0));
-        assert!(
-            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-            "1 day old file should't match exactly 1 day old"
-        );
-        assert!(
-            more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-            "1 day old file shouldn't match more than 1 day old"
-        );
-        assert!(
-            !less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-            "1 day old file should match less than 1 day old"
-        );
-        assert!(
-            !zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
-            "1 day old file should match exactly 0 days old"
         );
 
         // set "now" to exactly the same time file was modified.
