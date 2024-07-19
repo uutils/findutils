@@ -4,6 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+use std::{fs::File, io::Write};
+
 use walkdir::DirEntry;
 
 use super::{Matcher, MatcherIO};
@@ -25,25 +27,44 @@ impl std::fmt::Display for PrintDelimiter {
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer {
     delimiter: PrintDelimiter,
+    output_file: Option<File>,
 }
 
 impl Printer {
-    pub fn new(delimiter: PrintDelimiter) -> Self {
-        Self { delimiter }
+    pub fn new(delimiter: PrintDelimiter, output_file: Option<File>) -> Self {
+        Self {
+            delimiter,
+            output_file,
+        }
     }
 }
 
 impl Matcher for Printer {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        let mut out = matcher_io.deps.get_output().borrow_mut();
-        write!(
-            out,
-            "{}{}",
-            file_info.path().to_string_lossy(),
-            self.delimiter
-        )
-        .unwrap();
-        out.flush().unwrap();
+        match &self.output_file {
+            Some(output_file) => {
+                let mut out = output_file;
+                write!(
+                    out,
+                    "{}{}",
+                    file_info.path().to_string_lossy(),
+                    self.delimiter
+                )
+                .unwrap();
+                out.flush().unwrap();
+            }
+            None => {
+                let mut out = matcher_io.deps.get_output().borrow_mut();
+                write!(
+                    out,
+                    "{}{}",
+                    file_info.path().to_string_lossy(),
+                    self.delimiter
+                )
+                .unwrap();
+                out.flush().unwrap();
+            }
+        }
         true
     }
 
@@ -64,7 +85,7 @@ mod tests {
     fn prints_newline() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
 
-        let matcher = Printer::new(PrintDelimiter::Newline);
+        let matcher = Printer::new(PrintDelimiter::Newline, None);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         assert_eq!(
@@ -77,7 +98,7 @@ mod tests {
     fn prints_null() {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
 
-        let matcher = Printer::new(PrintDelimiter::Null);
+        let matcher = Printer::new(PrintDelimiter::Null, None);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
         assert_eq!(
