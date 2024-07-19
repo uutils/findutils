@@ -340,6 +340,23 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
+/// Creates a file if it doesn't exist.
+/// If it does exist, it will be overwritten.
+fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                File::create(path)?
+            } else {
+                return Err(From::from(err));
+            }
+        }
+    };
+
+    Ok(file)
+}
+
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -377,18 +394,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                // If the file does not exist, it is created.
-                let file = match File::open(args[i]) {
-                    Ok(file) => file,
-                    Err(err) => {
-                        if err.kind() == std::io::ErrorKind::NotFound {
-                            File::create(args[i])?
-                        } else {
-                            return Err(From::from(err));
-                        }
-                    }
-                };
-
+                let file = get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
