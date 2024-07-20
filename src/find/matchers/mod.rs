@@ -1538,4 +1538,23 @@ mod tests {
             .expect("-version should stop parsing");
         assert!(config.version_requested);
     }
+
+    #[test]
+    fn get_or_create_file_test() {
+        use std::fs;
+
+        // remove file if hard link file exist.
+        // But you can't delete a file that doesn't exist,
+        // so ignore the error returned here.
+        let _ = fs::remove_file("test_data/get_or_create_file_test");
+
+        // test create file
+        let file = get_or_create_file("test_data/get_or_create_file_test");
+        assert!(file.is_ok());
+
+        let file = get_or_create_file("test_data/get_or_create_file_test");
+        assert!(file.is_ok());
+
+        let _ = fs::remove_file("test_data/get_or_create_file_test");
+    }
 }
