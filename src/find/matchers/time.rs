@@ -7,7 +7,7 @@
 use std::error::Error;
 use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use walkdir::DirEntry;
 
 #[cfg(unix)]
@@ -16,6 +16,18 @@ use std::os::unix::fs::MetadataExt;
 use super::{ComparableValue, Matcher, MatcherIO};
 
 const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
+
+fn get_time(matcher_io: &mut MatcherIO, today_start: bool) -> SystemTime {
+    if today_start {
+        // the time at 00:00:00 of today
+        let duration = matcher_io.now().duration_since(UNIX_EPOCH).unwrap();
+        let seconds = duration.as_secs();
+        let midnight_seconds = seconds - (seconds % 86400);
+        UNIX_EPOCH + Duration::from_secs(midnight_seconds)
+    } else {
+        matcher_io.now()
+    }
+}
 
 /// This matcher checks whether a file is newer than the file the matcher is initialized with.
 pub struct NewerMatcher {
@@ -258,11 +270,13 @@ impl FileTimeType {
 pub struct FileTimeMatcher {
     days: ComparableValue,
     file_time_type: FileTimeType,
+    today_start: bool,
 }
 
 impl Matcher for FileTimeMatcher {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        match self.matches_impl(file_info, matcher_io.now()) {
+        let start_time = get_time(matcher_io, self.today_start);
+        match self.matches_impl(file_info, start_time) {
             Err(e) => {
                 writeln!(
                     &mut stderr(),
@@ -282,12 +296,16 @@ impl Matcher for FileTimeMatcher {
 impl FileTimeMatcher {
     /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
-    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(
+        &self,
+        file_info: &DirEntry,
+        start_time: SystemTime,
+    ) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
         let mut is_negative = false;
         // durations can't be negative. So duration_since returns a duration
         // wrapped in an error if now < this_time.
-        let age = match now.duration_since(this_time) {
+        let age = match start_time.duration_since(this_time) {
             Ok(duration) => duration,
             Err(e) => {
                 is_negative = true;
@@ -295,19 +313,29 @@ impl FileTimeMatcher {
             }
         };
         let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+
         // rust division truncates towards zero (see
         // https://github.com/rust-lang/rust/blob/master/src/libcore/ops.rs#L580 )
         // so a simple age_in_seconds / SECONDS_PER_DAY gives the wrong answer
         // for negative ages: a file whose age is 1 second in the future needs to
         // count as -1 day old, not 0.
-        let age_in_days = age_in_seconds / SECONDS_PER_DAY + if is_negative { -1 } else { 0 };
+        // If today_start is true, we should count it as 0 days old.
+        // because today is 00:00:00, so we need to subtract 1 day.
+        let negative_offset = if is_negative && !self.today_start {
+            -1
+        } else {
+            0
+        };
+
+        let age_in_days = age_in_seconds / SECONDS_PER_DAY + negative_offset;
         Ok(self.days.imatches(age_in_days))
     }
 
-    pub fn new(file_time_type: FileTimeType, days: ComparableValue) -> Self {
+    pub fn new(file_time_type: FileTimeType, days: ComparableValue, today_start: bool) -> Self {
         Self {
             days,
             file_time_type,
+            today_start,
         }
     }
 }
@@ -315,11 +343,13 @@ impl FileTimeMatcher {
 pub struct FileAgeRangeMatcher {
     minutes: ComparableValue,
     file_time_type: FileTimeType,
+    today_start: bool,
 }
 
 impl Matcher for FileAgeRangeMatcher {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        match self.matches_impl(file_info, matcher_io.now()) {
+        let start_time = get_time(matcher_io, self.today_start);
+        match self.matches_impl(file_info, start_time) {
             Err(e) => {
                 writeln!(
                     &mut stderr(),
@@ -337,10 +367,14 @@ impl Matcher for FileAgeRangeMatcher {
 }
 
 impl FileAgeRangeMatcher {
-    fn matches_impl(&self, file_info: &DirEntry, now: SystemTime) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(
+        &self,
+        file_info: &DirEntry,
+        start_time: SystemTime,
+    ) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
         let mut is_negative = false;
-        let age = match now.duration_since(this_time) {
+        let age = match start_time.duration_since(this_time) {
             Ok(duration) => duration,
             Err(e) => {
                 is_negative = true;
@@ -352,10 +386,11 @@ impl FileAgeRangeMatcher {
         Ok(self.minutes.imatches(age_in_minutes))
     }
 
-    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue) -> Self {
+    pub fn new(file_time_type: FileTimeType, minutes: ComparableValue, today_start: bool) -> Self {
         Self {
             minutes,
             file_time_type,
+            today_start,
         }
     }
 }
@@ -413,13 +448,13 @@ mod tests {
         let files_mtime = file.metadata().unwrap().modified().unwrap();
 
         let exactly_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1), false);
         let more_than_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), false);
         let less_than_one_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1), false);
         let zero_day_matcher =
-            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0));
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0), false);
 
         // set "now" to 2 days after the file was modified.
         let mut deps = FakeDependencies::new();
@@ -501,6 +536,84 @@ mod tests {
     }
 
     #[test]
+    fn file_time_matcher_with_daystart() {
+        // this file should already exist
+        let file = get_dir_entry_for("test_data", "simple");
+
+        let mut deps = FakeDependencies::new();
+        let files_mtime = file.metadata().unwrap().modified().unwrap();
+
+        let exactly_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(1), true);
+        let more_than_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), true);
+        let less_than_one_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::LessThan(1), true);
+        let zero_day_matcher =
+            FileTimeMatcher::new(FileTimeType::Modified, ComparableValue::EqualTo(0), true);
+
+        // set "now" to 3 days after the file was modified.
+        // Because daystart affects the time when the calculation starts,
+        // in order to avoid complicated assertions, it is set to 3 days later.
+        deps.set_time(files_mtime + Duration::new(3 * SECONDS_PER_DAY as u64, 0));
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "3 day old file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "3 day old file should match more than 1 day old"
+        );
+        assert!(
+            !less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "3 day old file shouldn't match less than 1 day old"
+        );
+        assert!(
+            !zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "3 day old file shouldn't match exactly 0 days old"
+        );
+
+        // set "now" to exactly the same time file was modified.
+        deps.set_time(files_mtime);
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file shouldn't match more than 1 day old"
+        );
+        assert!(
+            less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file should match less than 1 day old"
+        );
+        assert!(
+            zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "0 day old file should match exactly 0 days old"
+        );
+
+        // set "now" to a second before the file was modified (e.g. the file was
+        // modified after find started running
+        deps.set_time(files_mtime - Duration::new(1_u64, 0));
+        assert!(
+            !exactly_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn't match exactly 1 day old"
+        );
+        assert!(
+            !more_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file shouldn't match more than 1 day old"
+        );
+        assert!(
+            less_than_one_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file should match less than 1 day old"
+        );
+        assert!(
+            zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
+            "future-modified file should match exactly 0 days old"
+        );
+    }
+
+    #[test]
     fn file_time_matcher_modified_changed_accessed() {
         let temp_dir = Builder::new()
             .prefix("file_time_matcher_modified_changed_accessed")
@@ -569,7 +682,7 @@ mod tests {
         file_time_type: FileTimeType,
     ) {
         {
-            let matcher = FileTimeMatcher::new(file_time_type, ComparableValue::EqualTo(0));
+            let matcher = FileTimeMatcher::new(file_time_type, ComparableValue::EqualTo(0), false);
 
             let mut deps = FakeDependencies::new();
             deps.set_time(file_time);
@@ -771,7 +884,8 @@ mod tests {
         ]
         .iter()
         .for_each(|time_type| {
-            let more_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1));
+            let more_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1), true);
             assert!(
                 !more_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
                 "{}",
@@ -800,7 +914,8 @@ mod tests {
         ]
         .iter()
         .for_each(|time_type| {
-            let less_matcher = FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1));
+            let less_matcher =
+                FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1), true);
             assert!(
                 less_matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
                 "{}",
@@ -818,7 +933,7 @@ mod tests {
         // catch file error
         let _ = fs::remove_file(&*new_file.path().to_string_lossy());
         let matcher =
-            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1));
+            FileAgeRangeMatcher::new(FileTimeType::Modified, ComparableValue::MoreThan(1), true);
         assert!(
             !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
             "The correct situation is that the file reading here cannot be successful."
