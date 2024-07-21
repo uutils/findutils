@@ -21,6 +21,7 @@ pub struct Config {
     sorted_output: bool,
     help_requested: bool,
     version_requested: bool,
+    today_start: bool,
     no_leaf_dirs: bool,
 }
 
@@ -34,6 +35,7 @@ impl Default for Config {
             sorted_output: false,
             help_requested: false,
             version_requested: false,
+            today_start: false,
             // Directory information and traversal are done by walkdir,
             // and this configuration field will exist as
             // a compatibility item for GNU findutils.
@@ -1261,5 +1263,41 @@ mod tests {
             deps.get_output_as_string(),
             fix_up_slashes("./test_data/depth\n")
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_daystart() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-daystart",
+                "-mtime",
+                "0",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+
+        // twice -daystart should be matched
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-daystart",
+                "-daystart",
+                "-mtime",
+                "1",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
     }
 }

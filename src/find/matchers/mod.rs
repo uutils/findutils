@@ -456,7 +456,7 @@ fn build_matcher_tree(
                 };
                 let days = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(FileTimeMatcher::new(file_time_type, days).into_box())
+                Some(FileTimeMatcher::new(file_time_type, days, config.today_start).into_box())
             }
             "-amin" | "-cmin" | "-mmin" => {
                 if i >= args.len() - 1 {
@@ -470,7 +470,10 @@ fn build_matcher_tree(
                 };
                 let minutes = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(FileAgeRangeMatcher::new(file_time_type, minutes).into_box())
+                Some(
+                    FileAgeRangeMatcher::new(file_time_type, minutes, config.today_start)
+                        .into_box(),
+                )
             }
             "-size" => {
                 if i >= args.len() - 1 {
@@ -691,6 +694,10 @@ fn build_matcher_tree(
                 }
 
                 return Ok((i, top_level_matcher.build()));
+            }
+            "-daystart" => {
+                config.today_start = true;
+                None
             }
             "-noleaf" => {
                 // No change of behavior

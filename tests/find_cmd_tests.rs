@@ -921,3 +921,28 @@ fn find_noleaf() {
         .stdout(predicate::str::contains("test_data/simple/subdir"))
         .stderr(predicate::str::is_empty());
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_daystart() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-daystart", "-mtime", "0"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    // twice -daystart should be matched
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([
+            "./test_data/simple/subdir",
+            "-daystart",
+            "-daystart",
+            "-mtime",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
