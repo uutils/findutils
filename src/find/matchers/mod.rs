@@ -1562,6 +1562,13 @@ mod tests {
         let file = get_or_create_file("test_data/get_or_create_file_test");
         assert!(file.is_ok());
 
+        // test error when file no permission
+        #[cfg(unix)]
+        {
+            let result = get_or_create_file("/etc/shadow");
+            assert!(result.is_err());
+        }
+
         let _ = fs::remove_file("test_data/get_or_create_file_test");
     }
 }
