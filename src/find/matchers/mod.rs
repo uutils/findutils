@@ -343,13 +343,7 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
 /// Creates a file if it doesn't exist.
 /// If it does exist, it will be overwritten.
 fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
-    let file = match File::create(path) {
-        Ok(file) => file,
-        Err(err) => {
-            return Err(From::from(err));
-        }
-    };
-
+    let file = File::create(path)?;
     Ok(file)
 }
 
