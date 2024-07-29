@@ -37,33 +37,25 @@ impl Printer {
             output_file,
         }
     }
+
+    fn print(&self, file_info: &DirEntry, mut out: impl Write) {
+        write!(
+            out,
+            "{}{}",
+            file_info.path().to_string_lossy(),
+            self.delimiter
+        )
+        .unwrap();
+        out.flush().unwrap();
+    }
 }
 
 impl Matcher for Printer {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        match &self.output_file {
-            Some(output_file) => {
-                let mut out = output_file;
-                write!(
-                    out,
-                    "{}{}",
-                    file_info.path().to_string_lossy(),
-                    self.delimiter
-                )
-                .unwrap();
-                out.flush().unwrap();
-            }
-            None => {
-                let mut out = matcher_io.deps.get_output().borrow_mut();
-                write!(
-                    out,
-                    "{}{}",
-                    file_info.path().to_string_lossy(),
-                    self.delimiter
-                )
-                .unwrap();
-                out.flush().unwrap();
-            }
+        if let Some(file) = &self.output_file {
+            self.print(file_info, file);
+        } else {
+            self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut());
         }
         true
     }
