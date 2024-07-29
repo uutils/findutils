@@ -949,7 +949,7 @@ fn find_daystart() {
 
 #[test]
 #[serial(working_dir)]
-fn find_nogroup() {
+fn find_fprint() {
     let _ = fs::remove_file("test_data/find_fprint");
 
     Command::cargo_bin("find")
