@@ -46,7 +46,6 @@ impl Printer {
             self.delimiter
         )
         .unwrap();
-        out.flush().unwrap();
     }
 }
 
