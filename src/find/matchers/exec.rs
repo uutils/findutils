@@ -6,7 +6,7 @@
 
 use std::error::Error;
 use std::ffi::OsString;
-use std::io::{stderr, Write};
+use std::io::{stderr, stdin, stdout, Write};
 use std::path::Path;
 use std::process::Command;
 use walkdir::DirEntry;
@@ -22,6 +22,7 @@ pub struct SingleExecMatcher {
     executable: String,
     args: Vec<Arg>,
     exec_in_parent_dir: bool,
+    interactive: bool,
 }
 
 impl SingleExecMatcher {
@@ -29,6 +30,7 @@ impl SingleExecMatcher {
         executable: &str,
         args: &[&str],
         exec_in_parent_dir: bool,
+        interactive: bool,
     ) -> Result<Self, Box<dyn Error>> {
         let transformed_args = args
             .iter()
@@ -47,6 +49,7 @@ impl SingleExecMatcher {
             executable: executable.to_string(),
             args: transformed_args,
             exec_in_parent_dir,
+            interactive,
         })
     }
 }
@@ -84,6 +87,25 @@ impl Matcher for SingleExecMatcher {
                 }
             }
         }
+
+        // support interactive exec
+        if self.interactive {
+            let tips = format!(
+                "{} ... {} > ? [y/n]: ",
+                self.executable,
+                path_to_file.to_string_lossy()
+            );
+            #[allow(clippy::explicit_write)]
+            write!(stdout(), "{}", tips).unwrap();
+            stdout().flush().unwrap();
+
+            let mut input = String::new();
+            let _result = stdin().read_line(&mut input).unwrap();
+            if !input.trim().contains('y') {
+                return false;
+            }
+        }
+
         match command.status() {
             Ok(status) => status.success(),
             Err(e) => {
