@@ -5,7 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::fs::FileType;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::{error::Error, io::stderr};
 use walkdir::DirEntry;
 
@@ -72,10 +72,7 @@ impl Matcher for TypeMatcher {
         //    but also for files pointed to by symbolic links.
         // 2. -type l will not return any results because -follow will follow symbolic links,
         //    so the find command cannot find pure symbolic links.
-        if self.follow_ignore_l_option {
-            return false;
-        }
-
+        //    (unless they happen to match broken symbolic links)
         let file_type = if self.follow && file_info.file_type().is_symlink() {
             // According to the documentation, resolving a file with
             // `file_info.path()` will always return the underlying file.
@@ -83,6 +80,10 @@ impl Matcher for TypeMatcher {
             match path.metadata() {
                 Ok(metadata) => metadata.file_type(),
                 Err(e) => {
+                    if self.follow_ignore_l_option && e.kind() == ErrorKind::NotFound {
+                        return true;
+                    }
+
                     writeln!(
                         &mut stderr(),
                         "Error getting metadata for {}: {}",
