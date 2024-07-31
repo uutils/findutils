@@ -60,7 +60,11 @@ pub struct NewerMatcher {
 
 impl NewerMatcher {
     pub fn new(path_to_file: &str, follow: bool) -> Result<Self, Box<dyn Error>> {
-        let metadata = fs::metadata(path_to_file)?;
+        let metadata = if follow {
+            fs::symlink_metadata(path_to_file)?
+        } else {
+            fs::metadata(path_to_file)?
+        };
         Ok(Self {
             given_modification_time: metadata.modified()?,
             follow,
