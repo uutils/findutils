@@ -116,28 +116,28 @@ mod tests {
 
     #[test]
     fn file_type_matcher() {
-        [true, false].iter().for_each(|follow| {
+        for follow in [true, false] {
             let file = get_dir_entry_for("test_data/simple", "abbbc");
             let dir = get_dir_entry_for("test_data", "simple");
             let deps = FakeDependencies::new();
 
-            let matcher = TypeMatcher::new("f", *follow).unwrap();
+            let matcher = TypeMatcher::new("f", follow).unwrap();
             assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
             assert!(matcher.matches(&file, &mut deps.new_matcher_io()));
-        });
+        }
     }
 
     #[test]
     fn dir_type_matcher() {
-        [true, false].iter().for_each(|follow| {
+        for follow in [true, false] {
             let file = get_dir_entry_for("test_data/simple", "abbbc");
             let dir = get_dir_entry_for("test_data", "simple");
             let deps = FakeDependencies::new();
 
-            let matcher = TypeMatcher::new("d", *follow).unwrap();
+            let matcher = TypeMatcher::new("d", follow).unwrap();
             assert!(matcher.matches(&dir, &mut deps.new_matcher_io()));
             assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
-        });
+        }
     }
 
     // git does not translate links (in test_data) to Windows links
@@ -183,12 +183,12 @@ mod tests {
         let dir = get_dir_entry_for("test_data", "links");
         let deps = FakeDependencies::new();
 
-        [true, false].iter().for_each(|follow| {
-            let matcher = TypeMatcher::new("l", *follow).unwrap();
+        for follow in [true, false] {
+            let matcher = TypeMatcher::new("l", follow).unwrap();
             assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
             assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
 
-            if *follow {
+            if follow {
                 // Enabling the -follow option will make this matcher always return false for type l
                 assert!(!matcher.matches(&link_f, &mut deps.new_matcher_io()));
                 assert!(!matcher.matches(&link_d, &mut deps.new_matcher_io()));
@@ -196,7 +196,7 @@ mod tests {
                 assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
                 assert!(matcher.matches(&link_d, &mut deps.new_matcher_io()));
             }
-        });
+        }
 
         // Tests whether linked files are recognized in the -follow case.
         let matcher = TypeMatcher::new("f", true).unwrap();
@@ -206,17 +206,17 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn unix_extra_type_matcher() {
-        [true, false].iter().for_each(|follow| {
+        for follow in [true, false] {
             let file = get_dir_entry_for("test_data/simple", "abbbc");
             let dir = get_dir_entry_for("test_data", "simple");
             let deps = FakeDependencies::new();
 
             for typ in &["b", "c", "p", "s"] {
-                let matcher = TypeMatcher::new(typ, *follow).unwrap();
+                let matcher = TypeMatcher::new(typ, follow).unwrap();
                 assert!(!matcher.matches(&dir, &mut deps.new_matcher_io()));
                 assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
             }
-        });
+        }
     }
 
     #[test]
