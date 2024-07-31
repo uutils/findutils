@@ -708,6 +708,7 @@ fn build_matcher_tree(
             "-noignore_readdir_race" => {
                 config.ignore_readdir_race = false;
                 None
+            }
             "-daystart" => {
                 config.today_start = true;
                 None
