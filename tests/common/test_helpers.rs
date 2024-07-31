@@ -21,7 +21,7 @@ pub struct FakeDependencies {
     now: SystemTime,
 }
 
-impl<'a> FakeDependencies {
+impl FakeDependencies {
     pub fn new() -> Self {
         Self {
             output: RefCell::new(Cursor::new(Vec::<u8>::new())),
@@ -29,7 +29,7 @@ impl<'a> FakeDependencies {
         }
     }
 
-    pub fn new_matcher_io(&'a self) -> MatcherIO<'a> {
+    pub fn new_matcher_io(&self) -> MatcherIO<'_> {
         MatcherIO::new(self)
     }
 
@@ -42,12 +42,12 @@ impl<'a> FakeDependencies {
     }
 }
 
-impl<'a> Dependencies<'a> for FakeDependencies {
-    fn get_output(&'a self) -> &'a RefCell<dyn Write> {
+impl Dependencies for FakeDependencies {
+    fn get_output(&self) -> &RefCell<dyn Write> {
         &self.output
     }
 
-    fn now(&'a self) -> SystemTime {
+    fn now(&self) -> SystemTime {
         self.now
     }
 }

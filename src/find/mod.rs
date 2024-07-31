@@ -22,6 +22,8 @@ pub struct Config {
     help_requested: bool,
     version_requested: bool,
     ignore_readdir_race: bool,
+    today_start: bool,
+    no_leaf_dirs: bool,
 }
 
 impl Default for Config {
@@ -36,15 +38,20 @@ impl Default for Config {
             version_requested: false,
             // For compat: doesn't change anything
             ignore_readdir_race: false,
+            today_start: false,
+            // Directory information and traversal are done by walkdir,
+            // and this configuration field will exist as
+            // a compatibility item for GNU findutils.
+            no_leaf_dirs: false,
         }
     }
 }
 
 /// Trait that encapsulates various dependencies (output, clocks, etc.) that we
 /// might want to fake out for unit tests.
-pub trait Dependencies<'a> {
-    fn get_output(&'a self) -> &'a RefCell<dyn Write>;
-    fn now(&'a self) -> SystemTime;
+pub trait Dependencies {
+    fn get_output(&self) -> &RefCell<dyn Write>;
+    fn now(&self) -> SystemTime;
 }
 
 /// Struct that holds the dependencies we use when run as the real executable.
@@ -69,12 +76,12 @@ impl Default for StandardDependencies {
     }
 }
 
-impl<'a> Dependencies<'a> for StandardDependencies {
-    fn get_output(&'a self) -> &'a RefCell<dyn Write> {
+impl Dependencies for StandardDependencies {
+    fn get_output(&self) -> &RefCell<dyn Write> {
         self.output.as_ref()
     }
 
-    fn now(&'a self) -> SystemTime {
+    fn now(&self) -> SystemTime {
         self.now
     }
 }
@@ -131,10 +138,10 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     })
 }
 
-fn process_dir<'a>(
+fn process_dir(
     dir: &str,
     config: &Config,
-    deps: &'a dyn Dependencies<'a>,
+    deps: &dyn Dependencies,
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
 ) -> u64 {
@@ -159,6 +166,7 @@ fn process_dir<'a>(
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
+
                 if matcher.matches(&entry, &mut matcher_io) {
                     found_count += 1;
                 }
@@ -175,7 +183,7 @@ fn process_dir<'a>(
     found_count
 }
 
-fn do_find<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> Result<u64, Box<dyn Error>> {
+fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<u64, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
     if paths_and_matcher.config.help_requested {
         print_help();
@@ -258,7 +266,7 @@ fn print_version() {
 /// All main has to do is pass in the command-line args and exit the process
 /// with the exit code. Note that the first string in args is expected to be
 /// the name of the executable.
-pub fn find_main<'a>(args: &[&str], deps: &'a dyn Dependencies<'a>) -> i32 {
+pub fn find_main(args: &[&str], deps: &dyn Dependencies) -> i32 {
     match do_find(&args[1..], deps) {
         Ok(_) => uucore::error::get_exit_code(),
         Err(e) => {
@@ -282,6 +290,7 @@ mod tests {
     #[cfg(windows)]
     use std::os::windows::fs::symlink_file;
 
+    use crate::find::matchers::time::ChangeTime;
     use crate::find::matchers::MatcherIO;
 
     use super::*;
@@ -330,12 +339,12 @@ mod tests {
         }
     }
 
-    impl<'a> Dependencies<'a> for FakeDependencies {
-        fn get_output(&'a self) -> &'a RefCell<dyn Write> {
+    impl Dependencies for FakeDependencies {
+        fn get_output(&self) -> &RefCell<dyn Write> {
             &self.output
         }
 
-        fn now(&'a self) -> SystemTime {
+        fn now(&self) -> SystemTime {
             self.now
         }
     }
@@ -670,7 +679,7 @@ mod tests {
         let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
 
         // metadata can return errors like StringError("creation time is not available on this platform currently")
-        // so skip tests that won't pass due to shortcomings in std:;fs.
+        // so skip tests that won't pass due to shortcomings in std::fs.
         if let Ok(file_time) = meta.modified() {
             file_time_helper(file_time, "-mtime");
         }
@@ -681,8 +690,8 @@ mod tests {
         let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
 
         // metadata can return errors like StringError("creation time is not available on this platform currently")
-        // so skip tests that won't pass due to shortcomings in std:;fs.
-        if let Ok(file_time) = meta.created() {
+        // so skip tests that won't pass due to shortcomings in std::fs.
+        if let Ok(file_time) = meta.changed() {
             file_time_helper(file_time, "-ctime");
         }
     }
@@ -692,7 +701,7 @@ mod tests {
         let meta = fs::metadata("./test_data/simple/subdir/ABBBC").unwrap();
 
         // metadata can return errors like StringError("creation time is not available on this platform currently")
-        // so skip tests that won't pass due to shortcomings in std:;fs.
+        // so skip tests that won't pass due to shortcomings in std::fs.
         if let Ok(file_time) = meta.accessed() {
             file_time_helper(file_time, "-atime");
         }
@@ -940,9 +949,10 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
-    fn test_find_newer_xy_before_created_time() {
-        // normal - before the created time
+    fn test_find_newer_xy_before_changed_time() {
+        // normal - before the changed time
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
         #[cfg(not(target_os = "linux"))]
@@ -964,8 +974,8 @@ mod tests {
     }
 
     #[test]
-    fn test_find_newer_xy_after_created_time() {
-        // normal - after the created time
+    fn test_find_newer_xy_after_changed_time() {
+        // normal - after the changed time
         #[cfg(target_os = "linux")]
         let args = ["-newerat", "-newerct", "-newermt"];
         #[cfg(not(target_os = "linux"))]
@@ -1203,10 +1213,12 @@ mod tests {
     fn test_fs_matcher() {
         use crate::find::tests::FakeDependencies;
         use matchers::fs::get_file_system_type;
+        use std::cell::RefCell;
         use std::path::Path;
 
         let path = Path::new("./test_data/simple/subdir");
-        let target_fs_type = get_file_system_type(path).unwrap();
+        let empty_cache = RefCell::new(None);
+        let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
 
         // should match fs type
         let deps = FakeDependencies::new();
@@ -1223,6 +1235,64 @@ mod tests {
         assert_eq!(rc, 0);
     }
 
+    #[test]
+    fn find_maxdepth_and() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-maxdepth",
+                "0",
+                "-a",
+                "-print",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/depth\n")
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_daystart() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-daystart",
+                "-mtime",
+                "0",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+
+        // twice -daystart should be matched
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-daystart",
+                "-daystart",
+                "-mtime",
+                "1",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+    }
+  
     #[test]
     #[cfg(unix)]
     fn test_ignore_readdir_race() {

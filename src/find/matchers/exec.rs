@@ -67,7 +67,7 @@ impl Matcher for SingleExecMatcher {
         for arg in &self.args {
             match *arg {
                 Arg::LiteralArg(ref a) => command.arg(a.as_os_str()),
-                Arg::FileArg(ref parts) => command.arg(&parts.join(path_to_file.as_os_str())),
+                Arg::FileArg(ref parts) => command.arg(parts.join(path_to_file.as_os_str())),
             };
         }
         if self.exec_in_parent_dir {

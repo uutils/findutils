@@ -535,7 +535,13 @@ fn find_time() {
     let args = ["1", "+1", "-1"];
     let exception_args = ["1%2", "1%2%3", "1a2", "1%2a", "abc", "-", "+", "%"];
 
-    ["-ctime", "-atime", "-mtime"].iter().for_each(|flag| {
+    let tests = [
+        "-atime",
+        #[cfg(unix)]
+        "-ctime",
+        "-mtime",
+    ];
+    tests.iter().for_each(|flag| {
         args.iter().for_each(|arg| {
             Command::cargo_bin("find")
                 .expect("found binary")
@@ -704,10 +710,14 @@ fn find_with_gid_predicate() {
 #[test]
 #[serial(working_dir)]
 fn find_newer_xy() {
-    #[cfg(target_os = "linux")]
-    let options = ["a", "c", "m"];
-    #[cfg(not(target_os = "linux"))]
-    let options = ["a", "B", "c", "m"];
+    let options = [
+        "a",
+        #[cfg(not(target_os = "linux"))]
+        "B",
+        #[cfg(unix)]
+        "c",
+        "m",
+    ];
 
     for x in options {
         for y in options {
@@ -725,15 +735,18 @@ fn find_newer_xy() {
         }
     }
 
-    #[cfg(target_os = "linux")]
-    let args = ["-newerat", "-newerct", "-newermt"];
-    #[cfg(not(target_os = "linux"))]
-    let args = ["-newerat", "-newerBt", "-newerct", "-newermt"];
+    let args = [
+        "-newerat",
+        #[cfg(not(target_os = "linux"))]
+        "-newerBt",
+        #[cfg(unix)]
+        "-newerct",
+        "-newermt",
+    ];
     let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
 
     for arg in args {
         for time in times {
-            let arg = &format!("{arg}{time}");
             Command::cargo_bin("find")
                 .expect("found binary")
                 .args(["./test_data/simple/subdir", arg, time])
@@ -785,10 +798,12 @@ fn find_age_range() {
 #[serial(working_dir)]
 fn find_fs() {
     use findutils::find::matchers::fs::get_file_system_type;
+    use std::cell::RefCell;
     use std::path::Path;
 
     let path = Path::new("./test_data/simple/subdir");
-    let target_fs_type = get_file_system_type(path).unwrap();
+    let empty_cache = RefCell::new(None);
+    let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
 
     // match fs type
     Command::cargo_bin("find")
@@ -827,6 +842,19 @@ fn find_fs() {
         .assert()
         .success()
         .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    let path = Path::new("./test_data/links");
+    let empty_cache = RefCell::new(None);
+    let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
+
+    // working with broken links
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/links", "-fstype", &target_fs_type])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./test_data/links/link-missing"))
         .stderr(predicate::str::is_empty());
 }
 
@@ -880,6 +908,31 @@ fn find_samefile() {
         .failure()
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("not-exist-file"));
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_daystart() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-daystart", "-mtime", "0"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    // twice -daystart should be matched
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([
+            "./test_data/simple/subdir",
+            "-daystart",
+            "-daystart",
+            "-mtime",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
 }
 
 #[test]
