@@ -78,7 +78,13 @@ impl Matcher for TypeMatcher {
             // `file_info.path()` will always return the underlying file.
             let path = file_info.path();
             match path.metadata() {
-                Ok(metadata) => metadata.file_type(),
+                Ok(metadata) => {
+                    if self.follow_ignore_l_option {
+                        return false;
+                    }
+
+                    metadata.file_type()
+                }
                 Err(e) => {
                     if self.follow_ignore_l_option && e.kind() == ErrorKind::NotFound {
                         return true;
