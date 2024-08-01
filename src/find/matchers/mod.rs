@@ -73,11 +73,11 @@ use super::{Config, Dependencies};
 pub struct MatcherIO<'a> {
     should_skip_dir: bool,
     quit: bool,
-    deps: &'a dyn Dependencies<'a>,
+    deps: &'a dyn Dependencies,
 }
 
 impl<'a> MatcherIO<'a> {
-    pub fn new(deps: &'a dyn Dependencies<'a>) -> MatcherIO<'a> {
+    pub fn new(deps: &dyn Dependencies) -> MatcherIO<'_> {
         MatcherIO {
             deps,
             should_skip_dir: false,
