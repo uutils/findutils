@@ -41,7 +41,7 @@ impl Printer {
         }
     }
 
-    fn print(&self, file_info: &DirEntry, mut out: impl Write) {
+    fn print(&self, file_info: &DirEntry, mut out: impl Write, print_error_message: bool) {
         match write!(
             out,
             "{}{}",
@@ -50,13 +50,15 @@ impl Printer {
         ) {
             Ok(_) => {}
             Err(e) => {
-                writeln!(
-                    &mut stderr(),
-                    "Error writing {:?} for {}",
-                    file_info.path().to_string_lossy(),
-                    e
-                )
-                .unwrap();
+                if print_error_message {
+                    writeln!(
+                        &mut stderr(),
+                        "Error writing {:?} for {}",
+                        file_info.path().to_string_lossy(),
+                        e
+                    )
+                    .unwrap();
+                }
             }
         }
     }
@@ -65,9 +67,13 @@ impl Printer {
 impl Matcher for Printer {
     fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, file);
+            self.print(file_info, file, true);
         } else {
-            self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut());
+            self.print(
+                file_info,
+                &mut *matcher_io.deps.get_output().borrow_mut(),
+                false,
+            );
         }
         true
     }
