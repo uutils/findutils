@@ -4,7 +4,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::{fs::File, io::Write};
+use std::{
+    fs::File,
+    io::{stderr, Write},
+};
 
 use walkdir::DirEntry;
 
@@ -39,13 +42,23 @@ impl Printer {
     }
 
     fn print(&self, file_info: &DirEntry, mut out: impl Write) {
-        write!(
+        match write!(
             out,
             "{}{}",
             file_info.path().to_string_lossy(),
             self.delimiter
-        )
-        .unwrap();
+        ) {
+            Ok(_) => {},
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error writing {:?} for {}",
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+            }
+        }
     }
 }
 
