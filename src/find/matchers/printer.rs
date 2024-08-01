@@ -48,7 +48,7 @@ impl Printer {
             file_info.path().to_string_lossy(),
             self.delimiter
         ) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 writeln!(
                     &mut stderr(),
