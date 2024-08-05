@@ -58,9 +58,11 @@ impl Printer {
                         e
                     )
                     .unwrap();
+                    uucore::error::set_exit_code(1);
                 }
             }
         }
+        out.flush().unwrap();
     }
 }
 
