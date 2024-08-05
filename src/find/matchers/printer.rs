@@ -126,7 +126,13 @@ mod tests {
 
         let matcher = Printer::new(PrintDelimiter::Newline, Some(dev_full));
         let deps = FakeDependencies::new();
+
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+
+        // Reset the exit code global variable in case we run another test after this one
+        // See https://github.com/uutils/coreutils/issues/5777
+        uucore::error::set_exit_code(0);
+
         assert!(deps.get_output_as_string().is_empty());
     }
 }
