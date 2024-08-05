@@ -21,6 +21,7 @@ pub struct Config {
     sorted_output: bool,
     help_requested: bool,
     version_requested: bool,
+    ignore_readdir_race: bool,
     today_start: bool,
     no_leaf_dirs: bool,
 }
@@ -35,6 +36,8 @@ impl Default for Config {
             sorted_output: false,
             help_requested: false,
             version_requested: false,
+            // For compat: doesn't change anything
+            ignore_readdir_race: false,
             today_start: false,
             // Directory information and traversal are done by walkdir,
             // and this configuration field will exist as
@@ -1233,17 +1236,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
-    fn test_noleaf() {
-        use crate::find::tests::FakeDependencies;
-
-        let deps = FakeDependencies::new();
-        let rc = find_main(&["find", "./test_data/simple/subdir", "-noleaf"], &deps);
-
-        assert_eq!(rc, 0);
-    }
-
-    #[test]
     fn find_maxdepth_and() {
         let deps = FakeDependencies::new();
         let rc = find_main(
@@ -1294,6 +1286,37 @@ mod tests {
                 "-daystart",
                 "-mtime",
                 "1",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+    }
+  
+    #[test]
+    #[cfg(unix)]
+    fn test_ignore_readdir_race() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &["find", "./test_data/simple/subdir", "-ignore_readdir_race"],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn test_noignore_readdir_race() {
+        use crate::find::tests::FakeDependencies;
+
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple/subdir",
+                "-noignore_readdir_race",
             ],
             &deps,
         );
