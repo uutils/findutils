@@ -697,7 +697,7 @@ fn build_matcher_tree(
             }
             "-daystart" => {
                 config.today_start = true;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-noleaf" => {
                 // No change of behavior
