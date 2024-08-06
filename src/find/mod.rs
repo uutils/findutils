@@ -149,7 +149,8 @@ fn process_dir(
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
         .min_depth(config.min_depth)
-        .same_file_system(config.same_file_system);
+        .same_file_system(config.same_file_system)
+        .follow_links(config.follow);
     if config.sorted_output {
         walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }

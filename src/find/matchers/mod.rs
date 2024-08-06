@@ -377,10 +377,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(
-                    LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i"), config.follow)
-                        .into_box(),
-                )
+                Some(LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-name" | "-iname" => {
                 if i >= args.len() - 1 {
@@ -424,7 +421,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(TypeMatcher::new(args[i], config.follow)?.into_box())
+                Some(TypeMatcher::new(args[i])?.into_box())
             }
             "-fstype" => {
                 if i >= args.len() - 1 {
@@ -443,7 +440,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(NewerMatcher::new(args[i], config.follow)?.into_box())
+                Some(NewerMatcher::new(args[i])?.into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
@@ -459,10 +456,7 @@ fn build_matcher_tree(
                 };
                 let days = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(
-                    FileTimeMatcher::new(file_time_type, days, config.today_start, config.follow)
-                        .into_box(),
-                )
+                Some(FileTimeMatcher::new(file_time_type, days, config.today_start).into_box())
             }
             "-amin" | "-cmin" | "-mmin" => {
                 if i >= args.len() - 1 {
@@ -477,13 +471,8 @@ fn build_matcher_tree(
                 let minutes = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
                 Some(
-                    FileAgeRangeMatcher::new(
-                        file_time_type,
-                        minutes,
-                        config.today_start,
-                        config.follow,
-                    )
-                    .into_box(),
+                    FileAgeRangeMatcher::new(file_time_type, minutes, config.today_start)
+                        .into_box(),
                 )
             }
             "-size" => {
@@ -794,26 +783,11 @@ fn build_matcher_tree(
                                 }
                             };
                             i += 1;
-                            Some(
-                                NewerTimeMatcher::new(
-                                    newer_time_type,
-                                    comparable_time,
-                                    config.follow,
-                                )
-                                .into_box(),
-                            )
+                            Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
                         } else {
                             let file_path = args[i + 1];
                             i += 1;
-                            Some(
-                                NewerOptionMatcher::new(
-                                    x_option,
-                                    y_option,
-                                    file_path,
-                                    config.follow,
-                                )?
-                                .into_box(),
-                            )
+                            Some(NewerOptionMatcher::new(x_option, y_option, file_path)?.into_box())
                         }
                     }
                     None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
