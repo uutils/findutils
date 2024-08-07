@@ -147,3 +147,24 @@ impl Matcher for Ls {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[cfg(unix)]
+    fn test_format_permissions() {
+        use super::format_permissions;
+
+        let mode = 0o100644;
+        let expected = "-rw-r--r--";
+        assert_eq!(format_permissions(mode), expected);
+
+        let mode = 0o040755;
+        let expected = "drwxr-xr-x";
+        assert_eq!(format_permissions(mode), expected);
+
+        let mode = 0o100777;
+        let expected = "-rwxrwxrwx";
+        assert_eq!(format_permissions(mode), expected);
+    }
+}
