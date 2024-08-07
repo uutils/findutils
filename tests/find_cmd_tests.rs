@@ -11,8 +11,8 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serial_test::serial;
-use std::fs::File;
-use std::io::Write;
+use std::fs::{self, File};
+use std::io::{Read, Write};
 use std::{env, io::ErrorKind};
 use tempfile::Builder;
 
@@ -945,4 +945,26 @@ fn find_daystart() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_fprint() {
+    let _ = fs::remove_file("test_data/find_fprint");
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data/simple", "-fprint", "test_data/find_fprint"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    // read test_data/find_fprint
+    let mut f = File::open("test_data/find_fprint").unwrap();
+    let mut contents = String::new();
+    f.read_to_string(&mut contents).unwrap();
+    assert!(contents.contains("test_data/simple"));
+
+    let _ = fs::remove_file("test_data/find_fprint");
 }
