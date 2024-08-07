@@ -909,6 +909,8 @@ fn find_samefile() {
         .failure()
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("not-exist-file"));
+
+    fs::remove_file("test_data/links/hard_link").unwrap();
 }
 
 #[test]
