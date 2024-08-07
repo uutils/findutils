@@ -33,7 +33,7 @@ mod user;
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
-use std::fs::File;
+use std::fs::{File, Metadata};
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -69,6 +69,52 @@ use self::user::{NoUserMatcher, UserMatcher};
 use super::{Config, Dependencies};
 
 pub use entry::{FileType, WalkEntry, WalkError};
+
+/// Symlink following mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Follow {
+    /// Never follow symlinks (-P; default).
+    Never,
+    /// Follow symlinks on root paths only (-H).
+    Roots,
+    /// Always follow symlinks (-L).
+    Always,
+}
+
+impl Follow {
+    /// Check whether to follow a path of the given depth.
+    pub fn follow_at_depth(self, depth: usize) -> bool {
+        match self {
+            Follow::Never => false,
+            Follow::Roots => depth == 0,
+            Follow::Always => true,
+        }
+    }
+
+    /// Get metadata for a path from the command line.
+    pub fn root_metadata(self, path: impl AsRef<Path>) -> Result<Metadata, WalkError> {
+        self.metadata_at_depth(path, 0)
+    }
+
+    /// Get metadata for a path, following symlinks as necessary.
+    pub fn metadata_at_depth(
+        self,
+        path: impl AsRef<Path>,
+        depth: usize,
+    ) -> Result<Metadata, WalkError> {
+        let path = path.as_ref();
+
+        if self.follow_at_depth(depth) {
+            match path.metadata().map_err(WalkError::from) {
+                Ok(meta) => return Ok(meta),
+                Err(e) if !e.is_not_found() => return Err(e),
+                _ => {}
+            }
+        }
+
+        Ok(path.symlink_metadata()?)
+    }
+}
 
 /// Struct holding references to outputs and any inputs that can't be derived
 /// from the file/directory info.
@@ -736,7 +782,7 @@ fn build_matcher_tree(
                 //
                 // 5. causes the -lname and -ilname predicates always to return false.
                 //    (unless they happen to match broken symbolic links)
-                config.follow = true;
+                config.follow = Follow::Always;
                 config.no_leaf_dirs = true;
                 Some(TrueMatcher.into_box())
             }
@@ -869,7 +915,7 @@ mod tests {
         };
 
         let depth = path.components().count() - root.components().count();
-        WalkEntry::new(path, depth, false)
+        WalkEntry::new(path, depth, Follow::Never)
     }
 
     #[test]
@@ -1236,7 +1282,7 @@ mod tests {
 
         build_top_level_matcher(&["-follow"], &mut config).unwrap();
 
-        assert!(config.follow);
+        assert_eq!(config.follow, Follow::Always);
     }
 
     #[test]

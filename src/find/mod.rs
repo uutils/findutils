@@ -6,7 +6,7 @@
 
 pub mod matchers;
 
-use matchers::WalkEntry;
+use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
 use std::io::{stderr, stdout, Write};
@@ -24,7 +24,7 @@ pub struct Config {
     version_requested: bool,
     today_start: bool,
     no_leaf_dirs: bool,
-    follow: bool,
+    follow: Follow,
 }
 
 impl Default for Config {
@@ -42,7 +42,7 @@ impl Default for Config {
             // and this configuration field will exist as
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
-            follow: false,
+            follow: Follow::Never,
         }
     }
 }
@@ -104,9 +104,9 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             "-O0" | "-O1" | "-O2" | "-O3" => {
                 // GNU find optimization level flag (ignored)
             }
-            "-P" => {
-                // Never follow symlinks (the default)
-            }
+            "-H" => config.follow = Follow::Roots,
+            "-L" => config.follow = Follow::Always,
+            "-P" => config.follow = Follow::Never,
             "--" => {
                 // End of flags
                 i += 1;
@@ -150,7 +150,8 @@ fn process_dir(
         .max_depth(config.max_depth)
         .min_depth(config.min_depth)
         .same_file_system(config.same_file_system)
-        .follow_links(config.follow);
+        .follow_links(config.follow == Follow::Always)
+        .follow_root_links(config.follow != Follow::Never);
     if config.sorted_output {
         walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }
@@ -161,7 +162,7 @@ fn process_dir(
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
     while let Some(result) = it.next() {
-        match WalkEntry::try_from(result) {
+        match WalkEntry::from_walkdir(result, config.follow) {
             Err(err) => {
                 ret = 1;
                 writeln!(&mut stderr(), "Error: {err}").unwrap()
@@ -402,8 +403,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_h_flag() {
+        let parsed_info = super::parse_args(&["-H"]).expect("parsing should succeed");
+        assert_eq!(parsed_info.config.follow, Follow::Roots);
+    }
+
+    #[test]
+    fn parse_l_flag() {
+        let parsed_info = super::parse_args(&["-L"]).expect("parsing should succeed");
+        assert_eq!(parsed_info.config.follow, Follow::Always);
+    }
+
+    #[test]
     fn parse_p_flag() {
-        super::parse_args(&["-P"]).expect("parsing should succeed");
+        let parsed_info = super::parse_args(&["-P"]).expect("parsing should succeed");
+        assert_eq!(parsed_info.config.follow, Follow::Never);
     }
 
     #[test]
@@ -1345,5 +1359,74 @@ mod tests {
         let deps = FakeDependencies::new();
         let rc = find_main(&["find", "./test_data/simple", "-follow"], &deps);
         assert_eq!(rc, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_h_flag() {
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(
+            &["find", "-H", &fix_up_slashes("./test_data/links/link-d")],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/links/link-d\n\
+                 ./test_data/links/link-d/test\n"
+            )
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_l_flag() {
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(
+            &[
+                "find",
+                "-L",
+                &fix_up_slashes("./test_data/links"),
+                "-sorted",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 1);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes(
+                "./test_data/links\n\
+                 ./test_data/links/abbbc\n\
+                 ./test_data/links/link-d\n\
+                 ./test_data/links/link-d/test\n\
+                 ./test_data/links/link-f\n\
+                 ./test_data/links/link-missing\n\
+                 ./test_data/links/link-notdir\n\
+                 ./test_data/links/subdir\n\
+                 ./test_data/links/subdir/test\n"
+            )
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_p_flag() {
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(
+            &["find", "-P", &fix_up_slashes("./test_data/links/link-d")],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(
+            deps.get_output_as_string(),
+            fix_up_slashes("./test_data/links/link-d\n")
+        );
     }
 }

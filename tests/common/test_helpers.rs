@@ -10,7 +10,7 @@ use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use std::time::SystemTime;
 
-use findutils::find::matchers::{MatcherIO, WalkEntry};
+use findutils::find::matchers::{Follow, MatcherIO, WalkEntry};
 use findutils::find::Dependencies;
 
 /// A copy of `find::tests::FakeDependencies`.
@@ -96,5 +96,5 @@ pub fn get_dir_entry_for(root: &str, path: &str) -> WalkEntry {
 
     let depth = path.components().count() - root.components().count();
 
-    WalkEntry::new(path, depth, false)
+    WalkEntry::new(path, depth, Follow::Never)
 }

@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 
 use walkdir::DirEntry;
 
+use super::Follow;
+
 /// Wrapper for a directory entry.
 #[derive(Debug)]
 enum Entry {
@@ -199,18 +201,58 @@ pub struct WalkEntry {
     /// The wrapped path/dirent.
     inner: Entry,
     /// Whether to follow symlinks.
-    follow: bool,
+    follow: Follow,
     /// Cached metadata.
     meta: OnceCell<Result<Metadata, WalkError>>,
 }
 
 impl WalkEntry {
     /// Create a new WalkEntry for a specific file.
-    pub fn new(path: impl Into<PathBuf>, depth: usize, follow: bool) -> Self {
+    pub fn new(path: impl Into<PathBuf>, depth: usize, follow: Follow) -> Self {
         Self {
             inner: Entry::Explicit(path.into(), depth),
             follow,
             meta: OnceCell::new(),
+        }
+    }
+
+    /// Convert a [walkdir::DirEntry] to a [WalkEntry].  Errors due to broken symbolic links will be
+    /// converted to valid entries, but other errors will be propagated.
+    pub fn from_walkdir(
+        result: walkdir::Result<DirEntry>,
+        follow: Follow,
+    ) -> Result<WalkEntry, WalkError> {
+        let result = result.map_err(WalkError::from);
+
+        match result {
+            Ok(entry) => {
+                let ret = if entry.depth() == 0 && follow != Follow::Never {
+                    // DirEntry::file_type() is wrong for root symlinks when follow_root_links is set
+                    Self::new(entry.path(), 0, follow)
+                } else {
+                    Self {
+                        inner: Entry::WalkDir(entry),
+                        follow,
+                        meta: OnceCell::new(),
+                    }
+                };
+                Ok(ret)
+            }
+            Err(e) if e.is_not_found() => {
+                // Detect broken symlinks and replace them with explicit entries
+                if let (Some(path), Some(depth)) = (e.path(), e.depth()) {
+                    if let Ok(meta) = path.symlink_metadata() {
+                        return Ok(WalkEntry {
+                            inner: Entry::Explicit(path.into(), depth),
+                            follow: Follow::Never,
+                            meta: Ok(meta).into(),
+                        });
+                    }
+                }
+
+                Err(e)
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -252,17 +294,14 @@ impl WalkEntry {
         }
     }
 
-    /// Get the metadata on a cache miss.
-    fn get_metadata(&self) -> io::Result<Metadata> {
-        if self.follow {
-            match self.path().metadata() {
-                Ok(meta) => return Ok(meta),
-                Err(e) if !WalkError::from(&e).is_not_found() => return Err(e),
-                _ => (),
-            }
-        }
+    /// Get whether symbolic links are followed for this entry.
+    pub fn follow(&self) -> bool {
+        self.follow.follow_at_depth(self.depth())
+    }
 
-        self.path().symlink_metadata()
+    /// Get the metadata on a cache miss.
+    fn get_metadata(&self) -> Result<Metadata, WalkError> {
+        self.follow.metadata_at_depth(self.path(), self.depth())
     }
 
     /// Get the [Metadata] for this entry, following symbolic links if appropriate.
@@ -291,7 +330,7 @@ impl WalkEntry {
     pub fn path_is_symlink(&self) -> bool {
         match &self.inner {
             Entry::Explicit(path, _) => {
-                if self.follow {
+                if self.follow() {
                     path.symlink_metadata()
                         .is_ok_and(|m| m.file_type().is_symlink())
                 } else {
@@ -299,43 +338,6 @@ impl WalkEntry {
                 }
             }
             Entry::WalkDir(ent) => ent.path_is_symlink(),
-        }
-    }
-}
-
-impl From<DirEntry> for WalkEntry {
-    fn from(entry: DirEntry) -> WalkEntry {
-        let follow = entry.path_is_symlink() && !entry.file_type().is_symlink();
-        WalkEntry {
-            inner: Entry::WalkDir(entry),
-            follow,
-            meta: OnceCell::new(),
-        }
-    }
-}
-
-impl TryFrom<walkdir::Result<DirEntry>> for WalkEntry {
-    type Error = WalkError;
-
-    fn try_from(result: walkdir::Result<DirEntry>) -> Result<WalkEntry, WalkError> {
-        match result {
-            Ok(entry) => Ok(entry.into()),
-            Err(e) => {
-                // Detect broken symlinks and replace them with explicit entries
-                if let (Some(path), Some(ioe)) = (e.path(), e.io_error()) {
-                    if WalkError::from(ioe).is_not_found() {
-                        if let Ok(meta) = path.symlink_metadata() {
-                            return Ok(WalkEntry {
-                                inner: Entry::Explicit(path.into(), e.depth()),
-                                follow: false,
-                                meta: Ok(meta).into(),
-                            });
-                        }
-                    }
-                }
-
-                Err(e.into())
-            }
         }
     }
 }
