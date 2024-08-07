@@ -10,7 +10,7 @@ use std::{
     io::{stderr, Write},
 };
 
-use super::Matcher;
+use super::{Matcher, MatcherIO, WalkEntry};
 
 /// The latest mapping from dev_id to fs_type, used for saving mount info reads
 pub struct Cache {
@@ -88,7 +88,7 @@ impl FileSystemMatcher {
 }
 
 impl Matcher for FileSystemMatcher {
-    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         #[cfg(not(unix))]
         {
             false

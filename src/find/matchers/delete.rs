@@ -7,13 +7,11 @@
  * file that was distributed with this source code.
  */
 
-use std::fs::{self, FileType};
+use std::fs;
 use std::io::{self, stderr, Write};
 use std::path::Path;
 
-use walkdir::DirEntry;
-
-use super::{Matcher, MatcherIO};
+use super::{FileType, Matcher, MatcherIO, WalkEntry};
 
 pub struct DeleteMatcher;
 
@@ -32,7 +30,7 @@ impl DeleteMatcher {
 }
 
 impl Matcher for DeleteMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let path = file_info.path();
         let path_str = path.to_string_lossy();
 

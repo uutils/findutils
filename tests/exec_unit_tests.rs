@@ -12,7 +12,6 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use tempfile::Builder;
-use walkdir::WalkDir;
 
 use common::test_helpers::{
     fix_up_slashes, get_dir_entry_for, path_to_testing_commandline, FakeDependencies,
@@ -125,11 +124,7 @@ fn execdir_in_current_directory() {
         .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
-    let current_dir_entry = WalkDir::new(".")
-        .into_iter()
-        .next()
-        .expect("iterator was empty")
-        .expect("result wasn't OK");
+    let current_dir_entry = get_dir_entry_for(".", "");
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),
         &[temp_dir_path.as_ref(), "abc", "{}", "xyz"],
@@ -166,11 +161,7 @@ fn execdir_in_root_directory() {
         .ancestors()
         .last()
         .expect("current directory has no root");
-    let root_dir_entry = WalkDir::new(root_dir)
-        .into_iter()
-        .next()
-        .expect("iterator was empty")
-        .expect("result wasn't OK");
+    let root_dir_entry = get_dir_entry_for(root_dir.to_str().unwrap(), "");
 
     let matcher = SingleExecMatcher::new(
         &path_to_testing_commandline(),

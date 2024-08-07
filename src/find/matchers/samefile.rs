@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use super::Matcher;
+use super::{Matcher, MatcherIO, WalkEntry};
 use std::error::Error;
 use std::path::Path;
 use uucore::fs::FileInformation;
@@ -20,7 +20,7 @@ impl SameFileMatcher {
 }
 
 impl Matcher for SameFileMatcher {
-    fn matches(&self, file_info: &walkdir::DirEntry, _matcher_io: &mut super::MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _matcher_io: &mut MatcherIO) -> bool {
         if let Ok(info) = FileInformation::from_path(file_info.path(), false) {
             info == self.info
         } else {

@@ -7,9 +7,8 @@
 use std::error::Error;
 use std::io::{stderr, Write};
 use std::str::FromStr;
-use walkdir::DirEntry;
 
-use super::{ComparableValue, Matcher, MatcherIO};
+use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
 
 #[derive(Clone, Copy, Debug)]
 enum Unit {
@@ -83,7 +82,7 @@ impl SizeMatcher {
 }
 
 impl Matcher for SizeMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         match file_info.metadata() {
             Ok(metadata) => self
                 .value_to_match

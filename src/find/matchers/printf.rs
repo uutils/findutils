@@ -4,15 +4,18 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::{borrow::Cow, error::Error, fs, path::Path, time::SystemTime};
+use std::borrow::Cow;
+use std::error::Error;
+use std::fs;
+use std::path::Path;
+use std::time::SystemTime;
 
 use chrono::{format::StrftimeItems, DateTime, Local};
-use once_cell::unsync::OnceCell;
 
-use super::{Matcher, MatcherIO};
+use super::{FileType, Matcher, MatcherIO, WalkEntry, WalkError};
 
 #[cfg(unix)]
-use std::os::unix::prelude::{FileTypeExt, MetadataExt};
+use std::os::unix::prelude::MetadataExt;
 
 const STANDARD_BLOCK_SIZE: u64 = 512;
 
@@ -340,7 +343,7 @@ impl FormatString {
     }
 }
 
-fn get_starting_point(file_info: &walkdir::DirEntry) -> &Path {
+fn get_starting_point(file_info: &WalkEntry) -> &Path {
     file_info
         .path()
         .ancestors()
@@ -350,47 +353,23 @@ fn get_starting_point(file_info: &walkdir::DirEntry) -> &Path {
         .unwrap()
 }
 
-fn format_non_link_file_type(file_type: fs::FileType) -> char {
-    if file_type.is_file() {
-        'f'
-    } else if file_type.is_dir() {
-        'd'
-    } else {
-        #[cfg(unix)]
-        if file_type.is_block_device() {
-            'b'
-        } else if file_type.is_char_device() {
-            'c'
-        } else if file_type.is_fifo() {
-            'p'
-        } else if file_type.is_socket() {
-            's'
-        } else {
-            'U'
-        }
-        #[cfg(not(unix))]
-        'U'
+fn format_non_link_file_type(file_type: FileType) -> char {
+    match file_type {
+        FileType::Regular => 'f',
+        FileType::Directory => 'd',
+        FileType::BlockDevice => 'b',
+        FileType::CharDevice => 'c',
+        FileType::Fifo => 'p',
+        FileType::Socket => 's',
+        _ => 'U',
     }
 }
 
 fn format_directive<'entry>(
-    file_info: &'entry walkdir::DirEntry,
+    file_info: &'entry WalkEntry,
     directive: &FormatDirective,
-    meta_cell: &OnceCell<fs::Metadata>,
 ) -> Result<Cow<'entry, str>, Box<dyn Error>> {
-    let meta = || {
-        meta_cell.get_or_try_init(|| {
-            if file_info.path_is_symlink() && !file_info.file_type().is_symlink() {
-                // The file_info already followed the symlink, meaning that the
-                // metadata will be for the target file, which isn't the
-                // behavior we want, so manually re-compute the metadata for the
-                // symlink itself instead.
-                file_info.path().symlink_metadata()
-            } else {
-                file_info.metadata().map_err(std::convert::Into::into)
-            }
-        })
-    };
+    let meta = || file_info.metadata();
 
     // NOTE ON QUOTING:
     // GNU find's man page claims that several directives that print names (like
@@ -556,17 +535,10 @@ fn format_directive<'entry>(
 
         FormatDirective::Type { follow_links } => if file_info.path_is_symlink() {
             if *follow_links {
-                match file_info.path().metadata() {
-                    Ok(meta) => format_non_link_file_type(meta.file_type()),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => 'N',
-                    // The ErrorKinds corresponding to ELOOP and ENOTDIR are
-                    // nightly-only:
-                    // https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.FilesystemLoop
-                    // so we need to use the raw errno values instead.
-                    #[cfg(unix)]
-                    Err(e) if e.raw_os_error().unwrap_or(0) == uucore::libc::ENOTDIR => 'N',
-                    #[cfg(unix)]
-                    Err(e) if e.raw_os_error().unwrap_or(0) == uucore::libc::ELOOP => 'L',
+                match file_info.path().metadata().map_err(WalkError::from) {
+                    Ok(meta) => format_non_link_file_type(meta.file_type().into()),
+                    Err(e) if e.is_not_found() => 'N',
+                    Err(e) if e.is_loop() => 'L',
                     Err(_) => '?',
                 }
             } else {
@@ -610,11 +582,8 @@ impl Printf {
 }
 
 impl Matcher for Printf {
-    fn matches(&self, file_info: &walkdir::DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let mut out = matcher_io.deps.get_output().borrow_mut();
-        // The metadata is computed lazily, so that anything being printed
-        // without needing metadata won't incur any performance overhead.
-        let meta_cell = OnceCell::new();
 
         for component in &self.format.components {
             match component {
@@ -624,7 +593,7 @@ impl Matcher for Printf {
                     directive,
                     width,
                     justify,
-                } => match format_directive(file_info, directive, &meta_cell) {
+                } => match format_directive(file_info, directive) {
                     Ok(content) => {
                         if let Some(width) = width {
                             match justify {
@@ -1110,12 +1079,12 @@ mod tests {
         let new_file_name = "newFile";
         let file = File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
 
-        let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
-        let deps = FakeDependencies::new();
-
-        let mut perms = file_info.metadata().unwrap().permissions();
+        let mut perms = file.metadata().unwrap().permissions();
         perms.set_mode(0o755);
         file.set_permissions(perms).unwrap();
+
+        let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
+        let deps = FakeDependencies::new();
 
         let matcher = Printf::new("%m %M").unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));

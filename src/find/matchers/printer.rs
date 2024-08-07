@@ -4,9 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use walkdir::DirEntry;
-
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 pub enum PrintDelimiter {
     Newline,
@@ -34,7 +32,7 @@ impl Printer {
 }
 
 impl Matcher for Printer {
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let mut out = matcher_io.deps.get_output().borrow_mut();
         write!(
             out,

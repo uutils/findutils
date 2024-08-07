@@ -7,10 +7,10 @@
 use std::cell::RefCell;
 use std::env;
 use std::io::{Cursor, Read, Write};
+use std::path::Path;
 use std::time::SystemTime;
-use walkdir::{DirEntry, WalkDir};
 
-use findutils::find::matchers::MatcherIO;
+use findutils::find::matchers::{MatcherIO, WalkEntry};
 use findutils::find::Dependencies;
 
 /// A copy of `find::tests::FakeDependencies`.
@@ -80,15 +80,21 @@ pub fn fix_up_slashes(path: &str) -> String {
     path.to_string()
 }
 
-/// A copy of `find::tests::FakeDependencies`.
+/// A copy of `find::matchers::tests::get_dir_entry_for`.
 /// TODO: find out how to share #[cfg(test)] functions/structs between unit
 /// and integration tests.
-pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
-    for wrapped_dir_entry in WalkDir::new(fix_up_slashes(directory)) {
-        let dir_entry = wrapped_dir_entry.unwrap();
-        if dir_entry.file_name().to_string_lossy() == filename {
-            return dir_entry;
-        }
-    }
-    panic!("Couldn't find {directory} in {filename}");
+pub fn get_dir_entry_for(root: &str, path: &str) -> WalkEntry {
+    let root = fix_up_slashes(root);
+    let root = Path::new(&root);
+
+    let path = fix_up_slashes(path);
+    let path = if path.is_empty() {
+        root.to_owned()
+    } else {
+        root.join(path)
+    };
+
+    let depth = path.components().count() - root.components().count();
+
+    WalkEntry::new(path, depth, false)
 }
