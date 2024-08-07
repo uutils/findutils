@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 use chrono::DateTime;
-use nix::unistd::{Gid, Group, Uid, User};
 use std::{
     fs::File,
     io::{stderr, Write},
@@ -47,6 +46,32 @@ fn format_permissions(mode: u32) -> String {
     format!("{}{}{}{}", file_type, user_perms, group_perms, other_perms)
 }
 
+#[cfg(windows)]
+fn format_permissions(file_attributes: u32) -> String {
+    let mut attributes = Vec::new();
+
+    if file_attributes & 0x0001 != 0 {
+        attributes.push("read-only");
+    }
+    if file_attributes & 0x0002 != 0 {
+        attributes.push("hidden");
+    }
+    if file_attributes & 0x0004 != 0 {
+        attributes.push("system");
+    }
+    if file_attributes & 0x0020 != 0 {
+        attributes.push("archive");
+    }
+    if file_attributes & 0x0040 != 0 {
+        attributes.push("compressed");
+    }
+    if file_attributes & 0x0080 != 0 {
+        attributes.push("offline");
+    }
+
+    attributes.join(", ")
+}
+
 pub struct Ls {
     output_file: Option<File>,
 }
@@ -58,6 +83,7 @@ impl Ls {
 
     #[cfg(unix)]
     fn print(&self, file_info: &DirEntry, mut out: impl Write, print_error_message: bool) {
+        use nix::unistd::{Gid, Group, Uid, User};
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
         let metadata = file_info.metadata().unwrap();
@@ -126,7 +152,67 @@ impl Ls {
     }
 
     #[cfg(windows)]
-    fn print(&self, file_info: &DirEntry, mut out: impl Write, print_error_message: bool) {}
+    fn print(&self, file_info: &DirEntry, mut out: impl Write, print_error_message: bool) {
+        use std::os::windows::fs::MetadataExt;
+
+        let metadata = file_info.metadata().unwrap();
+
+        let inode_number = 0;
+        let number_of_blocks = {
+            let size = metadata.file_size();
+            let number_of_blocks = size / 1024;
+            let remainder = number_of_blocks % 4;
+
+            if remainder == 0 {
+                if number_of_blocks == 0 {
+                    4
+                } else {
+                    number_of_blocks
+                }
+            } else {
+                number_of_blocks + (4 - (remainder))
+            }
+        };
+        let permission = { format_permissions(metadata.file_attributes()) };
+        let hard_links = 0;
+        let user = 0;
+        let group = 0;
+        let size = metadata.file_size();
+        let last_modified = {
+            let system_time = metadata.modified().unwrap();
+            let now_utc: DateTime<chrono::Utc> = system_time.into();
+            now_utc.format("%b %e %H:%M")
+        };
+        let path = file_info.path().to_string_lossy();
+
+        match write!(
+            out,
+            " {:<4} {:>6} {:<10} {:>3} {:<8} {:<8} {:>8} {} {}\n",
+            inode_number,
+            number_of_blocks,
+            permission,
+            hard_links,
+            user,
+            group,
+            size,
+            last_modified,
+            path,
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                if print_error_message {
+                    writeln!(
+                        &mut stderr(),
+                        "Error writing {:?} for {}",
+                        file_info.path().to_string_lossy(),
+                        e
+                    )
+                    .unwrap();
+                    uucore::error::set_exit_code(1);
+                }
+            }
+        }
+    }
 }
 
 impl Matcher for Ls {
