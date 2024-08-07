@@ -7,6 +7,7 @@
 mod access;
 mod delete;
 mod empty;
+mod entry;
 pub mod exec;
 pub mod fs;
 mod glob;
@@ -36,7 +37,6 @@ use std::fs::File;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
-use walkdir::DirEntry;
 
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
@@ -67,6 +67,8 @@ use self::type_matcher::TypeMatcher;
 use self::user::{NoUserMatcher, UserMatcher};
 
 use super::{Config, Dependencies};
+
+pub use entry::{FileType, WalkEntry, WalkError};
 
 /// Struct holding references to outputs and any inputs that can't be derived
 /// from the file/directory info.
@@ -134,7 +136,7 @@ pub trait Matcher: 'static {
     }
 
     /// Returns whether the given file matches the object's predicate.
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool;
+    fn matches(&self, entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool;
 
     /// Returns whether the matcher has any side-effects (e.g. executing a
     /// command, deleting a file). Iff no such matcher exists in the chain, then
@@ -160,8 +162,8 @@ impl Matcher for Box<dyn Matcher> {
         self
     }
 
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        (**self).matches(file_info, matcher_io)
+    fn matches(&self, entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
+        (**self).matches(entry, matcher_io)
     }
 
     fn has_side_effects(&self) -> bool {
@@ -851,25 +853,23 @@ mod tests {
     use super::*;
     use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
-    use walkdir::WalkDir;
 
-    /// Helper function for tests to get a `DirEntry` object. directory should
+    /// Helper function for tests to get a [WalkEntry] object. root should
     /// probably be a string starting with `test_data/` (cargo's tests run with
     /// a working directory set to the root findutils folder).
-    pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
-        for wrapped_dir_entry in WalkDir::new(fix_up_slashes(directory)) {
-            let dir_entry = wrapped_dir_entry.unwrap();
-            if dir_entry
-                .path()
-                .strip_prefix(directory)
-                .unwrap()
-                .to_string_lossy()
-                == fix_up_slashes(filename)
-            {
-                return dir_entry;
-            }
-        }
-        panic!("Couldn't find {filename} in {directory}");
+    pub fn get_dir_entry_for(root: &str, path: &str) -> WalkEntry {
+        let root = fix_up_slashes(root);
+        let root = Path::new(&root);
+
+        let path = fix_up_slashes(path);
+        let path = if path.is_empty() {
+            root.to_owned()
+        } else {
+            root.join(path)
+        };
+
+        let depth = path.components().count() - root.components().count();
+        WalkEntry::new(path, depth, false)
     }
 
     #[test]

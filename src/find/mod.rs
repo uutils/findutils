@@ -6,6 +6,7 @@
 
 pub mod matchers;
 
+use matchers::WalkEntry;
 use std::cell::RefCell;
 use std::error::Error;
 use std::io::{stderr, stdout, Write};
@@ -160,10 +161,10 @@ fn process_dir(
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
     while let Some(result) = it.next() {
-        match result {
+        match WalkEntry::try_from(result) {
             Err(err) => {
                 ret = 1;
-                writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap()
+                writeln!(&mut stderr(), "Error: {err}").unwrap()
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);

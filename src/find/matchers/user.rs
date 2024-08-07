@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use super::Matcher;
+use super::{Matcher, MatcherIO, WalkEntry};
 
 #[cfg(unix)]
 use nix::unistd::User;
@@ -57,8 +57,8 @@ impl UserMatcher {
 
 impl Matcher for UserMatcher {
     #[cfg(unix)]
-    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
-        let Ok(metadata) = file_info.path().metadata() else {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        let Ok(metadata) = file_info.metadata() else {
             return false;
         };
 
@@ -71,7 +71,7 @@ impl Matcher for UserMatcher {
     }
 
     #[cfg(windows)]
-    fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+    fn matches(&self, _file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         false
     }
 }
@@ -80,14 +80,14 @@ pub struct NoUserMatcher {}
 
 impl Matcher for NoUserMatcher {
     #[cfg(unix)]
-    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         use nix::unistd::Uid;
 
         if file_info.path().is_symlink() {
             return false;
         }
 
-        let Ok(metadata) = file_info.path().metadata() else {
+        let Ok(metadata) = file_info.metadata() else {
             return true;
         };
 
@@ -103,7 +103,7 @@ impl Matcher for NoUserMatcher {
     }
 
     #[cfg(windows)]
-    fn matches(&self, _file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+    fn matches(&self, _file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         false
     }
 }
@@ -128,7 +128,7 @@ mod tests {
         let foo_path = temp_dir.path().join("foo");
         let _ = File::create(foo_path).expect("create temp file");
         let file_info = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "foo");
-        let file_uid = file_info.path().metadata().unwrap().uid();
+        let file_uid = file_info.metadata().unwrap().uid();
         let file_user = User::from_uid(Uid::from_raw(file_uid))
             .unwrap()
             .unwrap()

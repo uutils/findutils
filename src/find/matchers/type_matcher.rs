@@ -5,30 +5,24 @@
 // https://opensource.org/licenses/MIT.
 
 use std::error::Error;
-use std::fs::FileType;
-use walkdir::DirEntry;
 
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
-
-use super::{Matcher, MatcherIO};
+use super::{FileType, Matcher, MatcherIO, WalkEntry};
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
-    file_type_fn: fn(&FileType) -> bool,
+    file_type: FileType,
 }
 
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        #[cfg(unix)]
-        let function = match type_string {
-            "f" => FileType::is_file,
-            "d" => FileType::is_dir,
-            "l" => FileType::is_symlink,
-            "b" => FileType::is_block_device,
-            "c" => FileType::is_char_device,
-            "p" => FileType::is_fifo, // named pipe (FIFO)
-            "s" => FileType::is_socket,
+        let file_type = match type_string {
+            "f" => FileType::Regular,
+            "d" => FileType::Directory,
+            "l" => FileType::Symlink,
+            "b" => FileType::BlockDevice,
+            "c" => FileType::CharDevice,
+            "p" => FileType::Fifo, // named pipe (FIFO)
+            "s" => FileType::Socket,
             // D: door (Solaris)
             "D" => {
                 return Err(From::from(format!(
@@ -41,27 +35,13 @@ impl TypeMatcher {
                 )))
             }
         };
-        #[cfg(not(unix))]
-        let function = match type_string {
-            "f" => FileType::is_file,
-            "d" => FileType::is_dir,
-            "l" => FileType::is_symlink,
-            _ => {
-                return Err(From::from(format!(
-                    "Unrecognised type argument {}",
-                    type_string
-                )))
-            }
-        };
-        Ok(Self {
-            file_type_fn: function,
-        })
+        Ok(Self { file_type })
     }
 }
 
 impl Matcher for TypeMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        (self.file_type_fn)(&file_info.file_type())
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        file_info.file_type() == self.file_type
     }
 }
 

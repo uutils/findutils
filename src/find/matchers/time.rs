@@ -8,12 +8,11 @@ use std::error::Error;
 use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use walkdir::DirEntry;
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
-use super::{ComparableValue, Matcher, MatcherIO};
+use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
 
 const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 
@@ -44,7 +43,7 @@ impl NewerMatcher {
 
     /// Implementation of matches that returns a result, allowing use to use try!
     /// to deal with the errors.
-    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = file_info.metadata()?.modified()?;
         // duration_since returns an Ok duration if this_time <= given_modification_time
         // and returns an Err (with a duration) otherwise. So if this_time >
@@ -58,7 +57,7 @@ impl NewerMatcher {
 }
 
 impl Matcher for NewerMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         match self.matches_impl(file_info) {
             Err(e) => {
                 writeln!(
@@ -100,7 +99,7 @@ impl NewerOptionType {
         }
     }
 
-    fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
+    fn get_file_time(self, metadata: &Metadata) -> std::io::Result<SystemTime> {
         match self {
             NewerOptionType::Accessed => metadata.accessed(),
             NewerOptionType::Birthed => metadata.created(),
@@ -134,7 +133,7 @@ impl NewerOptionMatcher {
         })
     }
 
-    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
         let x_option_time = self.x_option.get_file_time(file_info.metadata()?)?;
         let y_option_time = self.y_option.get_file_time(file_info.metadata()?)?;
 
@@ -150,7 +149,7 @@ impl NewerOptionMatcher {
 }
 
 impl Matcher for NewerOptionMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         match self.matches_impl(file_info) {
             Err(e) => {
                 writeln!(
@@ -184,7 +183,7 @@ impl NewerTimeMatcher {
         }
     }
 
-    fn matches_impl(&self, file_info: &DirEntry) -> Result<bool, Box<dyn Error>> {
+    fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
         let timestamp = this_time
             .duration_since(UNIX_EPOCH)
@@ -201,7 +200,7 @@ impl NewerTimeMatcher {
 }
 
 impl Matcher for NewerTimeMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         match self.matches_impl(file_info) {
             Err(e) => {
                 writeln!(
@@ -256,7 +255,7 @@ pub enum FileTimeType {
 }
 
 impl FileTimeType {
-    fn get_file_time(self, metadata: Metadata) -> std::io::Result<SystemTime> {
+    fn get_file_time(self, metadata: &Metadata) -> std::io::Result<SystemTime> {
         match self {
             FileTimeType::Accessed => metadata.accessed(),
             FileTimeType::Changed => metadata.changed(),
@@ -274,7 +273,7 @@ pub struct FileTimeMatcher {
 }
 
 impl Matcher for FileTimeMatcher {
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let start_time = get_time(matcher_io, self.today_start);
         match self.matches_impl(file_info, start_time) {
             Err(e) => {
@@ -298,7 +297,7 @@ impl FileTimeMatcher {
     /// to deal with the errors.
     fn matches_impl(
         &self,
-        file_info: &DirEntry,
+        file_info: &WalkEntry,
         start_time: SystemTime,
     ) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
@@ -347,7 +346,7 @@ pub struct FileAgeRangeMatcher {
 }
 
 impl Matcher for FileAgeRangeMatcher {
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let start_time = get_time(matcher_io, self.today_start);
         match self.matches_impl(file_info, start_time) {
             Err(e) => {
@@ -369,7 +368,7 @@ impl Matcher for FileAgeRangeMatcher {
 impl FileAgeRangeMatcher {
     fn matches_impl(
         &self,
-        file_info: &DirEntry,
+        file_info: &WalkEntry,
         start_time: SystemTime,
     ) -> Result<bool, Box<dyn Error>> {
         let this_time = self.file_time_type.get_file_time(file_info.metadata()?)?;
@@ -677,7 +676,7 @@ mod tests {
 
     /// helper function for `file_time_matcher_modified_changed_accessed`
     fn test_matcher_for_file_time_type(
-        file_info: &DirEntry,
+        file_info: &WalkEntry,
         file_time: SystemTime,
         file_time_type: FileTimeType,
     ) {
@@ -733,30 +732,6 @@ mod tests {
                         .matches(&new_file, &mut deps.new_matcher_io()),
                     "new_file should be newer than old_dir"
                 );
-
-                // After the file is deleted, DirEntry will point to an empty file location,
-                // thus causing the Matcher to generate an IO error after matching.
-                //
-                // Note: This test is nondeterministic on Windows,
-                // because fs::remove_file may not actually remove the file from
-                // the file system even if it returns Ok.
-                // Therefore, this test will only be performed on Linux/Unix.
-                let _ = fs::remove_file(&*new_file.path().to_string_lossy());
-
-                #[cfg(unix)]
-                {
-                    let matcher = NewerOptionMatcher::new(
-                        x_option.to_string(),
-                        y_option.to_string(),
-                        &old_file.path().to_string_lossy(),
-                    );
-                    assert!(
-                        !matcher
-                            .unwrap()
-                            .matches(&new_file, &mut deps.new_matcher_io()),
-                        "The correct situation is that the file reading here cannot be successful."
-                    );
-                }
             }
         }
     }
@@ -836,29 +811,6 @@ mod tests {
                 inode_changed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
                 "file inode changed time should after 'std_time'"
             );
-
-            // After the file is deleted, DirEntry will point to an empty file location,
-            // thus causing the Matcher to generate an IO error after matching.
-            //
-            // Note: This test is nondeterministic on Windows,
-            // because fs::remove_file may not actually remove the file from
-            // the file system even if it returns Ok.
-            // Therefore, this test will only be performed on Linux/Unix.
-            let _ = fs::remove_file(&*file_info.path().to_string_lossy());
-
-            let matchers = [
-                &created_matcher,
-                &accessed_matcher,
-                &modified_matcher,
-                &inode_changed_matcher,
-            ];
-
-            for matcher in &matchers {
-                assert!(
-                    !matcher.matches(&file_info, &mut deps.new_matcher_io()),
-                    "The correct situation is that the file reading here cannot be successful."
-                );
-            }
         }
     }
 
