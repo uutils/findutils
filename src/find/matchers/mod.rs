@@ -621,7 +621,8 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 let path = args[i];
-                let matcher = SameFileMatcher::new(path).map_err(|e| format!("{path}: {e}"))?;
+                let matcher = SameFileMatcher::new(path, config.follow)
+                    .map_err(|e| format!("{path}: {e}"))?;
                 Some(matcher.into_box())
             }
             "-user" => {
@@ -904,6 +905,11 @@ mod tests {
     /// probably be a string starting with `test_data/` (cargo's tests run with
     /// a working directory set to the root findutils folder).
     pub fn get_dir_entry_for(root: &str, path: &str) -> WalkEntry {
+        get_dir_entry_follow(root, path, Follow::Never)
+    }
+
+    /// Get a [WalkEntry] with an explicit [Follow] flag.
+    pub fn get_dir_entry_follow(root: &str, path: &str, follow: Follow) -> WalkEntry {
         let root = fix_up_slashes(root);
         let root = Path::new(&root);
 
@@ -915,7 +921,7 @@ mod tests {
         };
 
         let depth = path.components().count() - root.components().count();
-        WalkEntry::new(path, depth, Follow::Never)
+        WalkEntry::new(path, depth, follow)
     }
 
     #[test]
