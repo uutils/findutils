@@ -516,7 +516,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(NewerMatcher::new(args[i])?.into_box())
+                Some(NewerMatcher::new(args[i], config.follow)?.into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {

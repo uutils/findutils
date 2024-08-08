@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
-use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
+use super::{ComparableValue, Follow, Matcher, MatcherIO, WalkEntry};
 
 const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 
@@ -34,8 +34,8 @@ pub struct NewerMatcher {
 }
 
 impl NewerMatcher {
-    pub fn new(path_to_file: &str) -> Result<Self, Box<dyn Error>> {
-        let metadata = fs::metadata(path_to_file)?;
+    pub fn new(path_to_file: &str, follow: Follow) -> Result<Self, Box<dyn Error>> {
+        let metadata = follow.root_metadata(path_to_file)?;
         Ok(Self {
             given_modification_time: metadata.modified()?,
         })
@@ -420,9 +420,13 @@ mod tests {
 
         let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
 
-        let matcher_for_new =
-            NewerMatcher::new(&temp_dir.path().join(new_file_name).to_string_lossy()).unwrap();
-        let matcher_for_old = NewerMatcher::new(&old_file.path().to_string_lossy()).unwrap();
+        let matcher_for_new = NewerMatcher::new(
+            &temp_dir.path().join(new_file_name).to_string_lossy(),
+            Follow::Never,
+        )
+        .unwrap();
+        let matcher_for_old =
+            NewerMatcher::new(&old_file.path().to_string_lossy(), Follow::Never).unwrap();
         let deps = FakeDependencies::new();
 
         assert!(
