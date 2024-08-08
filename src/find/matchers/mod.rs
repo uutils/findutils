@@ -63,7 +63,7 @@ use self::time::{
     FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
     NewerOptionType, NewerTimeMatcher,
 };
-use self::type_matcher::TypeMatcher;
+use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
 
 use super::{Config, Dependencies};
@@ -88,6 +88,22 @@ impl Follow {
             Follow::Never => false,
             Follow::Roots => depth == 0,
             Follow::Always => true,
+        }
+    }
+
+    /// Get metadata for a [WalkEntry].
+    pub fn metadata(self, entry: &WalkEntry) -> Result<Metadata, WalkError> {
+        if self.follow_at_depth(entry.depth()) == entry.follow() {
+            // Same follow flag, re-use cached metadata
+            entry.metadata().cloned()
+        } else if !entry.follow() && !entry.file_type().is_symlink() {
+            // Not a symlink, re-use cached metadata
+            entry.metadata().cloned()
+        } else if entry.follow() && entry.file_type().is_symlink() {
+            // Broken symlink, re-use cached metadata
+            entry.metadata().cloned()
+        } else {
+            self.metadata_at_depth(entry.path(), entry.depth())
         }
     }
 
@@ -498,6 +514,13 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(TypeMatcher::new(args[i])?.into_box())
+            }
+            "-xtype" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(XtypeMatcher::new(args[i])?.into_box())
             }
             "-fstype" => {
                 if i >= args.len() - 1 {
