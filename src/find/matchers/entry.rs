@@ -125,6 +125,15 @@ impl WalkError {
 
         false
     }
+
+    /// Check for ErrorKind::FilesystemLoop.
+    pub fn is_loop(&self) -> bool {
+        #[cfg(unix)]
+        return self.raw == Some(uucore::libc::ELOOP);
+
+        #[cfg(not(unix))]
+        return false;
+    }
 }
 
 impl Display for WalkError {

@@ -6,35 +6,40 @@
 
 use std::error::Error;
 
-use super::{FileType, Matcher, MatcherIO, WalkEntry};
+use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
     file_type: FileType,
 }
 
+fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
+    let file_type = match type_string {
+        "f" => FileType::Regular,
+        "d" => FileType::Directory,
+        "l" => FileType::Symlink,
+        "b" => FileType::BlockDevice,
+        "c" => FileType::CharDevice,
+        "p" => FileType::Fifo, // named pipe (FIFO)
+        "s" => FileType::Socket,
+        // D: door (Solaris)
+        "D" => {
+            return Err(From::from(format!(
+                "Type argument {type_string} not supported yet"
+            )))
+        }
+        _ => {
+            return Err(From::from(format!(
+                "Unrecognised type argument {type_string}"
+            )))
+        }
+    };
+    Ok(file_type)
+}
+
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let file_type = match type_string {
-            "f" => FileType::Regular,
-            "d" => FileType::Directory,
-            "l" => FileType::Symlink,
-            "b" => FileType::BlockDevice,
-            "c" => FileType::CharDevice,
-            "p" => FileType::Fifo, // named pipe (FIFO)
-            "s" => FileType::Socket,
-            // D: door (Solaris)
-            "D" => {
-                return Err(From::from(format!(
-                    "Type argument {type_string} not supported yet"
-                )))
-            }
-            _ => {
-                return Err(From::from(format!(
-                    "Unrecognised type argument {type_string}"
-                )))
-            }
-        };
+        let file_type = parse(type_string)?;
         Ok(Self { file_type })
     }
 }
@@ -45,10 +50,44 @@ impl Matcher for TypeMatcher {
     }
 }
 
+/// Like [TypeMatcher], but toggles whether symlinks are followed.
+pub struct XtypeMatcher {
+    file_type: FileType,
+}
+
+impl XtypeMatcher {
+    pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
+        let file_type = parse(type_string)?;
+        Ok(Self { file_type })
+    }
+}
+
+impl Matcher for XtypeMatcher {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        let follow = if file_info.follow() {
+            Follow::Never
+        } else {
+            Follow::Always
+        };
+
+        let file_type = follow
+            .metadata(file_info)
+            .map(|m| m.file_type())
+            .map(FileType::from);
+
+        match file_type {
+            Ok(file_type) if file_type == self.file_type => true,
+            // Since GNU find 4.10, ELOOP will match -xtype l
+            Err(e) if self.file_type.is_symlink() && e.is_loop() => true,
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::tests::{get_dir_entry_follow, get_dir_entry_for};
     use crate::find::tests::FakeDependencies;
     use std::io::ErrorKind;
 
@@ -148,5 +187,52 @@ mod tests {
     fn cant_create_with_invalid_pattern() {
         let result = TypeMatcher::new("xxx");
         assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xtype_file() {
+        let matcher = XtypeMatcher::new("f").unwrap();
+        let deps = FakeDependencies::new();
+
+        let entry = get_dir_entry_follow("test_data/links", "abbbc", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Always);
+        assert!(!matcher.matches(&entry, &mut deps.new_matcher_io()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xtype_link() {
+        let matcher = XtypeMatcher::new("l").unwrap();
+        let deps = FakeDependencies::new();
+
+        let entry = get_dir_entry_follow("test_data/links", "abbbc", Follow::Never);
+        assert!(!matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Never);
+        assert!(!matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-missing", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-notdir", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Always);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xtype_loop() {
+        let matcher = XtypeMatcher::new("l").unwrap();
+        let entry = get_dir_entry_for("test_data/links", "link-loop");
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
     }
 }
