@@ -9,9 +9,8 @@
 
 use std::fs;
 use std::io::{self, stderr, Write};
-use std::path::Path;
 
-use super::{FileType, Matcher, MatcherIO, WalkEntry};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 pub struct DeleteMatcher;
 
@@ -20,17 +19,17 @@ impl DeleteMatcher {
         DeleteMatcher
     }
 
-    fn delete(&self, file_path: &Path, file_type: FileType) -> io::Result<()> {
-        if file_type.is_dir() {
-            fs::remove_dir(file_path)
+    fn delete(&self, entry: &WalkEntry) -> io::Result<()> {
+        if entry.file_type().is_dir() && !entry.path_is_symlink() {
+            fs::remove_dir(entry.path())
         } else {
-            fs::remove_file(file_path)
+            fs::remove_file(entry.path())
         }
     }
 }
 
 impl Matcher for DeleteMatcher {
-    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let path = file_info.path();
         let path_str = path.to_string_lossy();
 
@@ -41,9 +40,10 @@ impl Matcher for DeleteMatcher {
             return true;
         }
 
-        match self.delete(path, file_info.file_type()) {
+        match self.delete(file_info) {
             Ok(()) => true,
             Err(e) => {
+                matcher_io.set_exit_code(1);
                 writeln!(&mut stderr(), "Failed to delete {path_str}: {e}").unwrap();
                 false
             }
