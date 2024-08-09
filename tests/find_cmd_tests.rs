@@ -530,6 +530,7 @@ fn find_accessible() {
         .stdout(predicate::str::contains("abbbc").not());
 }
 
+#[serial(working_dir)]
 #[test]
 fn find_time() {
     let args = ["1", "+1", "-1"];
