@@ -946,3 +946,14 @@ fn find_daystart() {
         .success()
         .stderr(predicate::str::is_empty());
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_ls() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-ls"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}

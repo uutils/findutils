@@ -13,6 +13,7 @@ mod glob;
 mod group;
 mod lname;
 mod logical_matchers;
+mod ls;
 mod name;
 mod path;
 mod perm;
@@ -32,6 +33,8 @@ mod user;
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
+use ls::Ls;
+use std::fs::File;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
@@ -339,6 +342,13 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
+/// Creates a file if it doesn't exist.
+/// If it does exist, it will be overwritten.
+fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
+    let file = File::create(path)?;
+    Ok(file)
+}
+
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -369,6 +379,16 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(Printf::new(args[i])?.into_box())
+            }
+            "-ls" => Some(Ls::new(None).into_box()),
+            "-fls" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+
+                let file = get_or_create_file(args[i])?;
+                Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
             "-false" => Some(FalseMatcher.into_box()),
