@@ -9,7 +9,7 @@ use std::{
     io::{stderr, Write},
 };
 
-use super::Matcher;
+use super::{Matcher, MatcherIO, WalkEntry};
 
 pub struct EmptyMatcher;
 
@@ -20,7 +20,7 @@ impl EmptyMatcher {
 }
 
 impl Matcher for EmptyMatcher {
-    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         if file_info.file_type().is_file() {
             match file_info.metadata() {
                 Ok(meta) => meta.len() == 0,

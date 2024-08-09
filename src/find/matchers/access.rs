@@ -5,9 +5,8 @@
 // https://opensource.org/licenses/MIT.
 
 use faccess::PathExt;
-use walkdir::DirEntry;
 
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 /// Matcher for -{read,writ,execut}able.
 pub enum AccessMatcher {
@@ -17,7 +16,7 @@ pub enum AccessMatcher {
 }
 
 impl Matcher for AccessMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let path = file_info.path();
 
         match self {

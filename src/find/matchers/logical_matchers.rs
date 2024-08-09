@@ -11,9 +11,8 @@
 //! to "-foo -o ( -bar -baz )", not "( -foo -o -bar ) -baz").
 use std::error::Error;
 use std::path::Path;
-use walkdir::DirEntry;
 
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 /// This matcher contains a collection of other matchers. A file only matches
 /// if it matches ALL the contained sub-matchers. For sub-matchers that have
@@ -33,7 +32,7 @@ impl Matcher for AndMatcher {
     /// Returns true if all sub-matchers return true. Short-circuiting does take
     /// place. If the nth sub-matcher returns false, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         for matcher in &self.submatchers {
             if !matcher.matches(dir_entry, matcher_io) {
                 return false;
@@ -109,7 +108,7 @@ impl Matcher for OrMatcher {
     /// Returns true if any sub-matcher returns true. Short-circuiting does take
     /// place. If the nth sub-matcher returns true, then we immediately return
     /// and don't make any further calls.
-    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         for matcher in &self.submatchers {
             if matcher.matches(dir_entry, matcher_io) {
                 return true;
@@ -206,7 +205,7 @@ impl ListMatcher {
 impl Matcher for ListMatcher {
     /// Calls matches on all submatcher objects, with no short-circuiting.
     /// Returns the result of the call to the final submatcher
-    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let mut rc = false;
         for matcher in &self.submatchers {
             rc = matcher.matches(dir_entry, matcher_io);
@@ -311,7 +310,7 @@ impl ListMatcherBuilder {
 pub struct TrueMatcher;
 
 impl Matcher for TrueMatcher {
-    fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, _dir_entry: &WalkEntry, _: &mut MatcherIO) -> bool {
         true
     }
 }
@@ -320,7 +319,7 @@ impl Matcher for TrueMatcher {
 pub struct FalseMatcher;
 
 impl Matcher for FalseMatcher {
-    fn matches(&self, _dir_entry: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, _dir_entry: &WalkEntry, _: &mut MatcherIO) -> bool {
         false
     }
 }
@@ -339,7 +338,7 @@ impl NotMatcher {
 }
 
 impl Matcher for NotMatcher {
-    fn matches(&self, dir_entry: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, dir_entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         !self.submatcher.matches(dir_entry, matcher_io)
     }
 
@@ -370,7 +369,7 @@ mod tests {
     pub struct HasSideEffects;
 
     impl Matcher for HasSideEffects {
-        fn matches(&self, _: &DirEntry, _: &mut MatcherIO) -> bool {
+        fn matches(&self, _: &WalkEntry, _: &mut MatcherIO) -> bool {
             false
         }
 
@@ -383,7 +382,7 @@ mod tests {
     struct Counter(Rc<RefCell<u32>>);
 
     impl Matcher for Counter {
-        fn matches(&self, _: &DirEntry, _: &mut MatcherIO) -> bool {
+        fn matches(&self, _: &WalkEntry, _: &mut MatcherIO) -> bool {
             *self.0.borrow_mut() += 1;
             true
         }

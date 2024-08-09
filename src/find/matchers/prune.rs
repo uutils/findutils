@@ -4,9 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use walkdir::DirEntry;
-
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 /// This matcher checks the type of the file.
 pub struct PruneMatcher;
@@ -18,7 +16,7 @@ impl PruneMatcher {
 }
 
 impl Matcher for PruneMatcher {
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if file_info.file_type().is_dir() {
             matcher_io.mark_current_dir_to_be_skipped();
         }

@@ -12,9 +12,8 @@ use std::error::Error;
 use std::io::{stderr, Write};
 #[cfg(unix)]
 use uucore::mode::{parse_numeric, parse_symbolic};
-use walkdir::DirEntry;
 
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg(unix)]
@@ -101,7 +100,7 @@ impl PermMatcher {
 
 impl Matcher for PermMatcher {
     #[cfg(unix)]
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         use std::os::unix::fs::PermissionsExt;
         match file_info.metadata() {
             Ok(metadata) => {
@@ -127,7 +126,7 @@ impl Matcher for PermMatcher {
     }
 
     #[cfg(not(unix))]
-    fn matches(&self, _dummy_file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, _dummy_file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         writeln!(
             &mut stderr(),
             "Permission matching not available on this platform!"
