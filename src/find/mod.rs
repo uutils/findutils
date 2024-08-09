@@ -143,8 +143,7 @@ fn process_dir(
     deps: &dyn Dependencies,
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
-) -> u64 {
-    let mut found_count: u64 = 0;
+) -> i32 {
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
@@ -155,20 +154,24 @@ fn process_dir(
         walkdir = walkdir.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     }
 
+    let mut ret = 0;
+
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
     while let Some(result) = it.next() {
         match result {
             Err(err) => {
-                uucore::error::set_exit_code(1);
+                ret = 1;
                 writeln!(&mut stderr(), "Error: {dir}: {err}").unwrap()
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
 
-                if matcher.matches(&entry, &mut matcher_io) {
-                    found_count += 1;
+                matcher.matches(&entry, &mut matcher_io);
+                match matcher_io.exit_code() {
+                    0 => {}
+                    code => ret = code,
                 }
                 if matcher_io.should_quit() {
                     *quit = true;
@@ -180,10 +183,11 @@ fn process_dir(
             }
         }
     }
-    found_count
+
+    ret
 }
 
-fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<u64, Box<dyn Error>> {
+fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
     if paths_and_matcher.config.help_requested {
         print_help();
@@ -194,21 +198,25 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<u64, Box<dyn Error>
         return Ok(0);
     }
 
-    let mut found_count: u64 = 0;
+    let mut ret = 0;
     let mut quit = false;
     for path in paths_and_matcher.paths {
-        found_count += process_dir(
+        let dir_ret = process_dir(
             &path,
             &paths_and_matcher.config,
             deps,
             &*paths_and_matcher.matcher,
             &mut quit,
         );
+        if dir_ret != 0 {
+            ret = dir_ret;
+        }
         if quit {
             break;
         }
     }
-    Ok(found_count)
+
+    Ok(ret)
 }
 
 fn print_help() {
@@ -268,7 +276,7 @@ fn print_version() {
 /// the name of the executable.
 pub fn find_main(args: &[&str], deps: &dyn Dependencies) -> i32 {
     match do_find(&args[1..], deps) {
-        Ok(_) => uucore::error::get_exit_code(),
+        Ok(ret) => ret,
         Err(e) => {
             writeln!(&mut stderr(), "Error: {e}").unwrap();
             1
@@ -1066,10 +1074,6 @@ mod tests {
         let rc = find_main(&["find", "./test_data/no_permission"], &deps);
 
         assert_eq!(rc, 1);
-
-        // Reset the exit code global variable in case we run another test after this one
-        // See https://github.com/uutils/coreutils/issues/5777
-        uucore::error::set_exit_code(0);
 
         if path.exists() {
             let _result = fs::create_dir(path);
