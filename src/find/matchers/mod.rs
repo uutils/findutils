@@ -72,6 +72,7 @@ use super::{Config, Dependencies};
 /// from the file/directory info.
 pub struct MatcherIO<'a> {
     should_skip_dir: bool,
+    exit_code: i32,
     quit: bool,
     deps: &'a dyn Dependencies,
 }
@@ -79,9 +80,10 @@ pub struct MatcherIO<'a> {
 impl<'a> MatcherIO<'a> {
     pub fn new(deps: &dyn Dependencies) -> MatcherIO<'_> {
         MatcherIO {
-            deps,
             should_skip_dir: false,
+            exit_code: 0,
             quit: false,
+            deps,
         }
     }
 
@@ -92,6 +94,15 @@ impl<'a> MatcherIO<'a> {
     #[must_use]
     pub fn should_skip_current_dir(&self) -> bool {
         self.should_skip_dir
+    }
+
+    pub fn set_exit_code(&mut self, code: i32) {
+        self.exit_code = code;
+    }
+
+    #[must_use]
+    pub fn exit_code(&self) -> i32 {
+        self.exit_code
     }
 
     pub fn quit(&mut self) {
