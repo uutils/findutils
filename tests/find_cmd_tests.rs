@@ -948,7 +948,6 @@ fn find_daystart() {
 }
 
 #[test]
-#[serial(working_dir)]
 fn find_follow() {
     Command::cargo_bin("find")
         .expect("found binary")
@@ -960,6 +959,7 @@ fn find_follow() {
 }
 
 #[test]
+#[serial(working_dir)]
 fn find_fprint() {
     let _ = fs::remove_file("test_data/find_fprint");
 
