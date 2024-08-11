@@ -142,7 +142,8 @@ impl Ls {
                 number_of_blocks + (4 - (remainder))
             }
         };
-        let permission = { format_permissions(metadata.permissions().mode()) };
+        let permission =
+            { format_permissions(metadata.permissions().mode() as uucore::libc::mode_t) };
         let hard_links = metadata.nlink();
         let user = {
             let uid = metadata.uid();
