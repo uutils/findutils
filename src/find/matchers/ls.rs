@@ -14,26 +14,32 @@ use super::{Matcher, MatcherIO};
 
 #[cfg(unix)]
 fn format_permissions(mode: u32) -> String {
-    let file_type = match mode & uucore::libc::S_IFMT as u32 {
-        uucore::libc::S_IFDIR => "d",
-        uucore::libc::S_IFREG => "-",
-        _ => "?",
+    let file_type = if mode & (uucore::libc::S_IFMT as uucore::libc::mode_t)
+        == (uucore::libc::S_IFDIR as uucore::libc::mode_t)
+    {
+        "d"
+    } else if mode & (uucore::libc::S_IFMT as uucore::libc::mode_t)
+        == (uucore::libc::S_IFREG as uucore::libc::mode_t)
+    {
+        "-"
+    } else {
+        "?"
     };
 
     // S_$$USR means "user permissions"
     let user_perms = format!(
         "{}{}{}",
-        if mode & uucore::libc::S_IRUSR as u32 != 0 {
+        if mode & (uucore::libc::S_IRUSR as uucore::libc::mode_t) != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IWUSR as u32 != 0 {
+        if mode & (uucore::libc::S_IWUSR as uucore::libc::mode_t) != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IXUSR as u32 != 0 {
+        if mode & (uucore::libc::S_IXUSR as uucore::libc::mode_t) != 0 {
             "x"
         } else {
             "-"
@@ -43,17 +49,17 @@ fn format_permissions(mode: u32) -> String {
     // S_$$GRP means "group permissions"
     let group_perms = format!(
         "{}{}{}",
-        if mode & uucore::libc::S_IRGRP as u32 != 0 {
+        if mode & (uucore::libc::S_IRGRP as uucore::libc::mode_t) != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IWGRP as u32 != 0 {
+        if mode & (uucore::libc::S_IWGRP as uucore::libc::mode_t) != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IXGRP as u32 != 0 {
+        if mode & (uucore::libc::S_IXGRP as uucore::libc::mode_t) != 0 {
             "x"
         } else {
             "-"
@@ -63,17 +69,17 @@ fn format_permissions(mode: u32) -> String {
     // S_$$OTH means "other permissions"
     let other_perms = format!(
         "{}{}{}",
-        if mode & uucore::libc::S_IROTH as u32 != 0 {
+        if mode & (uucore::libc::S_IROTH as uucore::libc::mode_t) != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IWOTH as u32 != 0 {
+        if mode & (uucore::libc::S_IWOTH as uucore::libc::mode_t) != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IXOTH as u32 != 0 {
+        if mode & (uucore::libc::S_IXOTH as uucore::libc::mode_t) != 0 {
             "x"
         } else {
             "-"
