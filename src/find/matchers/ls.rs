@@ -14,7 +14,7 @@ use super::{Matcher, MatcherIO};
 
 #[cfg(unix)]
 fn format_permissions(mode: u32) -> String {
-    let file_type = match mode & uucore::libc::S_IFMT {
+    let file_type = match mode & uucore::libc::S_IFMT as u32 {
         uucore::libc::S_IFDIR => "d",
         uucore::libc::S_IFREG => "-",
         _ => "?",
@@ -23,17 +23,17 @@ fn format_permissions(mode: u32) -> String {
     // S_$$USR means "user permissions"
     let user_perms = format!(
         "{}{}{}",
-        if mode & uucore::libc::S_IRUSR != 0 {
+        if mode & uucore::libc::S_IRUSR as u32 != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IWUSR != 0 {
+        if mode & uucore::libc::S_IWUSR as u32 != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IXUSR != 0 {
+        if mode & uucore::libc::S_IXUSR as u32 != 0 {
             "x"
         } else {
             "-"
@@ -43,17 +43,17 @@ fn format_permissions(mode: u32) -> String {
     // S_$$GRP means "group permissions"
     let group_perms = format!(
         "{}{}{}",
-        if mode & uucore::libc::S_IRGRP != 0 {
+        if mode & uucore::libc::S_IRGRP as u32 != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IWGRP != 0 {
+        if mode & uucore::libc::S_IWGRP as u32 != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IXGRP != 0 {
+        if mode & uucore::libc::S_IXGRP as u32 != 0 {
             "x"
         } else {
             "-"
@@ -63,17 +63,17 @@ fn format_permissions(mode: u32) -> String {
     // S_$$OTH means "other permissions"
     let other_perms = format!(
         "{}{}{}",
-        if mode & uucore::libc::S_IROTH != 0 {
+        if mode & uucore::libc::S_IROTH as u32 != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IWOTH != 0 {
+        if mode & uucore::libc::S_IWOTH as u32 != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & uucore::libc::S_IXOTH != 0 {
+        if mode & uucore::libc::S_IXOTH as u32 != 0 {
             "x"
         } else {
             "-"
