@@ -1317,7 +1317,7 @@ mod tests {
 
         let _ = fs::remove_file("test_data/find_fprint");
     }
-  
+
     #[test]
     #[cfg(unix)]
     fn test_ls() {
