@@ -205,7 +205,7 @@ pub fn build_top_level_matcher(
     if !top_level_matcher.has_side_effects() {
         let mut new_and_matcher = AndMatcherBuilder::new();
         new_and_matcher.new_and_condition(top_level_matcher);
-        new_and_matcher.new_and_condition(Printer::new(PrintDelimiter::Newline));
+        new_and_matcher.new_and_condition(Printer::new(PrintDelimiter::Newline, None));
         return Ok(new_and_matcher.build());
     }
     Ok(top_level_matcher)
@@ -371,14 +371,23 @@ fn build_matcher_tree(
     let mut invert_next_matcher = false;
     while i < args.len() {
         let possible_submatcher = match args[i] {
-            "-print" => Some(Printer::new(PrintDelimiter::Newline).into_box()),
-            "-print0" => Some(Printer::new(PrintDelimiter::Null).into_box()),
+            "-print" => Some(Printer::new(PrintDelimiter::Newline, None).into_box()),
+            "-print0" => Some(Printer::new(PrintDelimiter::Null, None).into_box()),
             "-printf" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
                 Some(Printf::new(args[i])?.into_box())
+            }
+            "-fprint" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+
+                let file = get_or_create_file(args[i])?;
+                Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
             }
             "-ls" => Some(Ls::new(None).into_box()),
             "-fls" => {
@@ -717,7 +726,7 @@ fn build_matcher_tree(
             }
             "-daystart" => {
                 config.today_start = true;
-                None
+                Some(TrueMatcher.into_box())
             }
             "-noleaf" => {
                 // No change of behavior
@@ -1537,5 +1546,31 @@ mod tests {
         build_top_level_matcher(&["(", "-version", "-o", ")", ")"], &mut config)
             .expect("-version should stop parsing");
         assert!(config.version_requested);
+    }
+
+    #[test]
+    fn get_or_create_file_test() {
+        use std::fs;
+
+        // remove file if hard link file exist.
+        // But you can't delete a file that doesn't exist,
+        // so ignore the error returned here.
+        let _ = fs::remove_file("test_data/get_or_create_file_test");
+
+        // test create file
+        let file = get_or_create_file("test_data/get_or_create_file_test");
+        assert!(file.is_ok());
+
+        let file = get_or_create_file("test_data/get_or_create_file_test");
+        assert!(file.is_ok());
+
+        // test error when file no permission
+        #[cfg(unix)]
+        {
+            let result = get_or_create_file("/etc/shadow");
+            assert!(result.is_err());
+        }
+
+        let _ = fs::remove_file("test_data/get_or_create_file_test");
     }
 }
