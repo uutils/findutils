@@ -13,33 +13,27 @@ use walkdir::DirEntry;
 use super::{Matcher, MatcherIO};
 
 #[cfg(unix)]
-fn format_permissions(mode: u32) -> String {
-    let file_type = if mode & (uucore::libc::S_IFMT as uucore::libc::mode_t)
-        == (uucore::libc::S_IFDIR as uucore::libc::mode_t)
-    {
-        "d"
-    } else if mode & (uucore::libc::S_IFMT as uucore::libc::mode_t)
-        == (uucore::libc::S_IFREG as uucore::libc::mode_t)
-    {
-        "-"
-    } else {
-        "?"
+fn format_permissions(mode: uucore::libc::mode_t) -> String {
+    let file_type = match mode & (uucore::libc::S_IFMT as uucore::libc::mode_t) {
+        uucore::libc::S_IFDIR => "d",
+        uucore::libc::S_IFREG => "-",
+        _ => "?",
     };
 
     // S_$$USR means "user permissions"
     let user_perms = format!(
         "{}{}{}",
-        if mode & (uucore::libc::S_IRUSR as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IRUSR != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & (uucore::libc::S_IWUSR as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IWUSR != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & (uucore::libc::S_IXUSR as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IXUSR != 0 {
             "x"
         } else {
             "-"
@@ -49,17 +43,17 @@ fn format_permissions(mode: u32) -> String {
     // S_$$GRP means "group permissions"
     let group_perms = format!(
         "{}{}{}",
-        if mode & (uucore::libc::S_IRGRP as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IRGRP != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & (uucore::libc::S_IWGRP as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IWGRP != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & (uucore::libc::S_IXGRP as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IXGRP != 0 {
             "x"
         } else {
             "-"
@@ -69,17 +63,17 @@ fn format_permissions(mode: u32) -> String {
     // S_$$OTH means "other permissions"
     let other_perms = format!(
         "{}{}{}",
-        if mode & (uucore::libc::S_IROTH as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IROTH != 0 {
             "r"
         } else {
             "-"
         },
-        if mode & (uucore::libc::S_IWOTH as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IWOTH != 0 {
             "w"
         } else {
             "-"
         },
-        if mode & (uucore::libc::S_IXOTH as uucore::libc::mode_t) != 0 {
+        if mode & uucore::libc::S_IXOTH != 0 {
             "x"
         } else {
             "-"
@@ -285,15 +279,15 @@ mod tests {
     fn test_format_permissions() {
         use super::format_permissions;
 
-        let mode = 0o100644;
+        let mode: uucore::libc::mode_t = 0o100644;
         let expected = "-rw-r--r--";
         assert_eq!(format_permissions(mode), expected);
 
-        let mode = 0o040755;
+        let mode: uucore::libc::mode_t = 0o040755;
         let expected = "drwxr-xr-x";
         assert_eq!(format_permissions(mode), expected);
 
-        let mode = 0o100777;
+        let mode: uucore::libc::mode_t = 0o100777;
         let expected = "-rwxrwxrwx";
         assert_eq!(format_permissions(mode), expected);
     }
