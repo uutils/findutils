@@ -4,10 +4,18 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::{borrow::Cow, error::Error, fs, path::Path, time::SystemTime};
+use std::{
+    borrow::Cow,
+    error::Error,
+    fs::{self, File},
+    io::Write,
+    path::Path,
+    time::SystemTime,
+};
 
 use chrono::{format::StrftimeItems, DateTime, Local};
 use once_cell::unsync::OnceCell;
+use walkdir::DirEntry;
 
 use super::{Matcher, MatcherIO};
 
@@ -599,19 +607,18 @@ fn format_directive<'entry>(
 /// find's printf syntax.
 pub struct Printf {
     format: FormatString,
+    output_file: Option<File>,
 }
 
 impl Printf {
-    pub fn new(format: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new(format: &str, output_file: Option<File>) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             format: FormatString::parse(format)?,
+            output_file,
         })
     }
-}
 
-impl Matcher for Printf {
-    fn matches(&self, file_info: &walkdir::DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        let mut out = matcher_io.deps.get_output().borrow_mut();
+    fn print(&self, file_info: &DirEntry, mut out: impl Write) {
         // The metadata is computed lazily, so that anything being printed
         // without needing metadata won't incur any performance overhead.
         let meta_cell = OnceCell::new();
@@ -649,6 +656,16 @@ impl Matcher for Printf {
                     }
                 },
             }
+        }
+    }
+}
+
+impl Matcher for Printf {
+    fn matches(&self, file_info: &walkdir::DirEntry, matcher_io: &mut MatcherIO) -> bool {
+        if let Some(file) = &self.output_file {
+            self.print(file_info, file);
+        } else {
+            self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut());
         }
 
         true
@@ -835,7 +852,7 @@ mod tests {
         let file_info = get_dir_entry_for("test_data/simple", "abbbc");
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%f,%7f,%-7f").unwrap();
+        let matcher = Printf::new("%f,%7f,%-7f", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!("abbbc,  abbbc,abbbc  ", deps.get_output_as_string());
     }
@@ -845,7 +862,7 @@ mod tests {
         let file_info = get_dir_entry_for("test_data/simple", "abbbc");
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%h %H %p %P").unwrap();
+        let matcher = Printf::new("%h %H %p %P", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!(
             format!(
@@ -864,7 +881,7 @@ mod tests {
         let file_info = get_dir_entry_for("test_data/simple", "subdir/ABBBC");
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%h %H %p %P").unwrap();
+        let matcher = Printf::new("%h %H %p %P", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!(
             format!(
@@ -884,7 +901,7 @@ mod tests {
         let file_info_2 = get_dir_entry_for("test_data/depth/1", "2/f2");
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%d.").unwrap();
+        let matcher = Printf::new("%d.", None).unwrap();
         assert!(matcher.matches(&file_info_1, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&file_info_2, &mut deps.new_matcher_io()));
         assert_eq!("1.2.", deps.get_output_as_string());
@@ -896,7 +913,7 @@ mod tests {
         let file_info_d = get_dir_entry_for("test_data/simple", "subdir");
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%y").unwrap();
+        let matcher = Printf::new("%y", None).unwrap();
         assert!(matcher.matches(&file_info_f, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&file_info_d, &mut deps.new_matcher_io()));
         assert_eq!("fd", deps.get_output_as_string());
@@ -924,7 +941,7 @@ mod tests {
         let socket_info = get_dir_entry_for(&temp_dir_path, socket_name);
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%y").unwrap();
+        let matcher = Printf::new("%y", None).unwrap();
         assert!(matcher.matches(&fifo_info, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&socket_info, &mut deps.new_matcher_io()));
         assert_eq!("ps", deps.get_output_as_string());
@@ -935,7 +952,7 @@ mod tests {
         let file_info = get_dir_entry_for("test_data/size", "512bytes");
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%s").unwrap();
+        let matcher = Printf::new("%s", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!("512", deps.get_output_as_string());
     }
@@ -1017,7 +1034,7 @@ mod tests {
 
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%y %Y %l\n").unwrap();
+        let matcher = Printf::new("%y %Y %l\n", None).unwrap();
         assert!(matcher.matches(&regular_file, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
         assert!(matcher.matches(&link_d, &mut deps.new_matcher_io()));
@@ -1064,7 +1081,7 @@ mod tests {
         let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%t,%T@,%TF").unwrap();
+        let matcher = Printf::new("%t,%T@,%TF", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!(
             format!(
@@ -1092,7 +1109,7 @@ mod tests {
         let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%u %U %g %G").unwrap();
+        let matcher = Printf::new("%u %U %g %G", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!(
             format!("{user} {uid} {group} {gid}"),
@@ -1117,7 +1134,7 @@ mod tests {
         perms.set_mode(0o755);
         file.set_permissions(perms).unwrap();
 
-        let matcher = Printf::new("%m %M").unwrap();
+        let matcher = Printf::new("%m %M", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!("755 -rwxr-xr-x", deps.get_output_as_string());
     }

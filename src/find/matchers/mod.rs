@@ -376,7 +376,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(Printf::new(args[i])?.into_box())
+                Some(Printf::new(args[i], None)?.into_box())
             }
             "-fprint" => {
                 if i >= args.len() - 1 {
