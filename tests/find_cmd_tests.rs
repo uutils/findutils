@@ -968,3 +968,30 @@ fn find_fprint() {
 
     let _ = fs::remove_file("test_data/find_fprint");
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_fprintf() {
+    let _ = fs::remove_file("test_data/find_fprintf");
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args([
+            "test_data/simple",
+            "-fprintf",
+            "test_data/find_fprintf",
+            "%h %H %p %P",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    // read test_data/find_fprintf
+    let mut f = File::open("test_data/find_fprintf").unwrap();
+    let mut contents = String::new();
+    f.read_to_string(&mut contents).unwrap();
+    assert!(contents.contains("test_data/simple"));
+
+    let _ = fs::remove_file("test_data/find_fprintf");
+}
