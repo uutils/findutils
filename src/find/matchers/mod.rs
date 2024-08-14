@@ -7,6 +7,7 @@
 mod access;
 mod delete;
 mod empty;
+mod entry;
 pub mod exec;
 pub mod fs;
 mod glob;
@@ -32,11 +33,10 @@ mod user;
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
-use std::fs::File;
+use std::fs::{File, Metadata};
 use std::path::Path;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
-use walkdir::DirEntry;
 
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
@@ -63,15 +63,80 @@ use self::time::{
     FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
     NewerOptionType, NewerTimeMatcher,
 };
-use self::type_matcher::TypeMatcher;
+use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
 
 use super::{Config, Dependencies};
+
+pub use entry::{FileType, WalkEntry, WalkError};
+
+/// Symlink following mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Follow {
+    /// Never follow symlinks (-P; default).
+    Never,
+    /// Follow symlinks on root paths only (-H).
+    Roots,
+    /// Always follow symlinks (-L).
+    Always,
+}
+
+impl Follow {
+    /// Check whether to follow a path of the given depth.
+    pub fn follow_at_depth(self, depth: usize) -> bool {
+        match self {
+            Follow::Never => false,
+            Follow::Roots => depth == 0,
+            Follow::Always => true,
+        }
+    }
+
+    /// Get metadata for a [WalkEntry].
+    pub fn metadata(self, entry: &WalkEntry) -> Result<Metadata, WalkError> {
+        if self.follow_at_depth(entry.depth()) == entry.follow() {
+            // Same follow flag, re-use cached metadata
+            entry.metadata().cloned()
+        } else if !entry.follow() && !entry.file_type().is_symlink() {
+            // Not a symlink, re-use cached metadata
+            entry.metadata().cloned()
+        } else if entry.follow() && entry.file_type().is_symlink() {
+            // Broken symlink, re-use cached metadata
+            entry.metadata().cloned()
+        } else {
+            self.metadata_at_depth(entry.path(), entry.depth())
+        }
+    }
+
+    /// Get metadata for a path from the command line.
+    pub fn root_metadata(self, path: impl AsRef<Path>) -> Result<Metadata, WalkError> {
+        self.metadata_at_depth(path, 0)
+    }
+
+    /// Get metadata for a path, following symlinks as necessary.
+    pub fn metadata_at_depth(
+        self,
+        path: impl AsRef<Path>,
+        depth: usize,
+    ) -> Result<Metadata, WalkError> {
+        let path = path.as_ref();
+
+        if self.follow_at_depth(depth) {
+            match path.metadata().map_err(WalkError::from) {
+                Ok(meta) => return Ok(meta),
+                Err(e) if !e.is_not_found() => return Err(e),
+                _ => {}
+            }
+        }
+
+        Ok(path.symlink_metadata()?)
+    }
+}
 
 /// Struct holding references to outputs and any inputs that can't be derived
 /// from the file/directory info.
 pub struct MatcherIO<'a> {
     should_skip_dir: bool,
+    exit_code: i32,
     quit: bool,
     deps: &'a dyn Dependencies,
 }
@@ -79,9 +144,10 @@ pub struct MatcherIO<'a> {
 impl<'a> MatcherIO<'a> {
     pub fn new(deps: &dyn Dependencies) -> MatcherIO<'_> {
         MatcherIO {
-            deps,
             should_skip_dir: false,
+            exit_code: 0,
             quit: false,
+            deps,
         }
     }
 
@@ -92,6 +158,15 @@ impl<'a> MatcherIO<'a> {
     #[must_use]
     pub fn should_skip_current_dir(&self) -> bool {
         self.should_skip_dir
+    }
+
+    pub fn set_exit_code(&mut self, code: i32) {
+        self.exit_code = code;
+    }
+
+    #[must_use]
+    pub fn exit_code(&self) -> i32 {
+        self.exit_code
     }
 
     pub fn quit(&mut self) {
@@ -123,7 +198,7 @@ pub trait Matcher: 'static {
     }
 
     /// Returns whether the given file matches the object's predicate.
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool;
+    fn matches(&self, entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool;
 
     /// Returns whether the matcher has any side-effects (e.g. executing a
     /// command, deleting a file). Iff no such matcher exists in the chain, then
@@ -149,8 +224,8 @@ impl Matcher for Box<dyn Matcher> {
         self
     }
 
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
-        (**self).matches(file_info, matcher_io)
+    fn matches(&self, entry: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
+        (**self).matches(entry, matcher_io)
     }
 
     fn has_side_effects(&self) -> bool {
@@ -440,6 +515,13 @@ fn build_matcher_tree(
                 i += 1;
                 Some(TypeMatcher::new(args[i])?.into_box())
             }
+            "-xtype" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(XtypeMatcher::new(args[i])?.into_box())
+            }
             "-fstype" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
@@ -457,7 +539,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(NewerMatcher::new(args[i])?.into_box())
+                Some(NewerMatcher::new(args[i], config.follow)?.into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
@@ -562,7 +644,8 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 let path = args[i];
-                let matcher = SameFileMatcher::new(path).map_err(|e| format!("{path}: {e}"))?;
+                let matcher = SameFileMatcher::new(path, config.follow)
+                    .map_err(|e| format!("{path}: {e}"))?;
                 Some(matcher.into_box())
             }
             "-user" => {
@@ -712,6 +795,21 @@ fn build_matcher_tree(
 
                 return Ok((i, top_level_matcher.build()));
             }
+            "-follow" => {
+                // This option affects multiple matchers.
+                // 1. It will use noleaf by default. (but -noleaf No change of behavior)
+                // Unless -L or -H is specified:
+                // 2. changes the behaviour of the -newer predicate.
+                // 3. consideration applies to -newerXY, -anewer and -cnewer
+                // 4. -type predicate will always match against the type of
+                //    the file that a symbolic link points to rather than the link itself.
+                //
+                // 5. causes the -lname and -ilname predicates always to return false.
+                //    (unless they happen to match broken symbolic links)
+                config.follow = Follow::Always;
+                config.no_leaf_dirs = true;
+                Some(TrueMatcher.into_box())
+            }
             "-daystart" => {
                 config.today_start = true;
                 Some(TrueMatcher.into_box())
@@ -825,25 +923,28 @@ mod tests {
     use super::*;
     use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
-    use walkdir::WalkDir;
 
-    /// Helper function for tests to get a `DirEntry` object. directory should
+    /// Helper function for tests to get a [WalkEntry] object. root should
     /// probably be a string starting with `test_data/` (cargo's tests run with
     /// a working directory set to the root findutils folder).
-    pub fn get_dir_entry_for(directory: &str, filename: &str) -> DirEntry {
-        for wrapped_dir_entry in WalkDir::new(fix_up_slashes(directory)) {
-            let dir_entry = wrapped_dir_entry.unwrap();
-            if dir_entry
-                .path()
-                .strip_prefix(directory)
-                .unwrap()
-                .to_string_lossy()
-                == fix_up_slashes(filename)
-            {
-                return dir_entry;
-            }
-        }
-        panic!("Couldn't find {filename} in {directory}");
+    pub fn get_dir_entry_for(root: &str, path: &str) -> WalkEntry {
+        get_dir_entry_follow(root, path, Follow::Never)
+    }
+
+    /// Get a [WalkEntry] with an explicit [Follow] flag.
+    pub fn get_dir_entry_follow(root: &str, path: &str, follow: Follow) -> WalkEntry {
+        let root = fix_up_slashes(root);
+        let root = Path::new(&root);
+
+        let path = fix_up_slashes(path);
+        let path = if path.is_empty() {
+            root.to_owned()
+        } else {
+            root.join(path)
+        };
+
+        let depth = path.components().count() - root.components().count();
+        WalkEntry::new(path, depth, follow)
     }
 
     #[test]
@@ -1202,6 +1303,15 @@ mod tests {
         } else {
             panic!("parsing argument list with empty parentheses in an expression should fail");
         }
+    }
+
+    #[test]
+    fn build_top_level_matcher_follow_config() {
+        let mut config = Config::default();
+
+        build_top_level_matcher(&["-follow"], &mut config).unwrap();
+
+        assert_eq!(config.follow, Follow::Always);
     }
 
     #[test]

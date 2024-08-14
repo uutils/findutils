@@ -530,6 +530,7 @@ fn find_accessible() {
         .stdout(predicate::str::contains("abbbc").not());
 }
 
+#[serial(working_dir)]
 #[test]
 fn find_time() {
     let args = ["1", "+1", "-1"];
@@ -545,7 +546,7 @@ fn find_time() {
         args.iter().for_each(|arg| {
             Command::cargo_bin("find")
                 .expect("found binary")
-                .args([".", flag, arg])
+                .args(["./test_data/simple", flag, arg])
                 .assert()
                 .success()
                 .stderr(predicate::str::is_empty());
@@ -908,6 +909,8 @@ fn find_samefile() {
         .failure()
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("not-exist-file"));
+
+    fs::remove_file("test_data/links/hard_link").unwrap();
 }
 
 #[test]
@@ -967,4 +970,16 @@ fn find_fprint() {
     assert!(contents.contains("test_data/simple"));
 
     let _ = fs::remove_file("test_data/find_fprint");
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_follow() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["test_data/links/link-f", "-follow"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test_data/links/link-f"))
+        .stderr(predicate::str::is_empty());
 }

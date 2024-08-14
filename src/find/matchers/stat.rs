@@ -6,9 +6,7 @@
 
 use std::os::unix::fs::MetadataExt;
 
-use walkdir::DirEntry;
-
-use super::{ComparableValue, Matcher, MatcherIO};
+use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
 
 /// Inode number matcher.
 pub struct InodeMatcher {
@@ -22,7 +20,7 @@ impl InodeMatcher {
 }
 
 impl Matcher for InodeMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         match file_info.metadata() {
             Ok(metadata) => self.ino.matches(metadata.ino()),
             Err(_) => false,
@@ -42,7 +40,7 @@ impl LinksMatcher {
 }
 
 impl Matcher for LinksMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         match file_info.metadata() {
             Ok(metadata) => self.nlink.matches(metadata.nlink()),
             Err(_) => false,
