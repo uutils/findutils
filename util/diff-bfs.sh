@@ -6,7 +6,7 @@ export LC_COLLATE=C
 
 # Extract the failing test lines from log files
 failing_tests() {
-    sed -n 's/^\([[:print:]]\+\) failed\!/\1/p' "$1" | sort
+    sed -En 's/^\[FAIL\] (.*[a-z].*)/\1/p' "$1" | sort
 }
 
 comm -3 <(failing_tests "$1") <(failing_tests "$2") | tr '\t' ',' | while IFS=, read old new; do
