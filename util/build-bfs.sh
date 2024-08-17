@@ -12,16 +12,17 @@ fi
 cargo build --release
 FIND=$(readlink -f target/release/find)
 
-cd ..
-make -C bfs -j "$(nproc)" bin/tests/{mksock,xtouch} NOLIBS=y
+cd ../bfs
+./configure NOLIBS=y
+make -j "$(nproc)" bin/tests/{mksock,xtouch}
 
 # Run the GNU find compatibility tests by default
 if test "$#" -eq 0; then
     set -- --verbose=tests --gnu --sudo
 fi
 
-LOG_FILE=bfs/tests.log
-./bfs/tests/tests.sh --bfs="$FIND" "$@" | tee "$LOG_FILE" || :
+LOG_FILE=tests.log
+./tests/tests.sh --bfs="$FIND" "$@" 2>&1 | tee "$LOG_FILE" || :
 
 PASS=$(sed -En 's|^\[PASS] *([0-9]+) / .*|\1|p' "$LOG_FILE")
 SKIP=$(sed -En 's|^\[SKIP] *([0-9]+) / .*|\1|p' "$LOG_FILE")
@@ -49,4 +50,4 @@ jq -n \
    --arg pass "$PASS" \
    --arg skip "$SKIP" \
    --arg fail "$FAIL" \
-   '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > bfs-result.json
+   '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > ../bfs-result.json
