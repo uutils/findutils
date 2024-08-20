@@ -8,9 +8,8 @@ use std::{
     fs::File,
     io::{stderr, Write},
 };
-use walkdir::DirEntry;
 
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 #[cfg(unix)]
 fn format_permissions(mode: uucore::libc::mode_t) -> String {
@@ -120,7 +119,7 @@ impl Ls {
     }
 
     #[cfg(unix)]
-    fn print(&self, file_info: &DirEntry, mut out: impl Write, print_error_message: bool) {
+    fn print(&self, file_info: &WalkEntry, mut out: impl Write, print_error_message: bool) {
         use nix::unistd::{Gid, Group, Uid, User};
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
@@ -255,7 +254,7 @@ impl Ls {
 }
 
 impl Matcher for Ls {
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
             self.print(file_info, file, true);
         } else {
