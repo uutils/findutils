@@ -190,7 +190,7 @@ impl Ls {
     }
 
     #[cfg(windows)]
-    fn print(&self, file_info: &DirEntry, mut out: impl Write, print_error_message: bool) {
+    fn print(&self, file_info: &WalkEntry, mut out: impl Write, print_error_message: bool) {
         use std::os::windows::fs::MetadataExt;
 
         let metadata = file_info.metadata().unwrap();
