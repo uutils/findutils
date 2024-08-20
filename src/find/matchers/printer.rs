@@ -4,14 +4,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::{
-    fs::File,
-    io::{stderr, Write},
-};
+use std::fs::File;
+use std::io::{stderr, Write};
 
-use walkdir::DirEntry;
-
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 pub enum PrintDelimiter {
     Newline,
@@ -41,7 +37,7 @@ impl Printer {
         }
     }
 
-    fn print(&self, file_info: &DirEntry, mut out: impl Write, print_error_message: bool) {
+    fn print(&self, file_info: &WalkEntry, mut out: impl Write, print_error_message: bool) {
         match write!(
             out,
             "{}{}",
@@ -67,7 +63,7 @@ impl Printer {
 }
 
 impl Matcher for Printer {
-    fn matches(&self, file_info: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
             self.print(file_info, file, true);
         } else {
@@ -86,7 +82,6 @@ impl Matcher for Printer {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;

@@ -7,12 +7,10 @@
 use std::io::{stderr, Write};
 use std::path::PathBuf;
 
-use walkdir::DirEntry;
-
 use super::glob::Pattern;
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
-fn read_link_target(file_info: &DirEntry) -> Option<PathBuf> {
+fn read_link_target(file_info: &WalkEntry) -> Option<PathBuf> {
     match file_info.path().read_link() {
         Ok(target) => Some(target),
         Err(err) => {
@@ -47,7 +45,7 @@ impl LinkNameMatcher {
 }
 
 impl Matcher for LinkNameMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         if let Some(target) = read_link_target(file_info) {
             self.pattern.matches(&target.to_string_lossy())
         } else {

@@ -4,10 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use walkdir::DirEntry;
-
 use super::glob::Pattern;
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 /// This matcher makes a comparison of the name against a shell wildcard
 /// pattern. See `glob::Pattern` for details on the exact syntax.
@@ -23,7 +21,7 @@ impl NameMatcher {
 }
 
 impl Matcher for NameMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let name = file_info.file_name().to_string_lossy();
         self.pattern.matches(&name)
     }
