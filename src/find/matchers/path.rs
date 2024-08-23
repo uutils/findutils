@@ -4,10 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use walkdir::DirEntry;
-
 use super::glob::Pattern;
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 /// This matcher makes a comparison of the path against a shell wildcard
 /// pattern. See `glob::Pattern` for details on the exact syntax.
@@ -23,7 +21,7 @@ impl PathMatcher {
 }
 
 impl Matcher for PathMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let path = file_info.path().to_string_lossy();
         self.pattern.matches(&path)
     }

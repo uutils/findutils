@@ -8,7 +8,7 @@ use std::{error::Error, fmt, str::FromStr};
 
 use onig::{Regex, RegexOptions, Syntax};
 
-use super::Matcher;
+use super::{Matcher, MatcherIO, WalkEntry};
 
 #[derive(Debug)]
 pub struct ParseRegexTypeError(String);
@@ -111,7 +111,7 @@ impl RegexMatcher {
 }
 
 impl Matcher for RegexMatcher {
-    fn matches(&self, file_info: &walkdir::DirEntry, _: &mut super::MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         self.regex
             .is_match(file_info.path().to_string_lossy().as_ref())
     }

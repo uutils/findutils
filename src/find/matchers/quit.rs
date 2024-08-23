@@ -4,15 +4,13 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use walkdir::DirEntry;
-
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 /// This matcher quits the search immediately.
 pub struct QuitMatcher;
 
 impl Matcher for QuitMatcher {
-    fn matches(&self, _: &DirEntry, matcher_io: &mut MatcherIO) -> bool {
+    fn matches(&self, _: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         matcher_io.quit();
         true
     }

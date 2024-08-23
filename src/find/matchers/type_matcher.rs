@@ -5,70 +5,89 @@
 // https://opensource.org/licenses/MIT.
 
 use std::error::Error;
-use std::fs::FileType;
-use walkdir::DirEntry;
 
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
-
-use super::{Matcher, MatcherIO};
+use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
-    file_type_fn: fn(&FileType) -> bool,
+    file_type: FileType,
+}
+
+fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
+    let file_type = match type_string {
+        "f" => FileType::Regular,
+        "d" => FileType::Directory,
+        "l" => FileType::Symlink,
+        "b" => FileType::BlockDevice,
+        "c" => FileType::CharDevice,
+        "p" => FileType::Fifo, // named pipe (FIFO)
+        "s" => FileType::Socket,
+        // D: door (Solaris)
+        "D" => {
+            return Err(From::from(format!(
+                "Type argument {type_string} not supported yet"
+            )))
+        }
+        _ => {
+            return Err(From::from(format!(
+                "Unrecognised type argument {type_string}"
+            )))
+        }
+    };
+    Ok(file_type)
 }
 
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        #[cfg(unix)]
-        let function = match type_string {
-            "f" => FileType::is_file,
-            "d" => FileType::is_dir,
-            "l" => FileType::is_symlink,
-            "b" => FileType::is_block_device,
-            "c" => FileType::is_char_device,
-            "p" => FileType::is_fifo, // named pipe (FIFO)
-            "s" => FileType::is_socket,
-            // D: door (Solaris)
-            "D" => {
-                return Err(From::from(format!(
-                    "Type argument {type_string} not supported yet"
-                )))
-            }
-            _ => {
-                return Err(From::from(format!(
-                    "Unrecognised type argument {type_string}"
-                )))
-            }
-        };
-        #[cfg(not(unix))]
-        let function = match type_string {
-            "f" => FileType::is_file,
-            "d" => FileType::is_dir,
-            "l" => FileType::is_symlink,
-            _ => {
-                return Err(From::from(format!(
-                    "Unrecognised type argument {}",
-                    type_string
-                )))
-            }
-        };
-        Ok(Self {
-            file_type_fn: function,
-        })
+        let file_type = parse(type_string)?;
+        Ok(Self { file_type })
     }
 }
 
 impl Matcher for TypeMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
-        (self.file_type_fn)(&file_info.file_type())
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        file_info.file_type() == self.file_type
+    }
+}
+
+/// Like [TypeMatcher], but toggles whether symlinks are followed.
+pub struct XtypeMatcher {
+    file_type: FileType,
+}
+
+impl XtypeMatcher {
+    pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
+        let file_type = parse(type_string)?;
+        Ok(Self { file_type })
+    }
+}
+
+impl Matcher for XtypeMatcher {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        let follow = if file_info.follow() {
+            Follow::Never
+        } else {
+            Follow::Always
+        };
+
+        let file_type = follow
+            .metadata(file_info)
+            .map(|m| m.file_type())
+            .map(FileType::from);
+
+        match file_type {
+            Ok(file_type) if file_type == self.file_type => true,
+            // Since GNU find 4.10, ELOOP will match -xtype l
+            Err(e) if self.file_type.is_symlink() && e.is_loop() => true,
+            _ => false,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::find::matchers::tests::get_dir_entry_for;
+    use crate::find::matchers::tests::{get_dir_entry_follow, get_dir_entry_for};
     use crate::find::tests::FakeDependencies;
     use std::io::ErrorKind;
 
@@ -168,5 +187,52 @@ mod tests {
     fn cant_create_with_invalid_pattern() {
         let result = TypeMatcher::new("xxx");
         assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xtype_file() {
+        let matcher = XtypeMatcher::new("f").unwrap();
+        let deps = FakeDependencies::new();
+
+        let entry = get_dir_entry_follow("test_data/links", "abbbc", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Always);
+        assert!(!matcher.matches(&entry, &mut deps.new_matcher_io()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xtype_link() {
+        let matcher = XtypeMatcher::new("l").unwrap();
+        let deps = FakeDependencies::new();
+
+        let entry = get_dir_entry_follow("test_data/links", "abbbc", Follow::Never);
+        assert!(!matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Never);
+        assert!(!matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-missing", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-notdir", Follow::Never);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Always);
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xtype_loop() {
+        let matcher = XtypeMatcher::new("l").unwrap();
+        let entry = get_dir_entry_for("test_data/links", "link-loop");
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
     }
 }

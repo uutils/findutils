@@ -9,9 +9,8 @@ use std::ffi::OsString;
 use std::io::{stderr, Write};
 use std::path::Path;
 use std::process::Command;
-use walkdir::DirEntry;
 
-use super::{Matcher, MatcherIO};
+use super::{Matcher, MatcherIO, WalkEntry};
 
 enum Arg {
     FileArg(Vec<OsString>),
@@ -52,7 +51,7 @@ impl SingleExecMatcher {
 }
 
 impl Matcher for SingleExecMatcher {
-    fn matches(&self, file_info: &DirEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let mut command = Command::new(&self.executable);
         let path_to_file = if self.exec_in_parent_dir {
             if let Some(f) = file_info.path().file_name() {
