@@ -87,7 +87,7 @@ impl Matcher for XtypeMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::find::matchers::tests::{get_dir_entry_follow, get_dir_entry_for};
+    use crate::find::matchers::tests::get_dir_entry_for;
     use crate::find::tests::FakeDependencies;
     use std::io::ErrorKind;
 

@@ -4,15 +4,11 @@
 // file that was distributed with this source code.
 
 use std::cell::RefCell;
-use std::path::Path;
-use std::{
-    error::Error,
-    io::{stderr, Write},
-};
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
 /// The latest mapping from dev_id to fs_type, used for saving mount info reads
+#[cfg(unix)]
 pub struct Cache {
     dev_id: String,
     fs_type: String,
@@ -30,6 +26,12 @@ pub struct Cache {
 /// Returns an error if the filesystem list could not be read.
 ///
 /// This is only supported on Unix.
+#[cfg(unix)]
+use std::{
+    error::Error,
+    io::{stderr, Write},
+    path::Path,
+};
 #[cfg(unix)]
 pub fn get_file_system_type(
     path: &Path,
@@ -74,41 +76,48 @@ pub fn get_file_system_type(
 ///
 /// This is only supported on Unix.
 pub struct FileSystemMatcher {
+    #[cfg(unix)]
     fs_text: String,
+    #[cfg(unix)]
     cache: RefCell<Option<Cache>>,
 }
 
 impl FileSystemMatcher {
+    #[cfg(unix)]
     pub fn new(fs_text: String) -> Self {
         Self {
             fs_text,
             cache: RefCell::new(None),
         }
     }
+
+    #[cfg(not(unix))]
+    pub fn new(_fs_text: String) -> Self {
+        Self {}
+    }
 }
 
 impl Matcher for FileSystemMatcher {
+    #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        #[cfg(not(unix))]
-        {
-            false
-        }
-        #[cfg(unix)]
-        {
-            match get_file_system_type(file_info.path(), &self.cache) {
-                Ok(result) => result == self.fs_text,
-                Err(_) => {
-                    writeln!(
-                        &mut stderr(),
-                        "Error getting filesystem type for {}",
-                        file_info.path().to_string_lossy()
-                    )
-                    .unwrap();
+        match get_file_system_type(file_info.path(), &self.cache) {
+            Ok(result) => result == self.fs_text,
+            Err(_) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting filesystem type for {}",
+                    file_info.path().to_string_lossy()
+                )
+                .unwrap();
 
-                    false
-                }
+                false
             }
         }
+    }
+
+    #[cfg(not(unix))]
+    fn matches(&self, _file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        false
     }
 }
 
