@@ -94,6 +94,9 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
 
+    #[cfg(unix)]
+    use crate::find::matchers::tests::get_dir_entry_follow;
+
     #[cfg(windows)]
     use std::os::windows::fs::{symlink_dir, symlink_file};
 
