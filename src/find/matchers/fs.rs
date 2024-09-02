@@ -2,9 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
-use std::cell::RefCell;
-
 use super::{Matcher, MatcherIO, WalkEntry};
 
 /// The latest mapping from dev_id to fs_type, used for saving mount info reads
@@ -31,6 +28,7 @@ use std::{
     error::Error,
     io::{stderr, Write},
     path::Path,
+    cell::RefCell,
 };
 #[cfg(unix)]
 pub fn get_file_system_type(
