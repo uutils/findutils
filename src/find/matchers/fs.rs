@@ -25,10 +25,10 @@ pub struct Cache {
 /// This is only supported on Unix.
 #[cfg(unix)]
 use std::{
+    cell::RefCell,
     error::Error,
     io::{stderr, Write},
     path::Path,
-    cell::RefCell,
 };
 #[cfg(unix)]
 pub fn get_file_system_type(
