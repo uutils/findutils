@@ -1429,4 +1429,13 @@ mod tests {
             fix_up_slashes("./test_data/links/link-d\n")
         );
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_ls() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-ls"], &deps);
+
+        assert_eq!(rc, 0);
+    }
 }
