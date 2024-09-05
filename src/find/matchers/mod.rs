@@ -472,6 +472,7 @@ fn build_matcher_tree(
 
                 let file = get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
+            }
             "-ls" => Some(Ls::new(None).into_box()),
             "-fls" => {
                 Some(Ls::new(Some(file)).into_box())
