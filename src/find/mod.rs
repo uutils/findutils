@@ -1447,4 +1447,12 @@ mod tests {
 
         let _ = fs::remove_file("test_data/find_fprintf");
     }
+  
+    #[cfg(unix)]
+    fn test_ls() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(&["find", "./test_data/simple/subdir", "-ls"], &deps);
+
+        assert_eq!(rc, 0);
+    }
 }

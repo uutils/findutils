@@ -14,6 +14,7 @@ mod glob;
 mod group;
 mod lname;
 mod logical_matchers;
+mod ls;
 mod name;
 mod path;
 mod perm;
@@ -33,6 +34,7 @@ mod user;
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
+use ls::Ls;
 use std::fs::{File, Metadata};
 use std::path::Path;
 use std::time::SystemTime;
@@ -474,6 +476,16 @@ fn build_matcher_tree(
                 let file = get_or_create_file(args[i])?;
                 i += 1;
                 Some(Printf::new(args[i], Some(file))?.into_box())
+            }
+            "-ls" => Some(Ls::new(None).into_box()),
+            "-fls" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+
+                let file = get_or_create_file(args[i])?;
+                Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
             "-false" => Some(FalseMatcher.into_box()),

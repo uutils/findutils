@@ -1010,3 +1010,12 @@ fn find_fprintf() {
 
     let _ = fs::remove_file("test_data/find_fprintf");
 }
+
+fn find_ls() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-ls"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
