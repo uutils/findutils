@@ -991,3 +991,14 @@ fn find_follow() {
         .stdout(predicate::str::contains("test_data/links/link-f"))
         .stderr(predicate::str::is_empty());
 }
+
+#[test]
+#[serial(working_dir)]
+fn find_ls() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["./test_data/simple/subdir", "-ls"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
