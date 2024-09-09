@@ -475,6 +475,12 @@ fn build_matcher_tree(
             }
             "-ls" => Some(Ls::new(None).into_box()),
             "-fls" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+
+                let file = get_or_create_file(args[i])?;
                 Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
