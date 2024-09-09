@@ -305,7 +305,7 @@ impl FormatStringParser<'_> {
     pub fn parse(&mut self) -> Result<FormatString, Box<dyn Error>> {
         let mut components = vec![];
 
-        while let Some(i) = self.string.find(|c| c == '%' || c == '\\') {
+        while let Some(i) = self.string.find(['%', '\\']) {
             if i > 0 {
                 // safe to unwrap: i is an index into the string, so it cannot
                 // be any shorter.
