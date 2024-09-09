@@ -1451,7 +1451,8 @@ mod tests {
 
         let _ = fs::remove_file("test_data/find_fprintf");
     }
-  
+
+    #[test]
     #[cfg(unix)]
     fn test_ls() {
         let deps = FakeDependencies::new();
