@@ -1338,20 +1338,24 @@ mod tests {
     }
 
     #[test]
-    fn find_fprint() {
-        let deps = FakeDependencies::new();
-        let rc = find_main(
-            &[
-                "find",
-                "./test_data/simple",
-                "-fprint",
-                "test_data/find_fprint",
-            ],
-            &deps,
-        );
-        assert_eq!(rc, 0);
+    fn find_fprinter() {
+        let printer = ["fprint", "fprint0"];
 
-        let _ = fs::remove_file("test_data/find_fprint");
+        for p in printer.iter() {
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &[
+                    "find",
+                    "./test_data/simple",
+                    format!("-{p}").as_str(),
+                    format!("test_data/find_{p}").as_str(),
+                ],
+                &deps,
+            );
+            assert_eq!(rc, 0);
+
+            let _ = fs::remove_file(format!("test_data/find_{p}"));
+        }
     }
 
     #[test]

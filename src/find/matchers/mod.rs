@@ -477,6 +477,15 @@ fn build_matcher_tree(
                 i += 1;
                 Some(Printf::new(args[i], Some(file))?.into_box())
             }
+            "-fprint0" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+
+                let file = get_or_create_file(args[i])?;
+                Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
+            }
             "-ls" => Some(Ls::new(None).into_box()),
             "-fls" => {
                 if i >= args.len() - 1 {
