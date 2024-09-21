@@ -1435,6 +1435,24 @@ mod tests {
     }
 
     #[test]
+    fn find_fprintf() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                "./test_data/simple",
+                "-fprintf",
+                "test_data/find_fprintf",
+                "%h %H %p %P",
+            ],
+            &deps,
+        );
+        assert_eq!(rc, 0);
+
+        let _ = fs::remove_file("test_data/find_fprintf");
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_ls() {
         let deps = FakeDependencies::new();
