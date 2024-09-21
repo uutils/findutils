@@ -10,6 +10,7 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use regex::Regex;
 use serial_test::serial;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -366,6 +367,28 @@ fn find_printf() {
             ABBBC 2 ./test_data/simple/subdir ./test_data/simple \
             ./test_data/simple/subdir/ABBBC subdir/ABBBC f\n",
         )));
+
+    fs::create_dir_all("a").expect("Failed to create directory 'a'");
+    let output = Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["a", "-printf", "%A+"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let output_str = String::from_utf8(output).expect("Invalid UTF-8 in output");
+
+    println!("Actual output: '{}'", output_str.trim());
+
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\+\d{2}:\d{2}:\d{2}\.\d{9}0$")
+        .expect("Failed to compile regex");
+
+    assert!(
+        re.is_match(output_str.trim()),
+        "Output did not match expected timestamp format"
+    );
 
     Command::cargo_bin("find")
         .expect("found binary")

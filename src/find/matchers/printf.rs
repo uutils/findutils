@@ -50,7 +50,11 @@ impl TimeFormat {
                     .to_string()
             }
             TimeFormat::Strftime(format) => {
-                DateTime::<Local>::from(time).format(format).to_string()
+                // Handle a special case
+                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S%.f0");
+                DateTime::<Local>::from(time)
+                    .format(&custom_format)
+                    .to_string()
             }
         };
 
