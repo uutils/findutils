@@ -564,3 +564,37 @@ fn xargs_replace_multiple_lines() {
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::diff("\n\n\n"));
 }
+
+#[test]
+fn xargs_help() {
+    for option_style in ["-h", "--help"] {
+        Command::cargo_bin("xargs")
+            .expect("found binary")
+            .args([option_style])
+            .assert()
+            .success()
+            .code(0)
+            .stderr(predicate::str::is_empty())
+            .stdout(predicate::str::contains("Usage: xargs "));
+    }
+}
+
+// Do not regress to:
+//
+// ❯ xargs --version
+// Error: xargs 0.7.0
+//
+// Same for help above
+#[test]
+fn xargs_version() {
+    for option_style in ["-V", "--version"] {
+        Command::cargo_bin("xargs")
+            .expect("found binary")
+            .args([option_style])
+            .assert()
+            .success()
+            .code(0)
+            .stderr(predicate::str::is_empty())
+            .stdout(predicate::str::starts_with("xargs "));
+    }
+}

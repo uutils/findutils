@@ -14,7 +14,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use clap::{crate_version, Arg, ArgAction};
+use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
 
 mod options {
     pub const COMMAND: &str = "COMMAND";
@@ -954,7 +954,15 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
 
     let matches = match matches {
         Ok(m) => m,
-        Err(e) => return Err(XargsError::from(e.to_string())),
+        Err(e) => match e.kind() {
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+                // The help/version text already has a newline, so use `print!` here, not `println!`
+                print!("{e}");
+
+                return Ok(CommandResult::Success);
+            }
+            _ => return Err(XargsError::from(e.to_string())),
+        },
     };
 
     let options = Options {
