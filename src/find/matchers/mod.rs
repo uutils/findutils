@@ -618,7 +618,7 @@ fn build_matcher_tree(
                 Some(SizeMatcher::new(size, &unit)?.into_box())
             }
             "-empty" => Some(EmptyMatcher::new().into_box()),
-            "-exec" | "-execdir" => {
+            "-exec" | "-execdir" | "-ok" | "-okdir" => {
                 let mut arg_index = i + 1;
                 while arg_index < args.len() && args[arg_index] != ";" {
                     if args[arg_index - 1] == "{}" && args[arg_index] == "+" {
@@ -638,10 +638,16 @@ fn build_matcher_tree(
                 let expression = args[i];
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
+                let interactive = expression == "-ok" || expression == "-okdir";
                 i = arg_index;
                 Some(
-                    SingleExecMatcher::new(executable, exec_args, expression == "-execdir")?
-                        .into_box(),
+                    SingleExecMatcher::new(
+                        executable,
+                        exec_args,
+                        expression == "-execdir",
+                        interactive,
+                    )?
+                    .into_box(),
                 )
             }
             #[cfg(unix)]
