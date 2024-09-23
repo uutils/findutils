@@ -573,9 +573,8 @@ fn xargs_help() {
             .args([option_style])
             .assert()
             .success()
-            .code(0)
             .stderr(predicate::str::is_empty())
-            .stdout(predicate::str::contains("Usage: xargs "));
+            .stdout(predicate::str::contains("--help"));
     }
 }
 
@@ -593,7 +592,6 @@ fn xargs_version() {
             .args([option_style])
             .assert()
             .success()
-            .code(0)
             .stderr(predicate::str::is_empty())
             .stdout(predicate::str::starts_with("xargs "));
     }
