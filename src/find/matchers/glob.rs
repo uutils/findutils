@@ -112,7 +112,7 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
 }
 
 /// Converts a POSIX glob into a POSIX Basic Regular Expression
-fn glob_to_regex(pattern: &str) -> String {
+fn glob_to_regex(pattern: &str) -> Option<String> {
     let mut regex = String::new();
 
     let mut chars = pattern.chars();
@@ -130,9 +130,9 @@ fn glob_to_regex(pattern: &str) -> String {
                     //     If pattern ends with an unescaped <backslash>, fnmatch() shall return a
                     //     non-zero value (indicating either no match or an error).
                     //
-                    // Most implementations return FNM_NOMATCH in this case, so return a regex that
+                    // Most implementations return FNM_NOMATCH in this case, so create a pattern that
                     // never matches.
-                    return "$.".to_string();
+                    return None;
                 }
             }
             '[' => {
@@ -147,12 +147,12 @@ fn glob_to_regex(pattern: &str) -> String {
         }
     }
 
-    regex
+    Some(regex)
 }
 
 /// An fnmatch()-style glob matcher.
 pub struct Pattern {
-    regex: Regex,
+    regex: Option<Regex>,
 }
 
 impl Pattern {
@@ -165,13 +165,13 @@ impl Pattern {
         };
 
         // As long as glob_to_regex() is correct, this should never fail
-        let regex = parse_bre(&glob_to_regex(pattern), options).unwrap();
+        let regex = glob_to_regex(pattern).map(|r| parse_bre(&r, options).unwrap());
         Self { regex }
     }
 
     /// Test if this pattern matches a string.
     pub fn matches(&self, string: &str) -> bool {
-        self.regex.is_match(string)
+        self.regex.as_ref().is_some_and(|r| r.is_match(string))
     }
 }
 
@@ -179,47 +179,52 @@ impl Pattern {
 mod tests {
     use super::*;
 
+    #[track_caller]
+    fn assert_glob_regex(glob: &str, regex: &str) {
+        assert_eq!(glob_to_regex(glob).as_deref(), Some(regex));
+    }
+
     #[test]
     fn literals() {
-        assert_eq!(glob_to_regex(r"foo.bar"), r"foo\.bar");
+        assert_glob_regex(r"foo.bar", r"foo\.bar");
     }
 
     #[test]
     fn regex_special() {
-        assert_eq!(glob_to_regex(r"^foo.bar$"), r"\^foo\.bar\$");
+        assert_glob_regex(r"^foo.bar$", r"\^foo\.bar\$");
     }
 
     #[test]
     fn wildcards() {
-        assert_eq!(glob_to_regex(r"foo?bar*baz"), r"foo.bar.*baz");
+        assert_glob_regex(r"foo?bar*baz", r"foo.bar.*baz");
     }
 
     #[test]
     fn escapes() {
-        assert_eq!(glob_to_regex(r"fo\o\?bar\*baz\\"), r"foo?bar\*baz\\");
-    }
-
-    #[test]
-    fn incomplete_escape() {
-        assert_eq!(glob_to_regex(r"foo\"), r"$.");
+        assert_glob_regex(r"fo\o\?bar\*baz\\", r"foo?bar\*baz\\");
     }
 
     #[test]
     fn valid_brackets() {
-        assert_eq!(glob_to_regex(r"foo[bar][!baz]"), r"foo[bar][^baz]");
+        assert_glob_regex(r"foo[bar][!baz]", r"foo[bar][^baz]");
     }
 
     #[test]
     fn complex_brackets() {
-        assert_eq!(
-            glob_to_regex(r"[!]!.*[\[.].][=]=][:space:]-]"),
-            r"[^]!.*[\[.].][=]=][:space:]-]"
+        assert_glob_regex(
+            r"[!]!.*[\[.].][=]=][:space:]-]",
+            r"[^]!.*[\[.].][=]=][:space:]-]",
         );
     }
 
     #[test]
     fn invalid_brackets() {
-        assert_eq!(glob_to_regex(r"foo[bar[!baz"), r"foo\[bar\[!baz");
+        assert_glob_regex(r"foo[bar[!baz", r"foo\[bar\[!baz");
+    }
+
+    #[test]
+    fn incomplete_escape() {
+        assert_eq!(glob_to_regex(r"foo\"), None);
     }
 
     #[test]
@@ -234,5 +239,10 @@ mod tests {
         assert!(Pattern::new(r"foo*BAR", true).matches("FOO--bar"));
 
         assert!(!Pattern::new(r"foo*BAR", true).matches("BAR--foo"));
+    }
+
+    #[test]
+    fn incomplete_escape_matches() {
+        assert!(!Pattern::new(r"foo\", false).matches("\n"));
     }
 }
