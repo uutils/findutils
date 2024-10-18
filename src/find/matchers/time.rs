@@ -9,7 +9,7 @@ use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, Timelike};
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -25,8 +25,8 @@ fn get_time(matcher_io: &mut MatcherIO, today_start: bool) -> SystemTime {
         let seconds_since_unix_epoch = duration_since_unix_epoch.as_secs();
         let utc_time = DateTime::from_timestamp(seconds_since_unix_epoch as i64, 0).unwrap();
         let local_time = utc_time.with_timezone(&Local);
-        let local_midnight = local_time.date().and_hms(0, 0, 0);
-        let local_midnight_seconds = local_midnight.timestamp();
+        let seconds_since_last_midnight = local_time.num_seconds_from_midnight();
+        let local_midnight_seconds = local_time.timestamp() - seconds_since_last_midnight as i64;
 
         UNIX_EPOCH + Duration::from_secs(local_midnight_seconds as u64)
     } else {
