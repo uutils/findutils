@@ -402,6 +402,7 @@ impl FileAgeRangeMatcher {
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveTime;
     use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::Read;
@@ -620,6 +621,15 @@ mod tests {
             zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
             "future-modified file should match exactly 0 days old"
         );
+    }
+
+    #[test]
+    fn get_local_midnight() {
+        let deps = FakeDependencies::new();
+        let midnight = get_time(&mut deps.new_matcher_io(), true);
+
+        let midnight = DateTime::<Local>::from(midnight);
+        assert_eq!(midnight.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap())
     }
 
     #[test]
