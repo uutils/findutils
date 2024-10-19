@@ -9,6 +9,8 @@ use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use chrono::{DateTime, Local, Timelike};
+
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
@@ -19,10 +21,14 @@ const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 fn get_time(matcher_io: &mut MatcherIO, today_start: bool) -> SystemTime {
     if today_start {
         // the time at 00:00:00 of today
-        let duration = matcher_io.now().duration_since(UNIX_EPOCH).unwrap();
-        let seconds = duration.as_secs();
-        let midnight_seconds = seconds - (seconds % 86400);
-        UNIX_EPOCH + Duration::from_secs(midnight_seconds)
+        let duration_since_unix_epoch = matcher_io.now().duration_since(UNIX_EPOCH).unwrap();
+        let seconds_since_unix_epoch = duration_since_unix_epoch.as_secs();
+        let utc_time = DateTime::from_timestamp(seconds_since_unix_epoch as i64, 0).unwrap();
+        let local_time = utc_time.with_timezone(&Local);
+        let seconds_since_last_midnight = local_time.num_seconds_from_midnight();
+        let local_midnight_seconds = local_time.timestamp() - seconds_since_last_midnight as i64;
+
+        UNIX_EPOCH + Duration::from_secs(local_midnight_seconds as u64)
     } else {
         matcher_io.now()
     }
@@ -396,6 +402,7 @@ impl FileAgeRangeMatcher {
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveTime;
     use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::Read;
@@ -614,6 +621,15 @@ mod tests {
             zero_day_matcher.matches(&file, &mut deps.new_matcher_io()),
             "future-modified file should match exactly 0 days old"
         );
+    }
+
+    #[test]
+    fn get_local_midnight() {
+        let deps = FakeDependencies::new();
+        let midnight = get_time(&mut deps.new_matcher_io(), true);
+
+        let midnight = DateTime::<Local>::from(midnight);
+        assert_eq!(midnight.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap())
     }
 
     #[test]
