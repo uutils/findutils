@@ -105,49 +105,23 @@ jobs:
 
       - name: Install `rust` toolchain
         run: |
-          ## Install `rust` toolchain
           rustup toolchain install nightly --no-self-update -c rustfmt --profile minimal
           rustup default nightly
 
-      - name: "`grcov` ~ install"
-        run: cargo install grcov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --lcov --branch --output-path lcov.info
 
-      - name: cargo test
-        run: |
-          cargo test --all --no-fail-fast ${{ matrix.cargo_flags }}
-        env:
-          CARGO_INCREMENTAL: "0"
-          RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort -Cdebug-assertions=off"
-          RUSTDOCFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort -Cdebug-assertions=off"
-
-      - name: Generate coverage data
-        id: grcov
-        run: |
-          grcov target/debug/ \
-              --branch \
-              --llvm \
-              --source-dir . \
-              --output-path lcov.info \
-              --ignore-not-existing \
-              --excl-line "#\\[derive\\(" \
-              --excl-br-line "#\\[derive\\(" \
-              --excl-start "#\\[cfg\\(test\\)\\]" \
-              --excl-br-start "#\\[cfg\\(test\\)\\]" \
-              --commit-sha ${{ github.sha }} \
-              --service-job-id ${{ github.job }} \
-              --service-name "GitHub Actions" \
-              --service-number ${{ github.run_id }}
       - name: Upload coverage as artifact
         uses: actions/upload-artifact@v4
         with:
           name: lcov.info
-          # path: ${{ steps.grcov.outputs.report }}
           path: lcov.info
 
       - name: Upload coverage to codecov.io
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          # file: ${{ steps.grcov.outputs.report }}
           file: lcov.info
           fail_ci_if_error: true
