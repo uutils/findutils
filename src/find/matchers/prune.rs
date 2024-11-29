@@ -24,8 +24,8 @@ impl Matcher for PruneMatcher {
         true
     }
 }
-#[cfg(test)]
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
