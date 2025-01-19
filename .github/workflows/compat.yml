@@ -102,7 +102,7 @@ jobs:
         shell: bash
         run: |
           # Enable sources & install dependencies
-          sudo find /etc/apt/sources.list* -type f -exec sed -i 'p; s/^deb /deb-src /' '{}' +
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get build-dep bfs
       - name: Run BFS tests
