@@ -143,7 +143,7 @@ pub struct MatcherIO<'a> {
     deps: &'a dyn Dependencies,
 }
 
-impl<'a> MatcherIO<'a> {
+impl MatcherIO<'_> {
     pub fn new(deps: &dyn Dependencies) -> MatcherIO<'_> {
         MatcherIO {
             should_skip_dir: false,
