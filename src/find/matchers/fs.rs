@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use super::{Matcher, MatcherIO, WalkEntry};
+use uucore::error::UResult;
 
 /// The latest mapping from dev_id to fs_type, used for saving mount info reads
 #[cfg(unix)]
@@ -26,15 +27,11 @@ pub struct Cache {
 #[cfg(unix)]
 use std::{
     cell::RefCell,
-    error::Error,
     io::{stderr, Write},
     path::Path,
 };
 #[cfg(unix)]
-pub fn get_file_system_type(
-    path: &Path,
-    cache: &RefCell<Option<Cache>>,
-) -> Result<String, Box<dyn Error>> {
+pub fn get_file_system_type(path: &Path, cache: &RefCell<Option<Cache>>) -> UResult<String> {
     use std::os::unix::fs::MetadataExt;
 
     // use symlink_metadata (lstat under the hood) instead of metadata (stat) to make sure that it
@@ -51,10 +48,7 @@ pub fn get_file_system_type(
         }
     }
 
-    let fs_list = match uucore::fsext::read_fs_list() {
-        Ok(fs_list) => fs_list,
-        Err(err) => Err(err)?,
-    };
+    let fs_list = uucore::fsext::read_fs_list()?;
     let result = fs_list
         .into_iter()
         .find(|fs| fs.dev_id == dev_id)
