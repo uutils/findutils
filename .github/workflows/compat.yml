@@ -4,6 +4,9 @@ name: External-testsuites
 
 jobs:
   gnu-tests:
+    permissions:
+      actions: read
+
     name: Run GNU findutils tests
     runs-on: ubuntu-latest
     steps:
@@ -27,7 +30,7 @@ jobs:
         shell: bash
         run: |
           # Enable sources & install dependencies
-          sudo find /etc/apt/sources.list* -type f -exec sed -i 'p; s/^deb /deb-src /' '{}' +
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get build-dep findutils
       - name: Run GNU tests
@@ -38,6 +41,7 @@ jobs:
       - name: Extract testing info
         shell: bash
         run: |
+
       - name: Upload gnu-test-report
         uses: actions/upload-artifact@v4
         with:
@@ -51,24 +55,43 @@ jobs:
         with:
           name: gnu-result
           path: gnu-result.json
-      - name: Download the result
-        uses: dawidd6/action-download-artifact@v6
+      - name: Download artifacts (gnu-result and gnu-test-report)
+        uses: actions/github-script@v7
         with:
-          workflow: compat.yml
-          workflow_conclusion: completed
-          name: gnu-result
-          repo: uutils/findutils
-          branch: main
-          path: dl
-      - name: Download the log
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: compat.yml
-          workflow_conclusion: completed
-          name: gnu-test-report
-          repo: uutils/findutils
-          branch: main
-          path: dl
+          script: |
+            let fs = require('fs');
+            fs.mkdirSync('${{ github.workspace }}/dl', { recursive: true });
+
+            async function downloadArtifact(artifactName) {
+              // List all artifacts from the workflow run
+              let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: ${{ github.run_id }},
+              });
+
+              // Find the specified artifact
+              let matchArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
+              if (!matchArtifact) {
+                throw new Error(`Artifact "${artifactName}" not found.`);
+              }
+
+              // Download the artifact
+              let download = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: matchArtifact.id,
+                archive_format: 'zip',
+              });
+
+              // Save the artifact to a file
+              fs.writeFileSync(`${{ github.workspace }}/dl/${artifactName}.zip`, Buffer.from(download.data));
+            }
+
+            // Download the required artifacts
+            await downloadArtifact("gnu-result");
+            await downloadArtifact("gnu-test-report");
+
       - name: Compare failing tests against master
         shell: bash
         run: |
@@ -76,6 +99,8 @@ jobs:
       - name: Compare against main results
         shell: bash
         run: |
+          unzip dl/gnu-result.zip -d dl/
+          unzip dl/gnu-test-report.zip -d dl/
           mv dl/gnu-result.json latest-gnu-result.json
           python findutils/util/compare_gnu_result.py
 
@@ -102,7 +127,7 @@ jobs:
         shell: bash
         run: |
           # Enable sources & install dependencies
-          sudo find /etc/apt/sources.list* -type f -exec sed -i 'p; s/^deb /deb-src /' '{}' +
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get build-dep bfs
       - name: Run BFS tests
@@ -120,24 +145,42 @@ jobs:
         with:
           name: bfs-result
           path: bfs-result.json
-      - name: Download the result
-        uses: dawidd6/action-download-artifact@v6
+      - name: Download artifacts (gnu-result and bfs-test-report)
+        uses: actions/github-script@v7
         with:
-          workflow: compat.yml
-          workflow_conclusion: completed
-          name: bfs-result
-          repo: uutils/findutils
-          branch: main
-          path: dl
-      - name: Download the log
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: compat.yml
-          workflow_conclusion: completed
-          name: bfs-test-report
-          repo: uutils/findutils
-          branch: main
-          path: dl
+          script: |
+            let fs = require('fs');
+            fs.mkdirSync('${{ github.workspace }}/dl', { recursive: true });
+
+            async function downloadArtifact(artifactName) {
+              // List all artifacts from the workflow run
+              let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: ${{ github.run_id }},
+              });
+
+              // Find the specified artifact
+              let matchArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
+              if (!matchArtifact) {
+                throw new Error(`Artifact "${artifactName}" not found.`);
+              }
+
+              // Download the artifact
+              let download = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: matchArtifact.id,
+                archive_format: 'zip',
+              });
+
+              // Save the artifact to a file
+              fs.writeFileSync(`${{ github.workspace }}/dl/${artifactName}.zip`, Buffer.from(download.data));
+            }
+
+            // Download the required artifacts
+            await downloadArtifact("bfs-result");
+            await downloadArtifact("bfs-test-report");
       - name: Compare failing tests against main
         shell: bash
         run: |
@@ -145,6 +188,8 @@ jobs:
       - name: Compare against main results
         shell: bash
         run: |
+          unzip dl/bfs-result.zip -d dl/
+          unzip dl/bfs-test-report.zip -d dl/
           mv dl/bfs-result.json latest-bfs-result.json
           python findutils/util/compare_bfs_result.py
 
