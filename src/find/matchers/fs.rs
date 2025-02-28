@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use super::{Matcher, MatcherIO, WalkEntry};
+#[cfg(unix)]
 use uucore::error::UResult;
 
 /// The latest mapping from dev_id to fs_type, used for saving mount info reads
@@ -30,6 +31,7 @@ use std::{
     io::{stderr, Write},
     path::Path,
 };
+
 #[cfg(unix)]
 pub fn get_file_system_type(path: &Path, cache: &RefCell<Option<Cache>>) -> UResult<String> {
     use std::os::unix::fs::MetadataExt;
