@@ -272,7 +272,6 @@ dependencies = [
  "faccess",
  "filetime",
  "nix",
- "once_cell",
  "onig",
  "predicates",
  "pretty_assertions",
