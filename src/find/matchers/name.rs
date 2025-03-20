@@ -23,6 +23,9 @@ impl NameMatcher {
 impl Matcher for NameMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let name = file_info.file_name().to_string_lossy();
+        if name.contains('/') {
+            return true;
+        }
         self.pattern.matches(&name)
     }
 }
