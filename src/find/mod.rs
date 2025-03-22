@@ -436,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_files0_basic(){
+    fn parse_files0_basic() {
         let parse = super::parse_args(&["-files0-from"]);
         if let Err(e) = parse {
             assert_eq!(e.to_string(), "missing argument to -files0-from");
@@ -446,8 +446,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_files0_no_file(){
-        let parse = super::parse_args(&["-files0-from","nonexistant.file"]);
+    fn parse_files0_no_file() {
+        let parse = super::parse_args(&["-files0-from", "nonexistant.file"]);
         if let Err(e) = parse {
             assert_eq!(e.to_string(), "No such file or directory (os error 2)");
         } else {
