@@ -6,15 +6,15 @@
 
 pub mod matchers;
 
+use atty::Stream;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
+use std::io;
 use std::io::{stderr, stdout, Read, Write};
 use std::rc::Rc;
 use std::time::SystemTime;
 use walkdir::WalkDir;
-use atty::Stream;
-use std::io;
 
 pub struct Config {
     same_file_system: bool,
@@ -27,7 +27,7 @@ pub struct Config {
     today_start: bool,
     no_leaf_dirs: bool,
     follow: Follow,
-    from_file: Option<String>
+    from_file: Option<String>,
 }
 
 impl Default for Config {
@@ -46,7 +46,7 @@ impl Default for Config {
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
             follow: Follow::Never,
-            from_file:None
+            from_file: None,
         }
     }
 }
@@ -130,20 +130,20 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     }
     //add more comments
     if config.from_file.is_some() {
-        if config.from_file.as_deref() == Some("-"){
+        if config.from_file.as_deref() == Some("-") {
             if atty::is(Stream::Stdin) {
-                return Err(From::from(format!("stdin not piped")));
+                return Err(From::from("stdin not piped".to_string()));
             }
-            let mut buffer=Vec::new();
+            let mut buffer = Vec::new();
             io::stdin().read_to_end(&mut buffer)?;
-            let b2:Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
+            let b2: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
             let string_segments: Vec<String> = b2
                 .iter()
                 .filter_map(|s| std::str::from_utf8(s).ok())
                 .map(|s| s.to_string())
                 .collect();
             paths.extend(string_segments);
-        }else{
+        } else {
             let file = std::fs::read(config.from_file.as_ref().unwrap())?;
             for path in file
                 .split(|&b| b == 0)
@@ -151,9 +151,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             {
                 paths.push(path.to_string());
             }
-            
         }
-        
     } else {
         let paths_start = i;
         while i < args.len()
@@ -168,7 +166,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             paths.push(".".to_string());
         }
     }
-    
+
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
     Ok(ParsedInfo {
         matcher,
