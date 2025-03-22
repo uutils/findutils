@@ -116,6 +116,10 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                 i += 1;
                 break;
             }
+            // https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html
+            // This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
+            // eg. dummy | find -files0-from -
+            // eg. find -files0-from rust.txt -name "cargo"
             "-files0-from" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
@@ -128,20 +132,27 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
 
         i += 1;
     }
-    //add more comments
+
+    // Check to see if '-files0-from' argument is used.
     if config.from_file.is_some() {
         if config.from_file.as_deref() == Some("-") {
+            // small check if using stdin / pipe mode but data is not piped
             if atty::is(Stream::Stdin) {
                 return Err(From::from("stdin not piped".to_string()));
             }
+
             let mut buffer = Vec::new();
             io::stdin().read_to_end(&mut buffer)?;
-            let b2: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
-            let string_segments: Vec<String> = b2
+            let buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
+            let string_segments: Vec<String> = buffer_split
                 .iter()
                 .filter_map(|s| std::str::from_utf8(s).ok())
                 .map(|s| s.to_string())
                 .collect();
+            // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
+            if string_segments.iter().any(|s| s.is_empty()) {
+                return Err("Empty starting point detected in -files0-from input".into());
+            }
             paths.extend(string_segments);
         } else {
             let file = std::fs::read(config.from_file.as_ref().unwrap())?;
@@ -149,10 +160,19 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                 .split(|&b| b == 0)
                 .filter_map(|s| std::str::from_utf8(s).ok())
             {
+                // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
+                // empty file should also exit immediately
+                if path.is_empty() {
+                    return Err(
+                        "Empty starting point detected in -files0-from input OR File is empty"
+                            .into(),
+                    );
+                }
                 paths.push(path.to_string());
             }
         }
     } else {
+        //proceed normally
         let paths_start = i;
         while i < args.len()
             && (args[i] == "-" || !args[i].starts_with('-'))
@@ -273,6 +293,7 @@ Early alpha implementation. Currently the only expressions supported are
  -iname case-insensitive_filename_pattern
  -ilname case-insensitive_filename_pattern
  -regextype type
+ -files0-from
  -regex pattern
  -iregex pattern
  -type type_char
