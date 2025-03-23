@@ -38,7 +38,7 @@ pub struct LinkNameMatcher {
 }
 
 impl LinkNameMatcher {
-    pub fn new(pattern_string: &str, caseless: bool) -> LinkNameMatcher {
+    pub fn new(pattern_string: &str, caseless: bool) -> Self {
         let pattern = Pattern::new(pattern_string, caseless);
         Self { pattern }
     }

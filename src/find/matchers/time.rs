@@ -98,19 +98,19 @@ impl NewerOptionType {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(option: &str) -> Self {
         match option {
-            "a" => NewerOptionType::Accessed,
-            "B" => NewerOptionType::Birthed,
-            "c" => NewerOptionType::Changed,
-            _ => NewerOptionType::Modified,
+            "a" => Self::Accessed,
+            "B" => Self::Birthed,
+            "c" => Self::Changed,
+            _ => Self::Modified,
         }
     }
 
     fn get_file_time(self, metadata: &Metadata) -> std::io::Result<SystemTime> {
         match self {
-            NewerOptionType::Accessed => metadata.accessed(),
-            NewerOptionType::Birthed => metadata.created(),
-            NewerOptionType::Changed => metadata.changed(),
-            NewerOptionType::Modified => metadata.modified(),
+            Self::Accessed => metadata.accessed(),
+            Self::Birthed => metadata.created(),
+            Self::Changed => metadata.changed(),
+            Self::Modified => metadata.modified(),
         }
     }
 }
@@ -263,9 +263,9 @@ pub enum FileTimeType {
 impl FileTimeType {
     fn get_file_time(self, metadata: &Metadata) -> std::io::Result<SystemTime> {
         match self {
-            FileTimeType::Accessed => metadata.accessed(),
-            FileTimeType::Changed => metadata.changed(),
-            FileTimeType::Modified => metadata.modified(),
+            Self::Accessed => metadata.accessed(),
+            Self::Changed => metadata.changed(),
+            Self::Modified => metadata.modified(),
         }
     }
 }
@@ -629,7 +629,7 @@ mod tests {
         let midnight = get_time(&mut deps.new_matcher_io(), true);
 
         let midnight = DateTime::<Local>::from(midnight);
-        assert_eq!(midnight.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+        assert_eq!(midnight.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
     }
 
     #[test]
