@@ -121,6 +121,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             // eg. dummy | find -files0-from -
             // eg. find -files0-from rust.txt -name "cargo"
             "-files0-from" => {
+                // NOTE : -ok and -okdir should NOT be provided along with -files0-from args.
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
@@ -449,7 +450,17 @@ mod tests {
     fn parse_files0_no_file() {
         let parse = super::parse_args(&["-files0-from", "nonexistant.file"]);
         if let Err(e) = parse {
-            assert_eq!(e.to_string(), "No such file or directory (os error 2)");
+            #[cfg(windows)]
+            {
+                assert_eq!(
+                    e.to_string(),
+                    "The system cannot find the file specified. (os error 2)"
+                );
+            }
+            #[cfg(unix)]
+            {
+                assert_eq!(e.to_string(), "No such file or directory (os error 2)");
+            }
         } else {
             panic!("parse_args should have returned an error");
         }

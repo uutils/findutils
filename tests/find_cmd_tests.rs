@@ -74,6 +74,63 @@ fn two_matchers_one_matches() {
         .stdout(predicate::str::is_empty());
 }
 
+#[serial(working_dir)]
+#[test]
+fn files0_empty_file() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-files0-from", "./test_data/simple/abbbc"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::diff(
+            "Error: Empty starting point detected in -files0-from input OR File is empty\n",
+        ))
+        .stdout(predicate::str::is_empty());
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_empty_pipe() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-files0-from", "-"])
+        .write_stdin(b"")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Error: Empty starting point detected in -files0-from input",
+        ))
+        .stdout(predicate::str::is_empty());
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_pipe_basic() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .write_stdin(b"./test_data/simple\0./test_data/links")
+        .args(["-files0-from", "-"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("./test_data/"));
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_pipe_double_nul() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .write_stdin(b"./test_data/simple\0\0./test_data/links")
+        .args(["-files0-from", "-"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Error: Empty starting point detected in -files0-from input",
+        ))
+        .stdout(predicate::str::is_empty());
+}
+
 #[test]
 fn matcher_with_side_effects_at_end() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
