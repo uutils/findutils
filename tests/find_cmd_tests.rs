@@ -1007,7 +1007,7 @@ fn find_fprinter() {
 struct TestCaseData {
     search_dir: &'static str,
     args: Vec<&'static str>,
-    expected_out: &'static str
+    expected_out: &'static str,
 }
 
 #[test]
