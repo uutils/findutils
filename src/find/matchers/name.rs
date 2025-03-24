@@ -23,9 +23,12 @@ impl NameMatcher {
 impl Matcher for NameMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let name = file_info.file_name().to_string_lossy();
+
+        #[cfg(unix)]
         if name.contains('/') {
             return true;
         }
+
         self.pattern.matches(&name)
     }
 }
@@ -130,6 +133,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn slash_match_returns_true() {
         let dir_to_match = get_dir_entry_for("/", "");
         let matcher = NameMatcher::new("///", true);
