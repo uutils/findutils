@@ -1054,7 +1054,7 @@ fn find_ls() {
 }
 
 #[test]
-#[config(unix)]
+#[cfg(unix)]
 fn find_slashs() {
     Command::cargo_bin("find")
         .expect("found binary")
