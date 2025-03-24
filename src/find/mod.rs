@@ -122,6 +122,13 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             // eg. find -files0-from rust.txt -name "cargo"
             "-files0-from" => {
                 // NOTE : -ok and -okdir should NOT be provided along with -files0-from args.
+                // This if checking -ok or -okdir exists in args should later be shifted to -ok and -okdir when it is fully implemented.
+                if args.iter().any(|arg| *arg == "-ok" || *arg == "-okdir") {
+                    return Err(From::from(
+                        "files0-from standard input cannot be combined with -ok, -okdir"
+                            .to_string(),
+                    ));
+                }
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
@@ -153,8 +160,9 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
             if string_segments.iter().any(|s| s.is_empty()) {
                 return Err("Empty starting point detected in -files0-from input".into());
+            } else {
+                paths.extend(string_segments);
             }
-            paths.extend(string_segments);
         } else {
             let file = std::fs::read(config.from_file.as_ref().unwrap())?;
             for path in file
@@ -163,13 +171,15 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             {
                 // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
                 // empty file should also exit immediately
+                // this if also handles if there are 2 consecutive ASCII NUL Characters
                 if path.is_empty() {
                     return Err(
                         "Empty starting point detected in -files0-from input OR File is empty"
                             .into(),
                     );
+                } else {
+                    paths.push(path.to_string());
                 }
-                paths.push(path.to_string());
             }
         }
     } else {
