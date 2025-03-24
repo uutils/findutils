@@ -138,7 +138,7 @@ fn files0_no_file() {
     {
         Command::cargo_bin("find")
             .expect("found binary")
-            .args(["-files0-from", "xyz.nonexistantFile"])
+            .args(["-files0-from", "xyz.nonexistentFile"])
             .assert()
             .failure()
             .stderr(predicate::str::contains("No such file or directory"))
