@@ -12,6 +12,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use regex::Regex;
 use serial_test::serial;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::{env, io::ErrorKind};
@@ -1119,6 +1120,55 @@ fn find_fprinter() {
         assert!(contents.contains("test_data/simple"));
 
         let _ = fs::remove_file(format!("test_data/find_{p}"));
+    }
+}
+
+struct TestCaseData {
+    search_dir: &'static str,
+    args: Vec<&'static str>,
+    expected_out: &'static str
+}
+
+#[test]
+#[serial(working_dir)]
+fn find_using_same_out_multiple_times() {
+    let cases = HashMap::from([
+        ("fprint", TestCaseData{
+            search_dir: "test_data/simple",
+            args: vec!["-fprint", "test_data/find_fprint", "-fprint", "test_data/find_fprint"],
+            expected_out: "test_data/simple\ntest_data/simple\ntest_data/simple/subdir\ntest_data/simple/subdir\ntest_data/simple/subdir/ABBBC\ntest_data/simple/subdir/ABBBC\ntest_data/simple/abbbc\ntest_data/simple/abbbc\n"
+        }),
+        ("fprint0", TestCaseData{
+            search_dir: "test_data/simple",
+            args: vec!["-fprint0", "test_data/find_fprint0", "-fprint0", "test_data/find_fprint0"],
+            expected_out: "test_data/simple\0test_data/simple\0test_data/simple/subdir\0test_data/simple/subdir\0test_data/simple/subdir/ABBBC\0test_data/simple/subdir/ABBBC\0test_data/simple/abbbc\0test_data/simple/abbbc\0"
+        }),
+        ("fprintf", TestCaseData{
+            search_dir: "test_data/simple",
+            args: vec!["-fprintf", "test_data/find_fprintf", "%p\n", "-fprintf", "test_data/find_fprintf", "%f\n"],
+            expected_out: "test_data/simple\nsimple\ntest_data/simple/subdir\nsubdir\ntest_data/simple/subdir/ABBBC\nABBBC\ntest_data/simple/abbbc\nabbbc\n"
+        }),
+    ]);
+
+    for (key, test_data) in cases {
+        let _ = fs::remove_file(format!("test_data/find_{key}"));
+
+        Command::cargo_bin("find")
+            .expect("found binary")
+            .arg(test_data.search_dir)
+            .args(test_data.args)
+            .assert()
+            .success()
+            .stdout(predicate::str::is_empty())
+            .stderr(predicate::str::is_empty());
+
+        // Read the generated content
+        let mut f = File::open(format!("test_data/find_{key}")).unwrap();
+        let mut contents = String::new();
+        f.read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, test_data.expected_out);
+
+        let _ = fs::remove_file(format!("test_data/find_{key}"));
     }
 }
 

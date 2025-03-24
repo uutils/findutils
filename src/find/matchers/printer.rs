@@ -6,6 +6,7 @@
 
 use std::fs::File;
 use std::io::{stderr, Write};
+use std::sync::Arc;
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -26,11 +27,11 @@ impl std::fmt::Display for PrintDelimiter {
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer {
     delimiter: PrintDelimiter,
-    output_file: Option<File>,
+    output_file: Option<Arc<File>>,
 }
 
 impl Printer {
-    pub fn new(delimiter: PrintDelimiter, output_file: Option<File>) -> Self {
+    pub fn new(delimiter: PrintDelimiter, output_file: Option<Arc<File>>) -> Self {
         Self {
             delimiter,
             output_file,
@@ -71,7 +72,7 @@ impl Printer {
 impl Matcher for Printer {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, matcher_io, file, true);
+            self.print(file_info, file.clone(), true);
         } else {
             self.print(
                 file_info,
@@ -127,7 +128,7 @@ mod tests {
         let dev_full = File::open("/dev/full").unwrap();
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
 
-        let matcher = Printer::new(PrintDelimiter::Newline, Some(dev_full));
+        let matcher = Printer::new(PrintDelimiter::Newline, Some(Arc::new(dev_full)));
         let deps = FakeDependencies::new();
 
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
