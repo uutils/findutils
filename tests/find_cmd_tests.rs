@@ -131,6 +131,45 @@ fn files0_pipe_double_nul() {
         .stdout(predicate::str::is_empty());
 }
 
+#[serial(working_dir)]
+#[test]
+fn files0_no_file() {
+    #[cfg(unix)]
+    {
+        Command::cargo_bin("find")
+            .expect("found binary")
+            .args(["-files0-from", "xyz.nonexistantFile"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("No such file or directory"))
+            .stdout(predicate::str::is_empty());
+    }
+    #[cfg(windows)]
+    {
+        Command::cargo_bin("find")
+            .expect("found binary")
+            .args(["-files0-from", "xyz.nonexistantFile"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "The system cannot find the file specified.",
+            ))
+            .stdout(predicate::str::is_empty());
+    }
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_basic() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .arg("-files0-from")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("missing argument to -files0-from"))
+        .stdout(predicate::str::is_empty());
+}
+
 #[test]
 fn matcher_with_side_effects_at_end() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();

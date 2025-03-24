@@ -437,36 +437,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_files0_basic() {
-        let parse = super::parse_args(&["-files0-from"]);
-        if let Err(e) = parse {
-            assert_eq!(e.to_string(), "missing argument to -files0-from");
-        } else {
-            panic!("parse_args should have returned an error");
-        }
-    }
-
-    #[test]
-    fn parse_files0_no_file() {
-        let parse = super::parse_args(&["-files0-from", "nonexistant.file"]);
-        if let Err(e) = parse {
-            #[cfg(windows)]
-            {
-                assert_eq!(
-                    e.to_string(),
-                    "The system cannot find the file specified. (os error 2)"
-                );
-            }
-            #[cfg(unix)]
-            {
-                assert_eq!(e.to_string(), "No such file or directory (os error 2)");
-            }
-        } else {
-            panic!("parse_args should have returned an error");
-        }
-    }
-
-    #[test]
     fn parse_args_handles_single_dash() {
         // Apparently "-" should be treated as a directory name.
         let parsed_info = super::parse_args(&["-"]).expect("parsing should succeed");
