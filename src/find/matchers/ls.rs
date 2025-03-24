@@ -7,6 +7,7 @@ use chrono::DateTime;
 use std::{
     fs::File,
     io::{stderr, Write},
+    sync::Arc,
 };
 
 use super::{Matcher, MatcherIO, WalkEntry};
@@ -110,11 +111,11 @@ fn format_permissions(file_attributes: u32) -> String {
 }
 
 pub struct Ls {
-    output_file: Option<File>,
+    output_file: Option<Arc<File>>,
 }
 
 impl Ls {
-    pub fn new(output_file: Option<File>) -> Self {
+    pub fn new(output_file: Option<Arc<File>>) -> Self {
         Self { output_file }
     }
 
@@ -268,7 +269,7 @@ impl Ls {
 impl Matcher for Ls {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, matcher_io, file, true);
+            self.print(file_info, file.clone(), true);
         } else {
             self.print(
                 file_info,

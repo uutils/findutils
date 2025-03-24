@@ -453,13 +453,6 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
-/// Creates a file if it doesn't exist.
-/// If it does exist, it will be overwritten.
-fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
-    let file = File::create(path)?;
-    Ok(file)
-}
-
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -530,7 +523,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = file_mem.get_or_create_file(args[i])?.clone();
                 Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
@@ -1830,31 +1823,5 @@ mod tests {
         build_top_level_matcher(&["(", "-version", "-o", ")", ")"], &mut config)
             .expect("-version should stop parsing");
         assert!(config.version_requested);
-    }
-
-    #[test]
-    fn get_or_create_file_test() {
-        use std::fs;
-
-        // remove file if hard link file exist.
-        // But you can't delete a file that doesn't exist,
-        // so ignore the error returned here.
-        let _ = fs::remove_file("test_data/get_or_create_file_test");
-
-        // test create file
-        let file = get_or_create_file("test_data/get_or_create_file_test");
-        assert!(file.is_ok());
-
-        let file = get_or_create_file("test_data/get_or_create_file_test");
-        assert!(file.is_ok());
-
-        // test error when file no permission
-        #[cfg(unix)]
-        {
-            let result = get_or_create_file("/etc/shadow");
-            assert!(result.is_err());
-        }
-
-        let _ = fs::remove_file("test_data/get_or_create_file_test");
     }
 }
