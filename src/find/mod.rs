@@ -142,24 +142,21 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     }
 
     // Check to see if '-files0-from' argument is used.
-    match config.from_file.is_some() {
-        true => {
-            parse_files0_args(&config, &mut paths)?;
+    if config.from_file.is_some() {
+        parse_files0_args(&config, &mut paths)?;
+    } else {
+        //proceed normally
+        let paths_start = i;
+        while i < args.len()
+            && (args[i] == "-" || !args[i].starts_with('-'))
+            && args[i] != "!"
+            && args[i] != "("
+        {
+            paths.push(args[i].to_string());
+            i += 1;
         }
-        false => {
-            //proceed normally
-            let paths_start = i;
-            while i < args.len()
-                && (args[i] == "-" || !args[i].starts_with('-'))
-                && args[i] != "!"
-                && args[i] != "("
-            {
-                paths.push(args[i].to_string());
-                i += 1;
-            }
-            if i == paths_start {
-                paths.push(".".to_string());
-            }
+        if i == paths_start {
+            paths.push(".".to_string());
         }
     }
 
