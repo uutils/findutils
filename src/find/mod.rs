@@ -195,7 +195,8 @@ fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box
         // incase the file starts/ends with ASCII NUL
         if file_split.first().is_some_and(|s| s.is_empty()) {
             file_split.remove(0);
-        } else if file_split.last().is_some_and(|s| s.is_empty()) {
+        }
+        if file_split.last().is_some_and(|s| s.is_empty()) {
             file_split.remove(file_split.len() - 1);
         }
 
