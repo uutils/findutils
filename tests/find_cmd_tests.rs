@@ -1052,3 +1052,14 @@ fn find_ls() {
         .success()
         .stderr(predicate::str::is_empty());
 }
+
+#[test]
+#[cfg(unix)]
+fn find_slashs() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["///", "-maxdepth", "0", "-name", "/"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
