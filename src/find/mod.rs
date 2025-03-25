@@ -142,59 +142,24 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     }
 
     // Check to see if '-files0-from' argument is used.
-    if config.from_file.is_some() {
-        if config.from_file.as_deref() == Some("-") {
-            // small check if using stdin / pipe mode but data is not piped
-            if atty::is(Stream::Stdin) {
-                return Err(From::from("stdin not piped".to_string()));
-            }
-
-            let mut buffer = Vec::new();
-            io::stdin().read_to_end(&mut buffer)?;
-            let buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
-            let string_segments: Vec<String> = buffer_split
-                .iter()
-                .filter_map(|s| std::str::from_utf8(s).ok())
-                .map(|s| s.to_string())
-                .collect();
-            // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
-            if string_segments.iter().any(|s| s.is_empty()) {
-                return Err("Empty starting point detected in -files0-from input".into());
-            } else {
-                paths.extend(string_segments);
-            }
-        } else {
-            let file = std::fs::read(config.from_file.as_ref().unwrap())?;
-            for path in file
-                .split(|&b| b == 0)
-                .filter_map(|s| std::str::from_utf8(s).ok())
+    match config.from_file.is_some() {
+        true => {
+            parse_files0_args(&config, &mut paths)?;
+        }
+        false => {
+            //proceed normally
+            let paths_start = i;
+            while i < args.len()
+                && (args[i] == "-" || !args[i].starts_with('-'))
+                && args[i] != "!"
+                && args[i] != "("
             {
-                // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
-                // empty file should also exit immediately
-                // this if also handles if there are 2 consecutive ASCII NUL Characters
-                if path.is_empty() {
-                    return Err(
-                        "Empty starting point detected in -files0-from input OR File is empty"
-                            .into(),
-                    );
-                } else {
-                    paths.push(path.to_string());
-                }
+                paths.push(args[i].to_string());
+                i += 1;
             }
-        }
-    } else {
-        //proceed normally
-        let paths_start = i;
-        while i < args.len()
-            && (args[i] == "-" || !args[i].starts_with('-'))
-            && args[i] != "!"
-            && args[i] != "("
-        {
-            paths.push(args[i].to_string());
-            i += 1;
-        }
-        if i == paths_start {
-            paths.push(".".to_string());
+            if i == paths_start {
+                paths.push(".".to_string());
+            }
         }
     }
 
@@ -204,6 +169,48 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         paths,
         config,
     })
+}
+
+fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box<dyn Error>> {
+    if config.from_file.as_deref() == Some("-") {
+        // small check if using stdin / pipe mode but data is not piped
+        if atty::is(Stream::Stdin) {
+            return Err(From::from("stdin not piped".to_string()));
+        }
+
+        let mut buffer = Vec::new();
+        io::stdin().read_to_end(&mut buffer)?;
+        let buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
+        let string_segments: Vec<String> = buffer_split
+            .iter()
+            .filter_map(|s| std::str::from_utf8(s).ok())
+            .map(|s| s.to_string())
+            .collect();
+        // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
+        if string_segments.iter().any(|s| s.is_empty()) {
+            return Err("Empty starting point detected in -files0-from input".into());
+        } else {
+            paths.extend(string_segments);
+        }
+    } else {
+        let file = std::fs::read(config.from_file.as_ref().unwrap())?;
+        for path in file
+            .split(|&b| b == 0)
+            .filter_map(|s| std::str::from_utf8(s).ok())
+        {
+            // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
+            // empty file should also exit immediately
+            // this if also handles if there are 2 consecutive ASCII NUL Characters
+            if path.is_empty() {
+                return Err(
+                    "Empty starting point detected in -files0-from input OR File is empty".into(),
+                );
+            } else {
+                paths.push(path.to_string());
+            }
+        }
+    }
+    Ok(())
 }
 
 fn process_dir(
