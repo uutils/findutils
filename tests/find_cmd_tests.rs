@@ -1126,7 +1126,7 @@ fn find_fprinter() {
 struct TestCaseData {
     search_dir: &'static str,
     args: Vec<&'static str>,
-    expected_out: &'static str,
+    needle_substr: Vec<(&'static str, usize)>,
 }
 
 #[test]
@@ -1136,17 +1136,17 @@ fn find_using_same_out_multiple_times() {
         ("fprint", TestCaseData{
             search_dir: "test_data/simple",
             args: vec!["-fprint", "test_data/find_fprint", "-fprint", "test_data/find_fprint"],
-            expected_out: "test_data/simple\ntest_data/simple\ntest_data/simple/subdir\ntest_data/simple/subdir\ntest_data/simple/subdir/ABBBC\ntest_data/simple/subdir/ABBBC\ntest_data/simple/abbbc\ntest_data/simple/abbbc\n"
+            needle_substr: vec![("test_data/simple\n", 2), ("test_data/simple/subdir\n", 2), ("test_data/simple/subdir/ABBBC\n", 2), ("test_data/simple/abbbc\n", 2)]
         }),
         ("fprint0", TestCaseData{
             search_dir: "test_data/simple",
             args: vec!["-fprint0", "test_data/find_fprint0", "-fprint0", "test_data/find_fprint0"],
-            expected_out: "test_data/simple\0test_data/simple\0test_data/simple/subdir\0test_data/simple/subdir\0test_data/simple/subdir/ABBBC\0test_data/simple/subdir/ABBBC\0test_data/simple/abbbc\0test_data/simple/abbbc\0"
+            needle_substr: vec![("test_data/simple\0", 2), ("test_data/simple/subdir\0", 2), ("test_data/simple/subdir/ABBBC\0", 2), ("test_data/simple/abbbc\0", 2)]
         }),
         ("fprintf", TestCaseData{
             search_dir: "test_data/simple",
             args: vec!["-fprintf", "test_data/find_fprintf", "%p\n", "-fprintf", "test_data/find_fprintf", "%f\n"],
-            expected_out: "test_data/simple\nsimple\ntest_data/simple/subdir\nsubdir\ntest_data/simple/subdir/ABBBC\nABBBC\ntest_data/simple/abbbc\nabbbc\n"
+            needle_substr: vec![("test_data/simple\nsimple\n", 1), ("test_data/simple/subdir\nsubdir\n", 1), ("test_data/simple/subdir/ABBBC\nABBBC\n", 1), ("test_data/simple/abbbc\nabbbc\n", 1)]
         }),
     ]);
 
@@ -1166,7 +1166,14 @@ fn find_using_same_out_multiple_times() {
         let mut f = File::open(format!("test_data/find_{key}")).unwrap();
         let mut contents = String::new();
         f.read_to_string(&mut contents).unwrap();
-        assert_eq!(contents, test_data.expected_out);
+
+        // The find output can have different order depending on the platform, so we check by substrs
+        for (substr, times) in test_data.needle_substr {
+            assert_eq!(
+                &contents.as_bytes().windows(substr.len()).filter(|&w| w == substr.as_bytes()).count(),
+                &times
+            );
+        }
 
         let _ = fs::remove_file(format!("test_data/find_{key}"));
     }
