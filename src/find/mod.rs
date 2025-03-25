@@ -191,13 +191,19 @@ fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box
         }
     } else {
         let file = std::fs::read(config.from_file.as_ref().unwrap())?;
-        for path in file
-            .split(|&b| b == 0)
-            .filter_map(|s| std::str::from_utf8(s).ok())
-        {
+        let mut file_split: Vec<&[u8]> = file.split(|&b| b == 0).collect();
+        // incase the file starts/ends with ASCII NUL
+        if file_split.first().is_some_and(|s| s.is_empty()) {
+            file_split.remove(0);
+        } else if file_split.last().is_some_and(|s| s.is_empty()) {
+            file_split.remove(file_split.len() - 1);
+        }
+
+        for value in file_split {
             // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
             // empty file should also exit immediately
             // this if also handles if there are 2 consecutive ASCII NUL Characters
+            let path = std::str::from_utf8(value)?;
             if path.is_empty() {
                 return Err(
                     "Empty starting point detected in -files0-from input OR File is empty".into(),
