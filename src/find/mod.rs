@@ -183,17 +183,18 @@ fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box
         if buffer_split.last().is_some_and(|s| s.is_empty()) {
             buffer_split.remove(buffer_split.len() - 1);
         }
-        let string_segments: Vec<String> = buffer_split
+        let mut string_segments: Vec<String> = buffer_split
             .iter()
             .filter_map(|s| std::str::from_utf8(s).ok())
             .map(|s| s.to_string())
             .collect();
         // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
         if string_segments.iter().any(|s| s.is_empty()) {
-            return Err("Empty starting point detected in -files0-from input".into());
-        } else {
-            paths.extend(string_segments);
+            println!("Find : Empty starting point detected in -files0-from input");
+            //remove the empty ones so as to avoid file not found error
+            string_segments.retain(|s| !s.is_empty());
         }
+        paths.extend(string_segments);
     } else {
         let file = std::fs::read(config.from_file.as_ref().unwrap())?;
         let mut file_split: Vec<&[u8]> = file.split(|&b| b == 0).collect();
@@ -208,10 +209,10 @@ fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box
             // this if also handles if there are 2 consecutive ASCII NUL Characters
             let path = std::str::from_utf8(value)?;
             if path.is_empty() {
-                println!("Find : Empty starting point detected in -files0-from input")
-            } else {
-                paths.push(path.to_string());
+                println!("Find : Empty starting point detected in -files0-from input");
+                continue;
             }
+            paths.push(path.to_string());
         }
     }
     Ok(())

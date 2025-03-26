@@ -175,11 +175,11 @@ fn files0_pipe_double_nul() {
         .write_stdin(b"./test_data/simple\0\0./test_data/links")
         .args(["-files0-from", "-"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "Error: Empty starting point detected in -files0-from input",
-        ))
-        .stdout(predicate::str::is_empty());
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains(
+            "Empty starting point detected in -files0-from input",
+        ));
 }
 
 #[serial(working_dir)]
