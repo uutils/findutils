@@ -30,6 +30,9 @@ impl Matcher for NameMatcher {
         } else {
             self.pattern.matches(&name)
         }
+
+        #[cfg(windows)]
+        self.pattern.matches(&name)
     }
 }
 
