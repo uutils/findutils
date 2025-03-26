@@ -94,10 +94,8 @@ fn files0_empty_pipe() {
         .args(["-files0-from", "-"])
         .write_stdin(b"")
         .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "Error: Empty starting point detected in -files0-from input",
-        ))
+        .success()
+        .stderr(predicate::str::is_empty())
         .stdout(predicate::str::is_empty());
 }
 
