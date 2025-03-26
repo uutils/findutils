@@ -121,19 +121,20 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             // eg. dummy | find -files0-from -
             // eg. find -files0-from rust.txt -name "cargo"
             "-files0-from" => {
-                // NOTE : -ok and -okdir should NOT be provided along with -files0-from args.
-                // This if checking -ok or -okdir exists in args should later be shifted to -ok and -okdir when it is fully implemented.
-                if args.iter().any(|arg| *arg == "-ok" || *arg == "-okdir") {
-                    return Err(From::from(
-                        "files0-from standard input cannot be combined with -ok, -okdir"
-                            .to_string(),
-                    ));
-                }
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
                 config.from_file = Some(args[i].to_string());
+
+                // NOTE : -ok and -okdir should NOT be provided along with -files0-from args.
+                // This if checking -ok or -okdir exists in args should later be shifted to -ok and -okdir when it is fully implemented.
+                if args.iter().any(|arg| *arg == "-ok" || *arg == "-okdir") && args[i] == "-" {
+                    return Err(From::from(
+                        "files0-from standard input cannot be combined with -ok, -okdir"
+                            .to_string(),
+                    ));
+                }
             }
             _ => break,
         }
