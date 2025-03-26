@@ -88,6 +88,35 @@ fn files0_empty_file() {
 
 #[serial(working_dir)]
 #[test]
+fn files0_file_basic_success() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-files0-from", "./test_data/simple/abbbc"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::is_empty());
+
+    #[cfg(unix)]
+    {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        let test_file = temp_dir.path().join("test_files0");
+        let mut file = File::create(&test_file).expect("created test file");
+        file.write_all(b"./test_data/\0./test_data/simple/\0")
+            .expect("file write error");
+
+        Command::cargo_bin("find")
+            .expect("found binary")
+            .args(["-files0-from", &test_file.display().to_string()])
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty())
+            .stdout(predicate::str::contains("/test_data/"));
+    }
+}
+
+#[serial(working_dir)]
+#[test]
 fn files0_empty_pipe() {
     Command::cargo_bin("find")
         .expect("found binary")
@@ -96,6 +125,32 @@ fn files0_empty_pipe() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::is_empty());
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_ok_okdir_check() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .write_stdin(b"./test_data/simple\0./test_data/links")
+        .args(["-files0-from", "-", "-ok"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "input cannot be combined with -ok, -okdir",
+        ))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .write_stdin(b"./test_data/simple\0./test_data/links")
+        .args(["-files0-from", "-", "-okdir"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "input cannot be combined with -ok, -okdir",
+        ))
         .stdout(predicate::str::is_empty());
 }
 
