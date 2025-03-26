@@ -6,11 +6,11 @@
 
 pub mod matchers;
 
-use atty::Stream;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
 use std::io;
+use std::io::IsTerminal;
 use std::io::{stderr, stdout, Read, Write};
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -171,7 +171,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
 fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box<dyn Error>> {
     if config.from_file.as_deref() == Some("-") {
         // small check if using stdin / pipe mode but data is not piped
-        if atty::is(Stream::Stdin) {
+        if io::stdin().is_terminal() {
             return Err(From::from("stdin not piped".to_string()));
         }
 
