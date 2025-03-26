@@ -143,4 +143,13 @@ mod tests {
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&dir_to_match, &mut deps.new_matcher_io()));
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn only_one_slash() {
+        let dir_to_match = get_dir_entry_for("/", "");
+        let matcher = NameMatcher::new("/", false);
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&dir_to_match, &mut deps.new_matcher_io()));
+    }
 }
