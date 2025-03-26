@@ -208,9 +208,7 @@ fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box
             // this if also handles if there are 2 consecutive ASCII NUL Characters
             let path = std::str::from_utf8(value)?;
             if path.is_empty() {
-                return Err(
-                    "Empty starting point detected in -files0-from input OR File is empty".into(),
-                );
+                println!("Find : Empty starting point detected in -files0-from input")
             } else {
                 paths.push(path.to_string());
             }
