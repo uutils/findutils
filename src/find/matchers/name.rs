@@ -25,11 +25,11 @@ impl Matcher for NameMatcher {
         let name = file_info.file_name().to_string_lossy();
 
         #[cfg(unix)]
-        if name.contains('/') {
-            return true;
+        if name.len() > 1 && name.chars().all(|x| x == '/') {
+            self.pattern.matches("/")
+        } else {
+            self.pattern.matches(&name)
         }
-
-        self.pattern.matches(&name)
     }
 }
 
@@ -135,8 +135,8 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn slash_match_returns_true() {
-        let dir_to_match = get_dir_entry_for("/", "");
-        let matcher = NameMatcher::new("///", true);
+        let dir_to_match = get_dir_entry_for("///", "");
+        let matcher = NameMatcher::new("/", true);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&dir_to_match, &mut deps.new_matcher_io()));
     }
