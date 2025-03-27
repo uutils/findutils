@@ -175,7 +175,7 @@ impl Matcher for MultiExecMatcher {
         if self.exec_in_parent_dir {
             let mut command = self.command.borrow_mut();
             if let Some(mut command) = command.take() {
-                command.current_dir(dir);
+                command.current_dir(Path::new(".").join(dir));
                 if let Err(e) = command.status() {
                     writeln!(&mut stderr(), "Failed to run {}: {}", self.executable, e).unwrap();
                 }

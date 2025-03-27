@@ -11,6 +11,7 @@
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 use tempfile::Builder;
 
 use common::test_helpers::{
@@ -225,7 +226,7 @@ fn matching_fails_if_executable_fails() {
 }
 
 #[test]
-fn matching_executes_code_multi() {
+fn matching_multi_executes_code() {
     let temp_dir = Builder::new()
         .prefix("matching_executes_code")
         .tempdir()
@@ -251,6 +252,39 @@ fn matching_executes_code_multi() {
         s,
         fix_up_slashes(&format!(
             "cwd={}\nargs=\nabc\ntest_data/simple/abbbc\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
+fn execdir_multi_in_current_directory() {
+    let temp_dir = Builder::new()
+        .prefix("execdir_in_current_directory")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    let current_dir_entry = get_dir_entry_for(".", "");
+    let matcher = MultiExecMatcher::new(
+        &path_to_testing_commandline(),
+        &[temp_dir_path.as_ref(), "abc"],
+        true,
+    )
+    .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&current_dir_entry, &mut deps.new_matcher_io()));
+    matcher.finished_dir(Path::new(""));
+    matcher.finished();
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\nabc\n./.\n",
             env::current_dir().unwrap().to_string_lossy()
         ))
     );
