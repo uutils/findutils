@@ -16,7 +16,7 @@ faccess = "0.2.4"
 walkdir = "2.5"
 regex = "1.11"
 onig = { version = "6.4", default-features = false }
-uucore = { version = "0.0.29", features = ["entries", "fs", "fsext", "mode"] }
+uucore = { version = "0.0.30", features = ["entries", "fs", "fsext", "mode"] }
 nix = { version = "0.29", features = ["fs", "user"] }
 
 [dev-dependencies]
