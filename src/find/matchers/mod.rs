@@ -1557,6 +1557,12 @@ mod tests {
         } else {
             panic!("parsing argument list with exec and no executable should fail");
         }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and + not following {{}} should fail");
+        }
     }
 
     #[test]
@@ -1571,6 +1577,18 @@ mod tests {
         let mut config = Config::default();
         build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+", ";"], &mut config)
             .expect("only {} + should be considered a multi-exec");
+    }
+
+    #[test]
+    fn build_top_level_multi_exec_too_many_holders() {
+        let mut config = Config::default();
+        if let Err(e) =
+            build_top_level_matcher(&["-exec", "foo", "{}", "foo", "{}", "+", ";"], &mut config)
+        {
+            assert!(e.to_string().contains("Only one instance of {}"));
+        } else {
+            panic!("parsing argument list with more than one {{}} for + should fail");
+        }
     }
 
     #[test]
