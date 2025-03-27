@@ -10,6 +10,7 @@ use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
 use std::io::{stderr, stdout, Write};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
 use walkdir::WalkDir;
@@ -161,6 +162,10 @@ fn process_dir(
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
+    let mut current_dir: Option<PathBuf> = None;
+    // This is intentionally set to non-zero, as ./. should
+    // call Matcher::finished_dir once.
+    let mut current_depth = 1;
     while let Some(result) = it.next() {
         match WalkEntry::from_walkdir(result, config.follow) {
             Err(err) => {
@@ -168,6 +173,16 @@ fn process_dir(
                 writeln!(&mut stderr(), "Error: {err}").unwrap()
             }
             Ok(entry) => {
+                if entry.depth() > current_depth {
+                    if let Some(ref dir) = current_dir.take() {
+                        matcher.finished_dir(dir.as_path());
+                    }
+                }
+                if entry.depth() != current_depth {
+                    current_dir = entry.path().parent().map(|x| x.to_path_buf());
+                    current_depth = entry.depth();
+                }
+
                 let mut matcher_io = matchers::MatcherIO::new(deps);
 
                 matcher.matches(&entry, &mut matcher_io);
@@ -185,6 +200,18 @@ fn process_dir(
             }
         }
     }
+
+    while current_depth > 1 {
+        if let Some(ref dir) = current_dir {
+            matcher.finished_dir(dir.as_path());
+            current_dir = Some(dir.parent().unwrap().to_path_buf());
+            current_depth -= 1;
+        } else {
+            unreachable!("Error while handling directory backtracking.");
+        }
+    }
+
+    matcher.finished();
 
     ret
 }
