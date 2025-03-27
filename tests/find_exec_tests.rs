@@ -105,3 +105,113 @@ fn find_execdir() {
         ))
     );
 }
+
+#[test]
+fn find_exec_multi() {
+    let temp_dir = tempfile::Builder::new()
+        .prefix("find_exec_multi")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let deps = FakeDependencies::new();
+
+    let rc = find_main(
+        &[
+            "find",
+            &fix_up_slashes("./test_data/simple"),
+            "-type",
+            "f",
+            "-exec",
+            &path_to_testing_commandline(),
+            temp_dir_path.as_ref(),
+            "(",
+            "-o",
+            "{}",
+            "+",
+        ],
+        &deps,
+    );
+
+    assert_eq!(rc, 0);
+    // exec has side effects, so we won't output anything unless -print is
+    // explicitly passed in.
+    assert_eq!(deps.get_output_as_string(), "");
+
+    // check the executable ran as expected
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\n(\n-o\n./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
+fn find_execdir_multi() {
+    let temp_dir = Builder::new()
+        .prefix("find_execdir_multi")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let deps = FakeDependencies::new();
+    // only look at files because the "size" of a directory is a system (and filesystem)
+    // dependent thing and we want these tests to be universal.
+    let rc = find_main(
+        &[
+            "find",
+            &fix_up_slashes("./test_data/simple"),
+            "-execdir",
+            &path_to_testing_commandline(),
+            temp_dir_path.as_ref(),
+            ")",
+            "{}",
+            "+",
+        ],
+        &deps,
+    );
+
+    assert_eq!(rc, 0);
+    // exec has side effects, so we won't output anything unless -print is
+    // explicitly passed in.
+    assert_eq!(deps.get_output_as_string(), "");
+
+    // check the executable ran as expected
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}/test_data\nargs=\n)\n./simple\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+    let mut f = File::open(temp_dir.path().join("2.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}/test_data/simple\nargs=\n)\n./abbbc\n./subdir\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+    let mut f = File::open(temp_dir.path().join("3.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}/test_data/simple/subdir\nargs=\n)\n./ABBBC\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}

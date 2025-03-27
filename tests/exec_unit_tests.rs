@@ -16,7 +16,7 @@ use tempfile::Builder;
 use common::test_helpers::{
     fix_up_slashes, get_dir_entry_for, path_to_testing_commandline, FakeDependencies,
 };
-use findutils::find::matchers::exec::SingleExecMatcher;
+use findutils::find::matchers::exec::{MultiExecMatcher, SingleExecMatcher};
 use findutils::find::matchers::Matcher;
 
 mod common;
@@ -219,6 +219,38 @@ fn matching_fails_if_executable_fails() {
         fix_up_slashes(&format!(
             "cwd={}/test_data/simple\nargs=\n--exit_with_failure\nabc\n.\
              /abbbc\nxyz\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
+fn matching_executes_code_multi() {
+    let temp_dir = Builder::new()
+        .prefix("matching_executes_code")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+    let matcher = MultiExecMatcher::new(
+        &path_to_testing_commandline(),
+        &[temp_dir_path.as_ref(), "abc"],
+        false,
+    )
+    .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+    matcher.finished();
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\nabc\ntest_data/simple/abbbc\n",
             env::current_dir().unwrap().to_string_lossy()
         ))
     );

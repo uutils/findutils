@@ -1539,6 +1539,24 @@ mod tests {
         } else {
             panic!("parsing argument list with exec and no executable should fail");
         }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no executable should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "foo", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no brackets should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "{}", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no executable should fail");
+        }
     }
 
     #[test]
