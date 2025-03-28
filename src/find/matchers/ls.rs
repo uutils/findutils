@@ -119,7 +119,13 @@ impl Ls {
     }
 
     #[cfg(unix)]
-    fn print(&self, file_info: &WalkEntry, mut out: impl Write, print_error_message: bool) {
+    fn print(
+        &self,
+        file_info: &WalkEntry,
+        matcher_io: &mut MatcherIO,
+        mut out: impl Write,
+        print_error_message: bool,
+    ) {
         use nix::unistd::{Gid, Group, Uid, User};
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
@@ -183,14 +189,20 @@ impl Ls {
                         e
                     )
                     .unwrap();
-                    uucore::error::set_exit_code(1);
+                    matcher_io.set_exit_code(1);
                 }
             }
         }
     }
 
     #[cfg(windows)]
-    fn print(&self, file_info: &WalkEntry, mut out: impl Write, print_error_message: bool) {
+    fn print(
+        &self,
+        file_info: &WalkEntry,
+        matcher_io: &mut MatcherIO,
+        mut out: impl Write,
+        print_error_message: bool,
+    ) {
         use std::os::windows::fs::MetadataExt;
 
         let metadata = file_info.metadata().unwrap();
@@ -246,7 +258,7 @@ impl Ls {
                         e
                     )
                     .unwrap();
-                    uucore::error::set_exit_code(1);
+                    matcher_io.set_exit_code(1);
                 }
             }
         }
@@ -256,10 +268,11 @@ impl Ls {
 impl Matcher for Ls {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, file, true);
+            self.print(file_info, matcher_io, file, true);
         } else {
             self.print(
                 file_info,
+                matcher_io,
                 &mut *matcher_io.deps.get_output().borrow_mut(),
                 false,
             );
