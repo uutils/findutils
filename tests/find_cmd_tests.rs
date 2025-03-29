@@ -15,6 +15,7 @@ use serial_test::serial;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
+use std::os::unix;
 use std::{env, io::ErrorKind};
 use tempfile::Builder;
 
@@ -1133,26 +1134,65 @@ struct TestCaseData {
 #[serial(working_dir)]
 fn find_using_same_out_multiple_times() {
     let cases = HashMap::from([
-        ("fprint", TestCaseData{
-            search_dir: "test_data/simple",
-            args: vec!["-fprint", "test_data/find_fprint", "-fprint", "test_data/find_fprint"],
-            needle_substr: vec![("test_data/simple\n", 2), ("test_data/simple/subdir\n", 2), ("test_data/simple/subdir/ABBBC\n", 2), ("test_data/simple/abbbc\n", 2)]
-        }),
-        ("fprint0", TestCaseData{
-            search_dir: "test_data/simple",
-            args: vec!["-fprint0", "test_data/find_fprint0", "-fprint0", "test_data/find_fprint0"],
-            needle_substr: vec![("test_data/simple\0", 2), ("test_data/simple/subdir\0", 2), ("test_data/simple/subdir/ABBBC\0", 2), ("test_data/simple/abbbc\0", 2)]
-        }),
-        ("fprintf", TestCaseData{
-            search_dir: "test_data/simple",
-            args: vec!["-fprintf", "test_data/find_fprintf", "%p\n", "-fprintf", "test_data/find_fprintf", "%f\n"],
-            needle_substr: vec![("test_data/simple\nsimple\n", 1), ("test_data/simple/subdir\nsubdir\n", 1), ("test_data/simple/subdir/ABBBC\nABBBC\n", 1), ("test_data/simple/abbbc\nabbbc\n", 1)]
-        }),
+        (
+            "fprint",
+            TestCaseData {
+                search_dir: "test_data/simple",
+                args: vec![
+                    "-fprint",
+                    "test_data/find_fprint",
+                    "-fprint",
+                    "test_data/find_fprint",
+                ],
+                needle_substr: vec![
+                    ("test_data/simple\n", 2),
+                    ("test_data/simple/subdir\n", 2),
+                    ("test_data/simple/subdir/ABBBC\n", 2),
+                    ("test_data/simple/abbbc\n", 2),
+                ],
+            },
+        ),
+        (
+            "fprint0",
+            TestCaseData {
+                search_dir: "test_data/simple",
+                args: vec![
+                    "-fprint0",
+                    "test_data/find_fprint0",
+                    "-fprint0",
+                    "test_data/find_fprint0",
+                ],
+                needle_substr: vec![
+                    ("test_data/simple\0", 2),
+                    ("test_data/simple/subdir\0", 2),
+                    ("test_data/simple/subdir/ABBBC\0", 2),
+                    ("test_data/simple/abbbc\0", 2),
+                ],
+            },
+        ),
+        (
+            "fprintf",
+            TestCaseData {
+                search_dir: "test_data/simple",
+                args: vec![
+                    "-fprintf",
+                    "test_data/find_fprintf",
+                    "%p\n",
+                    "-fprintf",
+                    "test_data/find_fprintf",
+                    "%f\n",
+                ],
+                needle_substr: vec![
+                    ("test_data/simple\nsimple\n", 1),
+                    ("test_data/simple/subdir\nsubdir\n", 1),
+                    ("test_data/simple/subdir/ABBBC\nABBBC\n", 1),
+                    ("test_data/simple/abbbc\nabbbc\n", 1),
+                ],
+            },
+        ),
     ]);
 
     for (key, test_data) in cases {
-        let _ = fs::remove_file(format!("test_data/find_{key}"));
-
         Command::cargo_bin("find")
             .expect("found binary")
             .arg(test_data.search_dir)
@@ -1170,13 +1210,101 @@ fn find_using_same_out_multiple_times() {
         // The find output can have different order depending on the platform, so we check by substrs
         for (substr, times) in test_data.needle_substr {
             assert_eq!(
-                &contents.as_bytes().windows(substr.len()).filter(|&w| w == substr.as_bytes()).count(),
+                &contents
+                    .as_bytes()
+                    .windows(substr.len())
+                    .filter(|&w| w == substr.as_bytes())
+                    .count(),
                 &times
             );
         }
 
         let _ = fs::remove_file(format!("test_data/find_{key}"));
     }
+
+    let original_file = "test_data/find_fprint_original_links";
+    assert!(
+        File::create(original_file).is_ok(),
+        "Error creating original file for symlink."
+    );
+
+    let symlink = "test_data/find_fprint_symlink";
+    #[cfg(unix)]
+    {
+        let symlink_file =
+            unix::fs::symlink(std::fs::canonicalize(original_file).unwrap(), symlink);
+        assert!(
+            symlink_file.is_ok(),
+            "Error creating symlink file. {:?}",
+            symlink_file
+        );
+    }
+    #[cfg(windows)]
+    {
+        let symlink_file = std::os::windows::fs::symlink_file(
+            std::fs::canonicalize(original_file).unwrap(),
+            symlink,
+        );
+        assert!(
+            symlink_file.is_ok(),
+            "Error creating symlink file. {:?}",
+            symlink_file
+        );
+    }
+
+    let hardlink = "test_data/find_fprint_hardlink";
+    let hardlink_file = std::fs::hard_link(std::fs::canonicalize(original_file).unwrap(), hardlink);
+    assert!(
+        hardlink_file.is_ok(),
+        "Error creating hardlink file. {:?}",
+        hardlink_file
+    );
+
+    let test = TestCaseData {
+        search_dir: "test_data/simple",
+        args: vec![
+            "-fprint",
+            original_file,
+            "-fprint",
+            symlink,
+            "-fprint",
+            hardlink,
+        ],
+        needle_substr: vec![
+            ("test_data/simple\n", 3),
+            ("test_data/simple/subdir\n", 3),
+            ("test_data/simple/subdir/ABBBC\n", 3),
+            ("test_data/simple/abbbc\n", 3),
+        ],
+    };
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .arg(test.search_dir)
+        .args(test.args)
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    let mut f = File::open(original_file).unwrap();
+    let mut contents = String::new();
+    f.read_to_string(&mut contents).unwrap();
+
+    for (substr, times) in test.needle_substr {
+        assert_eq!(
+            &contents
+                .as_bytes()
+                .windows(substr.len())
+                .filter(|&w| w == substr.as_bytes())
+                .count(),
+            &times,
+            "At substr {substr}"
+        );
+    }
+
+    let _ = fs::remove_file(original_file);
+    let _ = fs::remove_file(symlink);
+    let _ = fs::remove_file(hardlink);
 }
 
 #[test]

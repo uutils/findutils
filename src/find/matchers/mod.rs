@@ -41,6 +41,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
+use uucore::fs::FileInformation;
 
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
@@ -284,9 +285,10 @@ impl ComparableValue {
 }
 
 // Used on file output arguments.
-// When the same file is specified multiple times, the same pointer is used.
+// Based on path inode or file_index check if the file already has been specified.
+// If yes, use the same file pointer.
 struct FileMemoizer {
-    mem: HashMap<String, Arc<File>>,
+    mem: HashMap<u64, Arc<File>>,
 }
 impl FileMemoizer {
     fn new() -> Self {
@@ -295,11 +297,30 @@ impl FileMemoizer {
         }
     }
     fn get_or_create_file(&mut self, path: &str) -> Result<Arc<File>, Box<dyn Error>> {
+        let path = Path::new(path);
+        let file_id = self.get_file_id(path);
+        if file_id.is_err() {
+            let file = Arc::new(File::create(path)?);
+            self.mem.insert(self.get_file_id(path)?, file.clone());
+            return Ok(file);
+        }
+
         let file = self
             .mem
-            .entry(path.to_string())
+            .entry(file_id.unwrap())
             .or_insert(Arc::new(File::create(path)?));
         Ok(file.clone())
+    }
+
+    fn get_file_id(&self, path: &Path) -> Result<u64, Box<dyn Error>> {
+        let file_info = FileInformation::from_path(&path, true)?;
+        #[cfg(windows)]
+        let file_inode = file_info.file_index();
+
+        #[cfg(unix)]
+        let file_inode = file_info.inode();
+
+        Ok(file_inode)
     }
 }
 
@@ -491,7 +512,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = file_mem.get_or_create_file(args[i])?.clone();
+                let file = file_mem.get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
             }
             "-fprintf" => {
@@ -503,7 +524,7 @@ fn build_matcher_tree(
                 // Args + 1: output file path
                 // Args + 2: format string
                 i += 1;
-                let file = file_mem.get_or_create_file(args[i])?.clone();
+                let file = file_mem.get_or_create_file(args[i])?;
                 i += 1;
                 Some(Printf::new(args[i], Some(file))?.into_box())
             }
@@ -513,7 +534,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = file_mem.get_or_create_file(args[i])?.clone();
+                let file = file_mem.get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
             }
             "-ls" => Some(Ls::new(None).into_box()),
@@ -523,7 +544,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = file_mem.get_or_create_file(args[i])?.clone();
+                let file = file_mem.get_or_create_file(args[i])?;
                 Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),

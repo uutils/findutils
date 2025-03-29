@@ -269,7 +269,7 @@ impl Ls {
 impl Matcher for Ls {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, file.clone(), true);
+            self.print(file_info, file.as_ref(), true);
         } else {
             self.print(
                 file_info,

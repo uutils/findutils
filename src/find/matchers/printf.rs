@@ -625,7 +625,7 @@ impl Printf {
 impl Matcher for Printf {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, file.clone());
+            self.print(file_info, file.as_ref());
         } else {
             self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut());
         }
