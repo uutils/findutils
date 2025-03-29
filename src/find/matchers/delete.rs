@@ -16,7 +16,7 @@ pub struct DeleteMatcher;
 
 impl DeleteMatcher {
     pub fn new() -> Self {
-        DeleteMatcher
+        Self
     }
 
     fn delete(&self, entry: &WalkEntry) -> io::Result<()> {

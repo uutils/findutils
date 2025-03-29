@@ -51,34 +51,34 @@ impl FileType {
 }
 
 impl From<fs::FileType> for FileType {
-    fn from(t: fs::FileType) -> FileType {
+    fn from(t: fs::FileType) -> Self {
         if t.is_dir() {
-            return FileType::Directory;
+            return Self::Directory;
         }
         if t.is_file() {
-            return FileType::Regular;
+            return Self::Regular;
         }
         if t.is_symlink() {
-            return FileType::Symlink;
+            return Self::Symlink;
         }
 
         #[cfg(unix)]
         {
             if t.is_fifo() {
-                return FileType::Fifo;
+                return Self::Fifo;
             }
             if t.is_char_device() {
-                return FileType::CharDevice;
+                return Self::CharDevice;
             }
             if t.is_block_device() {
-                return FileType::BlockDevice;
+                return Self::BlockDevice;
             }
             if t.is_socket() {
-                return FileType::Socket;
+                return Self::Socket;
             }
         }
 
-        FileType::Unknown
+        Self::Unknown
     }
 }
 
@@ -150,14 +150,14 @@ impl Display for WalkError {
 impl Error for WalkError {}
 
 impl From<io::Error> for WalkError {
-    fn from(e: io::Error) -> WalkError {
-        WalkError::from(&e)
+    fn from(e: io::Error) -> Self {
+        Self::from(&e)
     }
 }
 
 impl From<&io::Error> for WalkError {
-    fn from(e: &io::Error) -> WalkError {
-        WalkError {
+    fn from(e: &io::Error) -> Self {
+        Self {
             path: None,
             depth: None,
             raw: e.raw_os_error(),
@@ -166,14 +166,14 @@ impl From<&io::Error> for WalkError {
 }
 
 impl From<walkdir::Error> for WalkError {
-    fn from(e: walkdir::Error) -> WalkError {
-        WalkError::from(&e)
+    fn from(e: walkdir::Error) -> Self {
+        Self::from(&e)
     }
 }
 
 impl From<&walkdir::Error> for WalkError {
-    fn from(e: &walkdir::Error) -> WalkError {
-        WalkError {
+    fn from(e: &walkdir::Error) -> Self {
+        Self {
             path: e.path().map(|p| p.to_owned()),
             depth: Some(e.depth()),
             raw: e.io_error().and_then(|e| e.raw_os_error()),
@@ -182,15 +182,15 @@ impl From<&walkdir::Error> for WalkError {
 }
 
 impl From<WalkError> for io::Error {
-    fn from(e: WalkError) -> io::Error {
-        io::Error::from(&e)
+    fn from(e: WalkError) -> Self {
+        Self::from(&e)
     }
 }
 
 impl From<&WalkError> for io::Error {
-    fn from(e: &WalkError) -> io::Error {
+    fn from(e: &WalkError) -> Self {
         e.raw
-            .map(io::Error::from_raw_os_error)
+            .map(Self::from_raw_os_error)
             .unwrap_or_else(|| ErrorKind::Other.into())
     }
 }
@@ -221,7 +221,7 @@ impl WalkEntry {
     pub fn from_walkdir(
         result: walkdir::Result<DirEntry>,
         follow: Follow,
-    ) -> Result<WalkEntry, WalkError> {
+    ) -> Result<Self, WalkError> {
         let result = result.map_err(WalkError::from);
 
         match result {
@@ -242,7 +242,7 @@ impl WalkEntry {
                 // Detect broken symlinks and replace them with explicit entries
                 if let (Some(path), Some(depth)) = (e.path(), e.depth()) {
                     if let Ok(meta) = path.symlink_metadata() {
-                        return Ok(WalkEntry {
+                        return Ok(Self {
                             inner: Entry::Explicit(path.into(), depth),
                             follow: Follow::Never,
                             meta: Ok(meta).into(),

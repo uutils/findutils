@@ -44,3 +44,20 @@ path = "src/testing/commandline/main.rs"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+
+[lints.clippy]
+multiple_crate_versions = "allow"
+cargo_common_metadata = "allow"
+uninlined_format_args = "allow"
+missing_panics_doc = "allow"
+
+use_self = "warn"
+needless_pass_by_value = "warn"
+semicolon_if_nothing_returned = "warn"
+single_char_pattern = "warn"
+explicit_iter_loop = "warn"
+if_not_else = "warn"
+manual_let_else = "warn"
+# Disable for now, we have a few occurrences
+# panic = "warn"

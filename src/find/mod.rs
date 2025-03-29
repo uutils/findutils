@@ -165,7 +165,7 @@ fn process_dir(
         match WalkEntry::from_walkdir(result, config.follow) {
             Err(err) => {
                 ret = 1;
-                writeln!(&mut stderr(), "Error: {err}").unwrap()
+                writeln!(&mut stderr(), "Error: {err}").unwrap();
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
@@ -932,7 +932,7 @@ mod tests {
         #[cfg(not(target_os = "linux"))]
         let y_options = ["a", "B", "c", "m"];
 
-        for &x in x_options.iter() {
+        for &x in &x_options {
             for &y in &y_options {
                 let arg = &format!("-newer{x}{y}").to_string();
                 let deps = FakeDependencies::new();
@@ -1341,7 +1341,7 @@ mod tests {
     fn find_fprinter() {
         let printer = ["fprint", "fprint0"];
 
-        for p in printer.iter() {
+        for p in &printer {
             let deps = FakeDependencies::new();
             let rc = find_main(
                 &[

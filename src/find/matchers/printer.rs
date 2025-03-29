@@ -17,8 +17,8 @@ pub enum PrintDelimiter {
 impl std::fmt::Display for PrintDelimiter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PrintDelimiter::Newline => writeln!(f),
-            PrintDelimiter::Null => write!(f, "\0"),
+            Self::Newline => writeln!(f),
+            Self::Null => write!(f, "\0"),
         }
     }
 }

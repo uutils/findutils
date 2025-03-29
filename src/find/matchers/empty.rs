@@ -14,8 +14,8 @@ use super::{Matcher, MatcherIO, WalkEntry};
 pub struct EmptyMatcher;
 
 impl EmptyMatcher {
-    pub fn new() -> EmptyMatcher {
-        EmptyMatcher
+    pub fn new() -> Self {
+        Self
     }
 }
 
