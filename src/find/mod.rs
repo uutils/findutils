@@ -162,6 +162,8 @@ fn process_dir(
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
+    // As WalkDir seems not providing a function to check its stack,
+    // using current_dir is a workaround to check leaving directory.
     let mut current_dir: Option<PathBuf> = None;
     while let Some(result) = it.next() {
         match WalkEntry::from_walkdir(result, config.follow) {
@@ -177,7 +179,7 @@ fn process_dir(
                     if let Some(dir) = current_dir.take() {
                         matcher.finished_dir(dir.as_path(), &mut matcher_io);
                     }
-                    current_dir = new_dir
+                    current_dir = new_dir;
                 }
 
                 matcher.matches(&entry, &mut matcher_io);
