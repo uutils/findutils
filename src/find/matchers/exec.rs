@@ -125,12 +125,26 @@ impl MultiExecMatcher {
     fn new_command(&self) -> argmax::Command {
         let mut command = argmax::Command::new(&self.executable);
         command.try_args(&self.args).unwrap();
-        return command;
+        command
+    }
+
+    fn run_command(&self, command: &mut argmax::Command, matcher_io: &mut MatcherIO) {
+        match command.status() {
+            Ok(status) => {
+                if !status.success() {
+                    matcher_io.set_exit_code(1);
+                }
+            }
+            Err(e) => {
+                writeln!(&mut stderr(), "Failed to run {}: {}", self.executable, e).unwrap();
+                matcher_io.set_exit_code(1);
+            }
+        }
     }
 }
 
 impl Matcher for MultiExecMatcher {
-    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let path_to_file = if self.exec_in_parent_dir {
             if let Some(f) = file_info.path().file_name() {
                 Path::new(".").join(f)
@@ -159,9 +173,7 @@ impl Matcher for MultiExecMatcher {
                     }
                 }
             }
-            if let Err(e) = command.status() {
-                writeln!(&mut stderr(), "Failed to run {}: {}", self.executable, e).unwrap();
-            }
+            self.run_command(command, matcher_io);
 
             // Reset command status.
             *command = self.new_command();
@@ -170,27 +182,23 @@ impl Matcher for MultiExecMatcher {
         true
     }
 
-    fn finished_dir(&self, dir: &Path) {
+    fn finished_dir(&self, dir: &Path, matcher_io: &mut MatcherIO) {
         // Dispatch command for -execdir.
         if self.exec_in_parent_dir {
             let mut command = self.command.borrow_mut();
             if let Some(mut command) = command.take() {
                 command.current_dir(Path::new(".").join(dir));
-                if let Err(e) = command.status() {
-                    writeln!(&mut stderr(), "Failed to run {}: {}", self.executable, e).unwrap();
-                }
+                self.run_command(&mut command, matcher_io);
             }
         }
     }
 
-    fn finished(&self) {
+    fn finished(&self, matcher_io: &mut MatcherIO) {
         // Dispatch command for -exec.
         if !self.exec_in_parent_dir {
             let mut command = self.command.borrow_mut();
             if let Some(mut command) = command.take() {
-                if let Err(e) = command.status() {
-                    writeln!(&mut stderr(), "Failed to run {}: {}", self.executable, e).unwrap();
-                }
+                self.run_command(&mut command, matcher_io);
             }
         }
     }

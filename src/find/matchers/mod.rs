@@ -212,13 +212,13 @@ pub trait Matcher: 'static {
         false
     }
 
-    /// Notification that find has finished processing a given directory.
-    fn finished_dir(&self, _finished_directory: &Path) {}
+    /// Notification that find is leaving a given directory.
+    fn finished_dir(&self, _finished_directory: &Path, _matcher_io: &mut MatcherIO) {}
 
     /// Notification that find has finished processing all directories -
     /// allowing for any cleanup that isn't suitable for destructors (e.g.
     /// blocking calls, I/O etc.)
-    fn finished(&self) {}
+    fn finished(&self, _matcher_io: &mut MatcherIO) {}
 }
 
 impl Matcher for Box<dyn Matcher> {
@@ -234,12 +234,12 @@ impl Matcher for Box<dyn Matcher> {
         (**self).has_side_effects()
     }
 
-    fn finished_dir(&self, finished_directory: &Path) {
-        (**self).finished_dir(finished_directory);
+    fn finished_dir(&self, finished_directory: &Path, matcher_io: &mut MatcherIO) {
+        (**self).finished_dir(finished_directory, matcher_io);
     }
 
-    fn finished(&self) {
-        (**self).finished();
+    fn finished(&self, matcher_io: &mut MatcherIO) {
+        (**self).finished(matcher_io);
     }
 }
 

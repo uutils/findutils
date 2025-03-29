@@ -170,15 +170,15 @@ fn process_dir(
                 writeln!(&mut stderr(), "Error: {err}").unwrap()
             }
             Ok(entry) => {
+                let mut matcher_io = matchers::MatcherIO::new(deps);
+
                 let new_dir = entry.path().parent().map(|x| x.to_path_buf());
                 if new_dir != current_dir {
-                    if let Some(ref dir) = current_dir.take() {
-                        matcher.finished_dir(dir.as_path());
+                    if let Some(dir) = current_dir.take() {
+                        matcher.finished_dir(dir.as_path(), &mut matcher_io);
                     }
                     current_dir = new_dir
                 }
-
-                let mut matcher_io = matchers::MatcherIO::new(deps);
 
                 matcher.matches(&entry, &mut matcher_io);
                 match matcher_io.exit_code() {
@@ -196,11 +196,16 @@ fn process_dir(
         }
     }
 
+    let mut matcher_io = matchers::MatcherIO::new(deps);
     if let Some(dir) = current_dir.take() {
-        matcher.finished_dir(dir.as_path());
+        matcher.finished_dir(dir.as_path(), &mut matcher_io);
     }
-
-    matcher.finished();
+    matcher.finished(&mut matcher_io);
+    // This is implemented for exec +.
+    match matcher_io.exit_code() {
+        0 => {}
+        code => ret = code,
+    }
 
     ret
 }

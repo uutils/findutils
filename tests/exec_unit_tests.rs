@@ -18,7 +18,7 @@ use common::test_helpers::{
     fix_up_slashes, get_dir_entry_for, path_to_testing_commandline, FakeDependencies,
 };
 use findutils::find::matchers::exec::{MultiExecMatcher, SingleExecMatcher};
-use findutils::find::matchers::Matcher;
+use findutils::find::matchers::{Matcher, MatcherIO};
 
 mod common;
 
@@ -241,8 +241,9 @@ fn matching_multi_executes_code() {
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
+    let mut matcher_io = MatcherIO::new(&deps);
     assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-    matcher.finished();
+    matcher.finished(&mut matcher_io);
 
     let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
     let mut s = String::new();
@@ -273,9 +274,10 @@ fn execdir_multi_in_current_directory() {
     )
     .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
+    let mut matcher_io = MatcherIO::new(&deps);
     assert!(matcher.matches(&current_dir_entry, &mut deps.new_matcher_io()));
-    matcher.finished_dir(Path::new(""));
-    matcher.finished();
+    matcher.finished_dir(Path::new(""), &mut matcher_io);
+    matcher.finished(&mut matcher_io);
 
     let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
     let mut s = String::new();
@@ -288,4 +290,49 @@ fn execdir_multi_in_current_directory() {
             env::current_dir().unwrap().to_string_lossy()
         ))
     );
+}
+
+#[test]
+fn multi_set_exit_code_if_executable_fails() {
+    let temp_dir = Builder::new()
+        .prefix("multi_set_exit_code_if_executable_fails")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+    let matcher = MultiExecMatcher::new(
+        &path_to_testing_commandline(),
+        &[temp_dir_path.as_ref(), "--exit_with_failure", "abc"],
+        true,
+    )
+    .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+    let mut matcher_io = deps.new_matcher_io();
+    matcher.finished_dir(Path::new("test_data/simple"), &mut matcher_io);
+    assert!(matcher_io.exit_code() == 1);
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}/test_data/simple\nargs=\n--exit_with_failure\nabc\n./abbbc\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
+fn multi_set_exit_code_if_command_fails() {
+    let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+    let matcher = MultiExecMatcher::new("1337", &["abc"], true).expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+    let mut matcher_io = deps.new_matcher_io();
+    matcher.finished_dir(Path::new("test_data/simple"), &mut matcher_io);
+    assert!(matcher_io.exit_code() == 1);
 }

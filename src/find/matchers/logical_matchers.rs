@@ -51,15 +51,15 @@ impl Matcher for AndMatcher {
             .any(super::Matcher::has_side_effects)
     }
 
-    fn finished_dir(&self, dir: &Path) {
+    fn finished_dir(&self, dir: &Path, matcher_io: &mut MatcherIO) {
         for m in &self.submatchers {
-            m.finished_dir(dir);
+            m.finished_dir(dir, matcher_io);
         }
     }
 
-    fn finished(&self) {
+    fn finished(&self, matcher_io: &mut MatcherIO) {
         for m in &self.submatchers {
-            m.finished();
+            m.finished(matcher_io);
         }
     }
 }
@@ -127,15 +127,15 @@ impl Matcher for OrMatcher {
             .any(super::Matcher::has_side_effects)
     }
 
-    fn finished_dir(&self, dir: &Path) {
+    fn finished_dir(&self, dir: &Path, matcher_io: &mut MatcherIO) {
         for m in &self.submatchers {
-            m.finished_dir(dir);
+            m.finished_dir(dir, matcher_io);
         }
     }
 
-    fn finished(&self) {
+    fn finished(&self, matcher_io: &mut MatcherIO) {
         for m in &self.submatchers {
-            m.finished();
+            m.finished(matcher_io);
         }
     }
 }
@@ -222,15 +222,15 @@ impl Matcher for ListMatcher {
             .any(super::Matcher::has_side_effects)
     }
 
-    fn finished_dir(&self, dir: &Path) {
+    fn finished_dir(&self, dir: &Path, matcher_io: &mut MatcherIO) {
         for m in &self.submatchers {
-            m.finished_dir(dir);
+            m.finished_dir(dir, matcher_io);
         }
     }
 
-    fn finished(&self) {
+    fn finished(&self, matcher_io: &mut MatcherIO) {
         for m in &self.submatchers {
-            m.finished();
+            m.finished(matcher_io);
         }
     }
 }
@@ -346,12 +346,12 @@ impl Matcher for NotMatcher {
         self.submatcher.has_side_effects()
     }
 
-    fn finished_dir(&self, dir: &Path) {
-        self.submatcher.finished_dir(dir);
+    fn finished_dir(&self, dir: &Path, matcher_io: &mut MatcherIO) {
+        self.submatcher.finished_dir(dir, matcher_io);
     }
 
-    fn finished(&self) {
-        self.submatcher.finished();
+    fn finished(&self, matcher_io: &mut MatcherIO) {
+        self.submatcher.finished(matcher_io);
     }
 }
 
