@@ -15,7 +15,6 @@ use serial_test::serial;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::os::unix;
 use std::{env, io::ErrorKind};
 use tempfile::Builder;
 
@@ -1195,7 +1194,7 @@ fn find_using_same_out_multiple_times() {
     for (key, test_data) in cases {
         Command::cargo_bin("find")
             .expect("found binary")
-            .arg(test_data.search_dir)
+            .arg(fix_up_slashes(test_data.search_dir))
             .args(test_data.args)
             .assert()
             .success()
@@ -1209,13 +1208,15 @@ fn find_using_same_out_multiple_times() {
 
         // The find output can have different order depending on the platform, so we check by substrs
         for (substr, times) in test_data.needle_substr {
+            let substr = fix_up_slashes(substr);
             assert_eq!(
                 &contents
                     .as_bytes()
                     .windows(substr.len())
                     .filter(|&w| w == substr.as_bytes())
                     .count(),
-                &times
+                &times,
+                "Failes on key '{key}' substr '{substr}'"
             );
         }
 
@@ -1228,11 +1229,10 @@ fn find_using_same_out_multiple_times() {
         "Error creating original file for symlink."
     );
 
-    let symlink = "test_data/find_fprint_symlink";
+    let symlink_path = "test_data/find_fprint_symlink";
     #[cfg(unix)]
     {
-        let symlink_file =
-            unix::fs::symlink(std::fs::canonicalize(original_file).unwrap(), symlink);
+        let symlink_file = symlink(std::fs::canonicalize(original_file).unwrap(), symlink_path);
         assert!(
             symlink_file.is_ok(),
             "Error creating symlink file. {:?}",
@@ -1243,7 +1243,7 @@ fn find_using_same_out_multiple_times() {
     {
         let symlink_file = std::os::windows::fs::symlink_file(
             std::fs::canonicalize(original_file).unwrap(),
-            symlink,
+            symlink_path,
         );
         assert!(
             symlink_file.is_ok(),
@@ -1252,8 +1252,9 @@ fn find_using_same_out_multiple_times() {
         );
     }
 
-    let hardlink = "test_data/find_fprint_hardlink";
-    let hardlink_file = std::fs::hard_link(std::fs::canonicalize(original_file).unwrap(), hardlink);
+    let hardlink_path = "test_data/find_fprint_hardlink";
+    let hardlink_file =
+        std::fs::hard_link(std::fs::canonicalize(original_file).unwrap(), hardlink_path);
     assert!(
         hardlink_file.is_ok(),
         "Error creating hardlink file. {:?}",
@@ -1266,9 +1267,9 @@ fn find_using_same_out_multiple_times() {
             "-fprint",
             original_file,
             "-fprint",
-            symlink,
+            symlink_path,
             "-fprint",
-            hardlink,
+            hardlink_path,
         ],
         needle_substr: vec![
             ("test_data/simple\n", 3),
@@ -1279,7 +1280,7 @@ fn find_using_same_out_multiple_times() {
     };
     Command::cargo_bin("find")
         .expect("found binary")
-        .arg(test.search_dir)
+        .arg(fix_up_slashes(test.search_dir))
         .args(test.args)
         .assert()
         .success()
@@ -1291,6 +1292,7 @@ fn find_using_same_out_multiple_times() {
     f.read_to_string(&mut contents).unwrap();
 
     for (substr, times) in test.needle_substr {
+        let substr = fix_up_slashes(substr);
         assert_eq!(
             &contents
                 .as_bytes()
@@ -1298,13 +1300,13 @@ fn find_using_same_out_multiple_times() {
                 .filter(|&w| w == substr.as_bytes())
                 .count(),
             &times,
-            "At substr {substr}"
+            "Error at substr '{substr}'"
         );
     }
 
     let _ = fs::remove_file(original_file);
-    let _ = fs::remove_file(symlink);
-    let _ = fs::remove_file(hardlink);
+    let _ = fs::remove_file(symlink_path);
+    let _ = fs::remove_file(hardlink_path);
 }
 
 #[test]

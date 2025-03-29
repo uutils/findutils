@@ -313,7 +313,7 @@ impl FileMemoizer {
     }
 
     fn get_file_id(&self, path: &Path) -> Result<u64, Box<dyn Error>> {
-        let file_info = FileInformation::from_path(&path, true)?;
+        let file_info = FileInformation::from_path(path, true)?;
         #[cfg(windows)]
         let file_inode = file_info.file_index();
 
