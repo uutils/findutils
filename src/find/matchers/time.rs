@@ -124,14 +124,10 @@ pub struct NewerOptionMatcher {
 }
 
 impl NewerOptionMatcher {
-    pub fn new(
-        x_option: String,
-        y_option: String,
-        path_to_file: &str,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn new(x_option: &str, y_option: &str, path_to_file: &str) -> Result<Self, Box<dyn Error>> {
         let metadata = fs::metadata(path_to_file)?;
-        let x_option = NewerOptionType::from_str(x_option.as_str());
-        let y_option = NewerOptionType::from_str(y_option.as_str());
+        let x_option = NewerOptionType::from_str(x_option);
+        let y_option = NewerOptionType::from_str(y_option);
         Ok(Self {
             x_option,
             y_option,
@@ -740,11 +736,8 @@ mod tests {
                 // this file should already exist
                 let old_file = get_dir_entry_for("test_data", "simple");
                 let deps = FakeDependencies::new();
-                let matcher = NewerOptionMatcher::new(
-                    x_option.to_string(),
-                    y_option.to_string(),
-                    &old_file.path().to_string_lossy(),
-                );
+                let matcher =
+                    NewerOptionMatcher::new(x_option, y_option, &old_file.path().to_string_lossy());
 
                 assert!(
                     matcher
