@@ -35,10 +35,13 @@ use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
+use std::collections::HashMap;
 use std::fs::{File, Metadata};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::SystemTime;
 use std::{error::Error, str::FromStr};
+use uucore::fs::FileInformation;
 
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
@@ -268,13 +271,54 @@ impl ComparableValue {
     }
 }
 
+// Used on file output arguments.
+// Based on path inode or file_index check if the file already has been specified.
+// If yes, use the same file pointer.
+struct FileMemoizer {
+    mem: HashMap<u64, Arc<File>>,
+}
+impl FileMemoizer {
+    fn new() -> Self {
+        Self {
+            mem: HashMap::new(),
+        }
+    }
+    fn get_or_create_file(&mut self, path: &str) -> Result<Arc<File>, Box<dyn Error>> {
+        let path = Path::new(path);
+        let file_id = self.get_file_id(path);
+        if file_id.is_err() {
+            let file = Arc::new(File::create(path)?);
+            self.mem.insert(self.get_file_id(path)?, file.clone());
+            return Ok(file);
+        }
+
+        let file = self
+            .mem
+            .entry(file_id.unwrap())
+            .or_insert(Arc::new(File::create(path)?));
+        Ok(file.clone())
+    }
+
+    fn get_file_id(&self, path: &Path) -> Result<u64, Box<dyn Error>> {
+        let file_info = FileInformation::from_path(&path, true)?;
+        #[cfg(windows)]
+        let file_inode = file_info.file_index();
+
+        #[cfg(unix)]
+        let file_inode = file_info.inode();
+
+        Ok(file_inode)
+    }
+}
+
 /// Builds a single `AndMatcher` containing the Matcher objects corresponding
 /// to the passed in predicate arguments.
 pub fn build_top_level_matcher(
     args: &[&str],
     config: &mut Config,
 ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-    let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, false))?;
+    let mut file_mem = FileMemoizer::new();
+    let (_, top_level_matcher) = (build_matcher_tree(args, config, &mut file_mem, 0, false))?;
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
@@ -417,13 +461,6 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
-/// Creates a file if it doesn't exist.
-/// If it does exist, it will be overwritten.
-fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
-    let file = File::create(path)?;
-    Ok(file)
-}
-
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -431,6 +468,7 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
 fn build_matcher_tree(
     args: &[&str],
     config: &mut Config,
+    file_mem: &mut FileMemoizer,
     arg_index: usize,
     mut expecting_bracket: bool,
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
@@ -461,7 +499,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = file_mem.get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
             }
             "-fprintf" => {
@@ -473,7 +511,7 @@ fn build_matcher_tree(
                 // Args + 1: output file path
                 // Args + 2: format string
                 i += 1;
-                let file = get_or_create_file(args[i])?;
+                let file = file_mem.get_or_create_file(args[i])?;
                 i += 1;
                 Some(Printf::new(args[i], Some(file))?.into_box())
             }
@@ -483,7 +521,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = file_mem.get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
             }
             "-ls" => Some(Ls::new(None).into_box()),
@@ -493,7 +531,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = file_mem.get_or_create_file(args[i])?;
                 Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
@@ -811,7 +849,8 @@ fn build_matcher_tree(
                 None
             }
             "(" => {
-                let (new_arg_index, sub_matcher) = build_matcher_tree(args, config, i + 1, true)?;
+                let (new_arg_index, sub_matcher) =
+                    build_matcher_tree(args, config, file_mem, i + 1, true)?;
                 i = new_arg_index;
                 Some(sub_matcher)
             }
@@ -1678,31 +1717,5 @@ mod tests {
         build_top_level_matcher(&["(", "-version", "-o", ")", ")"], &mut config)
             .expect("-version should stop parsing");
         assert!(config.version_requested);
-    }
-
-    #[test]
-    fn get_or_create_file_test() {
-        use std::fs;
-
-        // remove file if hard link file exist.
-        // But you can't delete a file that doesn't exist,
-        // so ignore the error returned here.
-        let _ = fs::remove_file("test_data/get_or_create_file_test");
-
-        // test create file
-        let file = get_or_create_file("test_data/get_or_create_file_test");
-        assert!(file.is_ok());
-
-        let file = get_or_create_file("test_data/get_or_create_file_test");
-        assert!(file.is_ok());
-
-        // test error when file no permission
-        #[cfg(unix)]
-        {
-            let result = get_or_create_file("/etc/shadow");
-            assert!(result.is_err());
-        }
-
-        let _ = fs::remove_file("test_data/get_or_create_file_test");
     }
 }
