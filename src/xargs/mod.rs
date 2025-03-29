@@ -706,11 +706,11 @@ impl InputProcessOptions {
 }
 
 fn process_input(
-    builder_options: CommandBuilderOptions,
+    builder_options: &CommandBuilderOptions,
     mut args: Box<dyn ArgumentReader>,
     options: &InputProcessOptions,
 ) -> Result<CommandResult, XargsError> {
-    let mut current_builder = CommandBuilder::new(&builder_options);
+    let mut current_builder = CommandBuilder::new(builder_options);
     let mut have_pending_command = false;
     let mut result = CommandResult::Success;
 
@@ -726,7 +726,7 @@ fn process_input(
                 result.combine(current_builder.execute()?);
             }
 
-            current_builder = CommandBuilder::new(&builder_options);
+            current_builder = CommandBuilder::new(builder_options);
             if let Err(ExhaustedCommandSpace { .. }) = current_builder.add_arg(arg) {
                 return Err(XargsError::ArgumentTooLarge);
             }
@@ -1031,7 +1031,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     };
 
     let result = process_input(
-        builder_options,
+        &builder_options,
         args,
         &InputProcessOptions::new(
             options.exit_if_pass_char_limit,

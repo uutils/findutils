@@ -907,21 +907,21 @@ fn build_matcher_tree(
                             let time = args[i + 1];
                             let newer_time_type = NewerOptionType::from_str(x_option.as_str());
                             // Convert args to unix timestamps. (expressed in numeric types)
-                            let comparable_time = match parse_date_str_to_timestamps(time) {
-                                Some(timestamp) => timestamp,
-                                None => {
-                                    return Err(From::from(format!(
-                                        "find: I cannot figure out how to interpret ‘{}’ as a date or time",
-                                        args[i + 1]
-                                    )))
-                                }
+                            let Some(comparable_time) = parse_date_str_to_timestamps(time) else {
+                                return Err(From::from(format!(
+                                    "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                                    args[i + 1]
+                                )));
                             };
                             i += 1;
                             Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
                         } else {
                             let file_path = args[i + 1];
                             i += 1;
-                            Some(NewerOptionMatcher::new(x_option, y_option, file_path)?.into_box())
+                            Some(
+                                NewerOptionMatcher::new(&x_option, &y_option, file_path)?
+                                    .into_box(),
+                            )
                         }
                     }
                     None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
