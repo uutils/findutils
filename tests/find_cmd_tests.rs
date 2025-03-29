@@ -978,7 +978,7 @@ fn find_daystart() {
 fn find_fprinter() {
     let printer = ["fprint", "fprint0"];
 
-    for p in printer.iter() {
+    for p in &printer {
         let _ = fs::remove_file(format!("test_data/find_{p}"));
 
         Command::cargo_bin("find")
