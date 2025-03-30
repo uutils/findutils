@@ -895,16 +895,26 @@ fn build_matcher_tree(
                 None
             }
             "-files0-from" => {
+                // The logic for the below if is to handle edge cases like `-files0-from -ok` etc.
+                if i == args.len() - 1
+                    || (i < args.len() - 1 && args[i + 1].starts_with('-') && args[i + 1] != "-")
+                {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
                 parse_files0_args(config, args)?;
                 i += 1;
                 None
             }
+            // -ok and -okdir are yet to be implemented fully
             "-ok" | "-okdir" => {
-                if args.iter().any(|v| *v == "-files0-from") {
-                    return Err(From::from(
-                        "files0-from standard input cannot be combined with -ok / -okdir"
-                            .to_string(),
-                    ));
+                //basic check for if -files0-from and -ok /-okdir are used together
+                if let Some(pos) = args.iter().position(|arg| *arg == "-files0-from") {
+                    if args.get(pos + 1).map(|arg| *arg == "-").unwrap_or(false) {
+                        return Err(From::from(
+                            "files0-from standard input cannot be combined with -ok / -okdir"
+                                .to_string(),
+                        ));
+                    }
                 }
                 None
             }
@@ -977,9 +987,7 @@ fn parse_files0_args(config: &mut Config, args: &[&str]) -> Result<(), Box<dyn E
         .iter()
         .position(|m| *m == "-files0-from")
         .expect("Error getting files0-from mode.");
-    if args.len() - 1 <= mode {
-        return Err(From::from(format!("missing argument to {}", args[mode])));
-    }
+
     if args[mode + 1] == "-" {
         // small check if using stdin / pipe mode but data is not piped
         if io::stdin().is_terminal() {
