@@ -982,51 +982,35 @@ fn build_matcher_tree(
 // eg. dummy | find -files0-from -
 // eg. find -files0-from rust.txt -name "cargo"
 fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Error>> {
+    let mut buffer = Vec::new();
+    let new_paths = config.new_paths.get_or_insert(Vec::new());
+
     if mode == "-" {
-        let mut buffer = Vec::new();
         std::io::stdin().read_to_end(&mut buffer)?;
-        let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
-        // if pipe ends with ASCII NUL
-        if buffer_split.last().is_some_and(|s| s.is_empty()) {
-            buffer_split.remove(buffer_split.len() - 1);
-        }
-        let mut string_segments: Vec<String> = buffer_split
-            .iter()
-            .filter_map(|s| std::str::from_utf8(s).ok())
-            .map(|s| s.to_string())
-            .collect();
-        // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
-        if string_segments.iter().any(|s| s.is_empty()) {
-            println!("Find : Empty starting point detected in -files0-from input");
-            //remove the empty ones so as to avoid file not found error
-            string_segments.retain(|s| !s.is_empty());
-        }
-        config
-            .new_paths
-            .get_or_insert(Vec::new())
-            .extend(string_segments);
     } else {
-        let file = std::fs::read(mode)?;
-        let mut file_split: Vec<&[u8]> = file.split(|&b| b == 0).collect();
-        let new_paths = config.new_paths.get_or_insert(Vec::new());
-        // incase the file ends with ASCII NUL
-        if file_split.last().is_some_and(|s| s.is_empty()) {
-            file_split.remove(file_split.len() - 1);
-        }
-
-        for value in file_split {
-            // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
-            // empty file should also exit immediately
-            // this if also handles if there are 2 consecutive ASCII NUL Characters
-            let path = std::str::from_utf8(value)?;
-            if path.is_empty() {
-                println!("Find : Empty starting point detected in -files0-from input");
-                continue;
-            }
-
-            new_paths.push(path.to_string());
-        }
+        let mut file = File::open(mode)?;
+        file.read_to_end(&mut buffer)?;
     }
+
+    let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
+    //if the pipe/file ends with ASCII NULL
+    if buffer_split.last().is_some_and(|s| s.is_empty()) {
+        buffer_split.remove(buffer_split.len() - 1);
+    }
+
+    let mut string_segments: Vec<String> = buffer_split
+        .iter()
+        .filter_map(|s| std::str::from_utf8(s).ok())
+        .map(|s| s.to_string())
+        .collect();
+    // empty starting point checker
+    if string_segments.iter().any(|s| s.is_empty()) {
+        println!("Find : Empty starting point detected in -files0-from input");
+        //remove the empty ones so as to avoid file not found error
+        string_segments.retain(|s| !s.is_empty());
+    }
+
+    new_paths.extend(string_segments);
     Ok(())
 }
 
