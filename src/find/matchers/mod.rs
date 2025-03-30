@@ -907,13 +907,11 @@ fn build_matcher_tree(
             // -ok and -okdir are yet to be implemented fully
             "-ok" | "-okdir" => {
                 //basic check for if -files0-from and -ok /-okdir are used together
-                if let Some(pos) = args.iter().position(|arg| *arg == "-files0-from") {
-                    if args.get(pos + 1).map(|arg| *arg == "-").unwrap_or(false) {
-                        return Err(From::from(
-                            "files0-from standard input cannot be combined with -ok / -okdir"
-                                .to_string(),
-                        ));
-                    }
+                if config.is_stdin {
+                    return Err(From::from(
+                        "files0-from standard input cannot be combined with -ok / -okdir"
+                            .to_string(),
+                    ));
                 }
                 None
             }
@@ -982,6 +980,7 @@ fn build_matcher_tree(
 // eg. dummy | find -files0-from -
 // eg. find -files0-from rust.txt -name "cargo"
 fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Error>> {
+    config.is_stdin = true;
     let mut buffer = Vec::new();
     let new_paths = config.new_paths.get_or_insert(Vec::new());
 
