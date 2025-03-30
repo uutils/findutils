@@ -62,13 +62,14 @@ use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
-use std::fs::{File, Metadata};
-use std::io;
-use std::io::IsTerminal;
-use std::io::Read;
-use std::path::Path;
-use std::time::SystemTime;
-use std::{error::Error, str::FromStr};
+use std::{
+    error::Error,
+    fs::{File, Metadata},
+    io::Read,
+    path::Path,
+    str::FromStr,
+    time::SystemTime,
+};
 
 use super::{Config, Dependencies};
 
@@ -896,12 +897,10 @@ fn build_matcher_tree(
             }
             "-files0-from" => {
                 // The logic for the below if is to handle edge cases like `-files0-from -ok` etc.
-                if i == args.len() - 1
-                    || (i < args.len() - 1 && args[i + 1].starts_with('-') && args[i + 1] != "-")
-                {
+                if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                parse_files0_args(config, args)?;
+                parse_files0_args(config, args[i + 1])?;
                 i += 1;
                 None
             }
@@ -982,20 +981,10 @@ fn build_matcher_tree(
 // This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
 // eg. dummy | find -files0-from -
 // eg. find -files0-from rust.txt -name "cargo"
-fn parse_files0_args(config: &mut Config, args: &[&str]) -> Result<(), Box<dyn Error>> {
-    let mode = args
-        .iter()
-        .position(|m| *m == "-files0-from")
-        .expect("Error getting files0-from mode.");
-
-    if args[mode + 1] == "-" {
-        // small check if using stdin / pipe mode but data is not piped
-        if io::stdin().is_terminal() {
-            return Err(From::from("stdin not piped".to_string()));
-        }
-
+fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Error>> {
+    if mode == "-" {
         let mut buffer = Vec::new();
-        io::stdin().read_to_end(&mut buffer)?;
+        std::io::stdin().read_to_end(&mut buffer)?;
         let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
         // if pipe ends with ASCII NUL
         if buffer_split.last().is_some_and(|s| s.is_empty()) {
@@ -1017,7 +1006,7 @@ fn parse_files0_args(config: &mut Config, args: &[&str]) -> Result<(), Box<dyn E
             .get_or_insert(Vec::new())
             .extend(string_segments);
     } else {
-        let file = std::fs::read(args[mode + 1])?;
+        let file = std::fs::read(mode)?;
         let mut file_split: Vec<&[u8]> = file.split(|&b| b == 0).collect();
         let new_paths = config.new_paths.get_or_insert(Vec::new());
         // incase the file ends with ASCII NUL

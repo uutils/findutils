@@ -152,14 +152,6 @@ fn files0_ok_okdir_check() {
             "standard input cannot be combined with -ok / -okdir",
         ))
         .stdout(predicate::str::is_empty());
-
-    Command::cargo_bin("find")
-        .expect("found binary")
-        .args(["-files0-from", "-okdir"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("missing argument to -files0-from"))
-        .stdout(predicate::str::is_empty());
 }
 
 #[serial(working_dir)]
