@@ -9,9 +9,7 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io;
-use std::io::IsTerminal;
-use std::io::{stderr, stdout, Read, Write};
+use std::io::{stderr, stdout, Write};
 use std::rc::Rc;
 use std::time::SystemTime;
 use walkdir::WalkDir;
@@ -27,7 +25,7 @@ pub struct Config {
     today_start: bool,
     no_leaf_dirs: bool,
     follow: Follow,
-    from_file: Option<String>,
+    new_paths: Option<Vec<String>>,
 }
 
 impl Default for Config {
@@ -46,7 +44,7 @@ impl Default for Config {
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
             follow: Follow::Never,
-            from_file: None,
+            new_paths: None, // This option exclusively for -files0-from argument.
         }
     }
 }
@@ -116,106 +114,34 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                 i += 1;
                 break;
             }
-            // https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html
-            // This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
-            // eg. dummy | find -files0-from -
-            // eg. find -files0-from rust.txt -name "cargo"
-            "-files0-from" => {
-                if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
-                }
-                i += 1;
-                config.from_file = Some(args[i].to_string());
-
-                // NOTE : -ok and -okdir should NOT be provided along with -files0-from args.
-                // This if checking -ok or -okdir exists in args should later be shifted to -ok and -okdir when it is fully implemented.
-                if args.iter().any(|arg| *arg == "-ok" || *arg == "-okdir") && args[i] == "-" {
-                    return Err(From::from(
-                        "files0-from standard input cannot be combined with -ok, -okdir"
-                            .to_string(),
-                    ));
-                }
-            }
             _ => break,
         }
 
         i += 1;
     }
 
-    // Check to see if '-files0-from' argument is used.
-    if config.from_file.is_some() {
-        parse_files0_args(&config, &mut paths)?;
-    } else {
-        //proceed normally
-        let paths_start = i;
-        while i < args.len()
-            && (args[i] == "-" || !args[i].starts_with('-'))
-            && args[i] != "!"
-            && args[i] != "("
-        {
-            paths.push(args[i].to_string());
-            i += 1;
-        }
-        if i == paths_start {
-            paths.push(".".to_string());
-        }
+    let paths_start = i;
+    while i < args.len()
+        && (args[i] == "-" || !args[i].starts_with('-'))
+        && args[i] != "!"
+        && args[i] != "("
+    {
+        paths.push(args[i].to_string());
+        i += 1;
+    }
+    if i == paths_start {
+        paths.push(".".to_string());
     }
 
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
+    if let Some(new_paths) = &config.new_paths {
+        paths = new_paths.to_vec();
+    }
     Ok(ParsedInfo {
         matcher,
         paths,
         config,
     })
-}
-
-fn parse_files0_args(config: &Config, paths: &mut Vec<String>) -> Result<(), Box<dyn Error>> {
-    if config.from_file.as_deref() == Some("-") {
-        // small check if using stdin / pipe mode but data is not piped
-        if io::stdin().is_terminal() {
-            return Err(From::from("stdin not piped".to_string()));
-        }
-
-        let mut buffer = Vec::new();
-        io::stdin().read_to_end(&mut buffer)?;
-        let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
-        // if pipe ends with ASCII NUL
-        if buffer_split.last().is_some_and(|s| s.is_empty()) {
-            buffer_split.remove(buffer_split.len() - 1);
-        }
-        let mut string_segments: Vec<String> = buffer_split
-            .iter()
-            .filter_map(|s| std::str::from_utf8(s).ok())
-            .map(|s| s.to_string())
-            .collect();
-        // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
-        if string_segments.iter().any(|s| s.is_empty()) {
-            println!("Find : Empty starting point detected in -files0-from input");
-            //remove the empty ones so as to avoid file not found error
-            string_segments.retain(|s| !s.is_empty());
-        }
-        paths.extend(string_segments);
-    } else {
-        let file = std::fs::read(config.from_file.as_ref().unwrap())?;
-        let mut file_split: Vec<&[u8]> = file.split(|&b| b == 0).collect();
-        // incase the file ends with ASCII NUL
-        if file_split.last().is_some_and(|s| s.is_empty()) {
-            file_split.remove(file_split.len() - 1);
-        }
-
-        for value in file_split {
-            // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
-            // empty file should also exit immediately
-            // this if also handles if there are 2 consecutive ASCII NUL Characters
-            let path = std::str::from_utf8(value)?;
-            if path.is_empty() {
-                println!("Find : Empty starting point detected in -files0-from input");
-                continue;
-            }
-            paths.push(path.to_string());
-        }
-    }
-    Ok(())
 }
 
 fn process_dir(
@@ -282,6 +208,7 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
 
     let mut ret = 0;
     let mut quit = false;
+
     for path in paths_and_matcher.paths {
         let dir_ret = process_dir(
             &path,

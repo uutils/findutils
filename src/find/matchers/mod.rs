@@ -31,15 +31,6 @@ pub mod time;
 mod type_matcher;
 mod user;
 
-use ::regex::Regex;
-use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
-use fs::FileSystemMatcher;
-use ls::Ls;
-use std::fs::{File, Metadata};
-use std::path::Path;
-use std::time::SystemTime;
-use std::{error::Error, str::FromStr};
-
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
@@ -67,6 +58,17 @@ use self::time::{
 };
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
+use ::regex::Regex;
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use fs::FileSystemMatcher;
+use ls::Ls;
+use std::fs::{File, Metadata};
+use std::io;
+use std::io::IsTerminal;
+use std::io::Read;
+use std::path::Path;
+use std::time::SystemTime;
+use std::{error::Error, str::FromStr};
 
 use super::{Config, Dependencies};
 
@@ -892,6 +894,20 @@ fn build_matcher_tree(
                 config.version_requested = true;
                 None
             }
+            "-files0-from" => {
+                parse_files0_args(config, args)?;
+                i += 1;
+                None
+            }
+            "-ok" | "-okdir" => {
+                if args.iter().any(|v| *v == "-files0-from") {
+                    return Err(From::from(
+                        "files0-from standard input cannot be combined with -ok / -okdir"
+                            .to_string(),
+                    ));
+                }
+                None
+            }
 
             _ => {
                 match parse_str_to_newer_args(args[i]) {
@@ -950,6 +966,71 @@ fn build_matcher_tree(
         ));
     }
     Ok((i, top_level_matcher.build()))
+}
+
+// https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html
+// This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
+// eg. dummy | find -files0-from -
+// eg. find -files0-from rust.txt -name "cargo"
+fn parse_files0_args(config: &mut Config, args: &[&str]) -> Result<(), Box<dyn Error>> {
+    let mode = args
+        .iter()
+        .position(|m| *m == "-files0-from")
+        .expect("Error getting files0-from mode.");
+    if args.len() - 1 <= mode {
+        return Err(From::from(format!("missing argument to {}", args[mode])));
+    }
+    if args[mode + 1] == "-" {
+        // small check if using stdin / pipe mode but data is not piped
+        if io::stdin().is_terminal() {
+            return Err(From::from("stdin not piped".to_string()));
+        }
+
+        let mut buffer = Vec::new();
+        io::stdin().read_to_end(&mut buffer)?;
+        let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
+        // if pipe ends with ASCII NUL
+        if buffer_split.last().is_some_and(|s| s.is_empty()) {
+            buffer_split.remove(buffer_split.len() - 1);
+        }
+        let mut string_segments: Vec<String> = buffer_split
+            .iter()
+            .filter_map(|s| std::str::from_utf8(s).ok())
+            .map(|s| s.to_string())
+            .collect();
+        // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
+        if string_segments.iter().any(|s| s.is_empty()) {
+            println!("Find : Empty starting point detected in -files0-from input");
+            //remove the empty ones so as to avoid file not found error
+            string_segments.retain(|s| !s.is_empty());
+        }
+        config
+            .new_paths
+            .get_or_insert(Vec::new())
+            .extend(string_segments);
+    } else {
+        let file = std::fs::read(args[mode + 1])?;
+        let mut file_split: Vec<&[u8]> = file.split(|&b| b == 0).collect();
+        let new_paths = config.new_paths.get_or_insert(Vec::new());
+        // incase the file ends with ASCII NUL
+        if file_split.last().is_some_and(|s| s.is_empty()) {
+            file_split.remove(file_split.len() - 1);
+        }
+
+        for value in file_split {
+            // empty starting point if detected shall make the program exit with non-zero code (as per GNU Manual)
+            // empty file should also exit immediately
+            // this if also handles if there are 2 consecutive ASCII NUL Characters
+            let path = std::str::from_utf8(value)?;
+            if path.is_empty() {
+                println!("Find : Empty starting point detected in -files0-from input");
+                continue;
+            }
+
+            new_paths.push(path.to_string());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
