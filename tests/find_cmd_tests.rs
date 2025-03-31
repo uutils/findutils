@@ -177,9 +177,7 @@ fn files0_pipe_double_nul() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::contains(
-            "Empty starting point detected in -files0-from input",
-        ));
+        .stdout(predicate::str::contains("invalid zero-length file name"));
 }
 
 #[serial(working_dir)]

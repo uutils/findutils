@@ -820,7 +820,9 @@ fn build_matcher_tree(
             }
             ")" => {
                 if !expecting_bracket {
-                    return Err(From::from(" invalid expression: expected expression before closing parentheses ')'."));
+                    return Err(From::from(
+                        " invalid expression: expected expression before closing parentheses ')'.",
+                    ));
                 }
 
                 let bracket = args[i - 1];
@@ -986,7 +988,8 @@ fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Erro
     if mode == "-" {
         std::io::stdin().read_to_end(&mut buffer)?;
     } else {
-        let mut file = File::open(mode).map_err(|e|format!("cannot open '{}' for reading: {}",mode,e))?;
+        let mut file =
+            File::open(mode).map_err(|e| format!("cannot open '{}' for reading: {}", mode, e))?;
         file.read_to_end(&mut buffer)?;
     }
 
@@ -1333,7 +1336,9 @@ mod tests {
             &["-type", "f", "(", "-name", "*.txt", ")", ")"],
             &mut config,
         ) {
-            assert!(e.to_string().contains("too many ')'"));
+            assert!(e
+                .to_string()
+                .contains("expected expression before closing parentheses ')'"));
         } else {
             panic!("parsing argument list with too many closing brackets should fail");
         }
