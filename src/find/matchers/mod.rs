@@ -820,7 +820,7 @@ fn build_matcher_tree(
             }
             ")" => {
                 if !expecting_bracket {
-                    return Err(From::from("you have too many ')'"));
+                    return Err(From::from(" invalid expression: expected expression before closing parentheses ')'."));
                 }
 
                 let bracket = args[i - 1];
@@ -986,7 +986,7 @@ fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Erro
     if mode == "-" {
         std::io::stdin().read_to_end(&mut buffer)?;
     } else {
-        let mut file = File::open(mode)?;
+        let mut file = File::open(mode).map_err(|e|format!("cannot open '{}' for reading: {}",mode,e))?;
         file.read_to_end(&mut buffer)?;
     }
 
@@ -1003,7 +1003,7 @@ fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Erro
         .collect();
     // empty starting point checker
     if string_segments.iter().any(|s| s.is_empty()) {
-        println!("Find : Empty starting point detected in -files0-from input");
+        println!("find: invalid zero-length file name");
         //remove the empty ones so as to avoid file not found error
         string_segments.retain(|s| !s.is_empty());
     }
