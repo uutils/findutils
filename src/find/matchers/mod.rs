@@ -902,7 +902,7 @@ fn build_matcher_tree(
                 }
                 parse_files0_args(config, args[i + 1])?;
                 i += 1;
-                None
+                Some(TrueMatcher.into_box())
             }
             // -ok and -okdir are yet to be implemented fully
             "-ok" | "-okdir" => {
