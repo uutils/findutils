@@ -896,7 +896,6 @@ fn build_matcher_tree(
                 None
             }
             "-files0-from" => {
-                // The logic for the below if is to handle edge cases like `-files0-from -ok` etc.
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
