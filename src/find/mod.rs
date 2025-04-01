@@ -26,7 +26,7 @@ pub struct Config {
     no_leaf_dirs: bool,
     follow: Follow,
     new_paths: Option<Vec<String>>,
-    is_stdin: bool,
+    files0_argument: Option<String>,
 }
 
 impl Default for Config {
@@ -46,7 +46,7 @@ impl Default for Config {
             no_leaf_dirs: false,
             follow: Follow::Never,
             new_paths: None, // This option exclusively for -files0-from argument.
-            is_stdin: false, // This option also is used for files0-from by -ok / -okdir
+            files0_argument: None, //This option also is used for file0-from
         }
     }
 }

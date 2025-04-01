@@ -901,7 +901,7 @@ fn build_matcher_tree(
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
-                parse_files0_args(config, args[i + 1])?;
+                let _ = config.files0_argument.insert(args[i + 1].to_string());
                 i += 1;
                 Some(TrueMatcher.into_box())
             }
@@ -956,6 +956,9 @@ fn build_matcher_tree(
             }
         }
     }
+    if config.files0_argument.is_some() {
+        parse_files0_args(config)?;
+    }
     if expecting_bracket {
         return Err(From::from(
             "invalid expression; I was expecting to find a ')' somewhere but \
@@ -969,8 +972,8 @@ fn build_matcher_tree(
 // This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
 // eg. dummy | find -files0-from -
 // eg. find -files0-from rust.txt -name "cargo"
-fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Error>> {
-    config.is_stdin = true;
+fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
+    let mode = config.files0_argument.as_ref().unwrap();
     let mut buffer = Vec::new();
     let new_paths = config.new_paths.insert(Vec::new());
 
