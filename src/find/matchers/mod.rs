@@ -986,7 +986,7 @@ fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
     }
 
     let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
-    //if the pipe/file ends with ASCII NULL
+    // if the pipe/file ends with ASCII NULL
     if buffer_split.last().is_some_and(|s| s.is_empty()) {
         buffer_split.remove(buffer_split.len() - 1);
     }
