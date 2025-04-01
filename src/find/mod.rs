@@ -216,7 +216,6 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
 
     let mut ret = 0;
     let mut quit = false;
-
     for path in paths_and_matcher.paths {
         let dir_ret = process_dir(
             &path,
