@@ -956,14 +956,14 @@ fn build_matcher_tree(
             }
         }
     }
-    if config.files0_argument.is_some() {
-        parse_files0_args(config)?;
-    }
     if expecting_bracket {
         return Err(From::from(
             "invalid expression; I was expecting to find a ')' somewhere but \
              did not see one.",
         ));
+    }
+    if config.files0_argument.is_some() {
+        parse_files0_args(config)?;
     }
     Ok((i, top_level_matcher.build()))
 }
