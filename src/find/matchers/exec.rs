@@ -177,7 +177,16 @@ impl Matcher for MultiExecMatcher {
 
             // Reset command status.
             *command = self.new_command();
-            command.try_arg(&path_to_file).unwrap();
+            if let Err(e) = command.try_arg(&path_to_file) {
+                writeln!(
+                    &mut stderr(),
+                    "Cannot fit a single argument {}: {}",
+                    &path_to_file.to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                matcher_io.set_exit_code(1);
+            }
         }
         true
     }
