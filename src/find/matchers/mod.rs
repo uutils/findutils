@@ -905,17 +905,6 @@ fn build_matcher_tree(
                 i += 1;
                 Some(TrueMatcher.into_box())
             }
-            // -ok and -okdir are yet to be implemented fully
-            "-ok" | "-okdir" => {
-                //basic check for if -files0-from and -ok /-okdir are used together
-                if config.is_stdin {
-                    return Err(From::from(
-                        "files0-from standard input cannot be combined with -ok / -okdir"
-                            .to_string(),
-                    ));
-                }
-                None
-            }
 
             _ => {
                 match parse_str_to_newer_args(args[i]) {
