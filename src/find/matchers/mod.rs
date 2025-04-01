@@ -972,7 +972,7 @@ fn build_matcher_tree(
 fn parse_files0_args(config: &mut Config, mode: &str) -> Result<(), Box<dyn Error>> {
     config.is_stdin = true;
     let mut buffer = Vec::new();
-    let new_paths = config.new_paths.get_or_insert(Vec::new());
+    let new_paths = config.new_paths.insert(Vec::new());
 
     if mode == "-" {
         std::io::stdin().read_to_end(&mut buffer)?;

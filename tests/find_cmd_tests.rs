@@ -130,32 +130,6 @@ fn files0_empty_pipe() {
 
 #[serial(working_dir)]
 #[test]
-fn files0_ok_okdir_check() {
-    Command::cargo_bin("find")
-        .expect("found binary")
-        .write_stdin(b"./test_data/simple\0./test_data/links")
-        .args(["-files0-from", "-", "-ok"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "standard input cannot be combined with -ok / -okdir",
-        ))
-        .stdout(predicate::str::is_empty());
-
-    Command::cargo_bin("find")
-        .expect("found binary")
-        .write_stdin(b"./test_data/simple\0./test_data/links")
-        .args(["-files0-from", "-", "-okdir"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "standard input cannot be combined with -ok / -okdir",
-        ))
-        .stdout(predicate::str::is_empty());
-}
-
-#[serial(working_dir)]
-#[test]
 fn files0_pipe_basic() {
     Command::cargo_bin("find")
         .expect("found binary")

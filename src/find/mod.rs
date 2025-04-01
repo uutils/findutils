@@ -134,10 +134,16 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     if i == paths_start {
         paths.push(".".to_string());
     }
-
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
     if let Some(new_paths) = &config.new_paths {
-        paths = new_paths.to_vec();
+        if paths.len() == 1 && paths[0] == "." {
+            paths = new_paths.to_vec();
+        } else {
+            return Err(From::from(format!(
+                "extra operand '{}'\nfile operands cannot be combined with -files0-from",
+                paths[0]
+            )));
+        }
     }
     Ok(ParsedInfo {
         matcher,
