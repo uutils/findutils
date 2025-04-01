@@ -150,8 +150,8 @@ fn files0_pipe_double_nul() {
         .args(["-files0-from", "-"])
         .assert()
         .success()
-        .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::contains("invalid zero-length file name"));
+        .stderr(predicate::str::contains("invalid zero-length file name"))
+        .stdout(predicate::str::contains("./test_data/"));
 }
 
 #[serial(working_dir)]
