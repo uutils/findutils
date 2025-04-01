@@ -821,7 +821,7 @@ fn build_matcher_tree(
             ")" => {
                 if !expecting_bracket {
                     return Err(From::from(
-                        " invalid expression: expected expression before closing parentheses ')'.",
+                        "invalid expression: expected expression before closing parentheses ')'.",
                     ));
                 }
 
