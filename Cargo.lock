@@ -77,6 +77,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "argmax"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b7e3ef5e3a7f2c5e5a49d90ad087c03d38258e75155daac64deb62c50972c66"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "nix 0.24.3",
+]
+
+[[package]]
 name = "assert_cmd"
 version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -290,12 +301,13 @@ dependencies = [
 name = "findutils"
 version = "0.7.0"
 dependencies = [
+ "argmax",
  "assert_cmd",
  "chrono",
  "clap",
  "faccess",
  "filetime",
- "nix",
+ "nix 0.29.0",
  "onig",
  "predicates",
  "pretty_assertions",
@@ -450,6 +462,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lazy_static"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+
+[[package]]
 name = "libc"
 version = "0.2.169"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -502,6 +520,17 @@ name = "memchr"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
+
+[[package]]
+name = "nix"
+version = "0.24.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa52e972a9a719cecb6864fb88568781eb706bac2cd1d4f04a648542dbf78069"
+dependencies = [
+ "bitflags 1.3.2",
+ "cfg-if",
+ "libc",
+]
 
 [[package]]
 name = "nix"
@@ -960,7 +989,7 @@ dependencies = [
  "glob",
  "iana-time-zone",
  "libc",
- "nix",
+ "nix 0.29.0",
  "number_prefix",
  "os_display",
  "uucore_procs",

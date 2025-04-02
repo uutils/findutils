@@ -34,7 +34,7 @@ mod user;
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
-use self::exec::SingleExecMatcher;
+use self::exec::{MultiExecMatcher, SingleExecMatcher};
 use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
@@ -215,13 +215,13 @@ pub trait Matcher: 'static {
         false
     }
 
-    /// Notification that find has finished processing a given directory.
-    fn finished_dir(&self, _finished_directory: &Path) {}
+    /// Notification that find is leaving a given directory.
+    fn finished_dir(&self, _finished_directory: &Path, _matcher_io: &mut MatcherIO) {}
 
     /// Notification that find has finished processing all directories -
     /// allowing for any cleanup that isn't suitable for destructors (e.g.
     /// blocking calls, I/O etc.)
-    fn finished(&self) {}
+    fn finished(&self, _matcher_io: &mut MatcherIO) {}
 }
 
 impl Matcher for Box<dyn Matcher> {
@@ -237,12 +237,12 @@ impl Matcher for Box<dyn Matcher> {
         (**self).has_side_effects()
     }
 
-    fn finished_dir(&self, finished_directory: &Path) {
-        (**self).finished_dir(finished_directory);
+    fn finished_dir(&self, finished_directory: &Path, matcher_io: &mut MatcherIO) {
+        (**self).finished_dir(finished_directory, matcher_io);
     }
 
-    fn finished(&self) {
-        (**self).finished();
+    fn finished(&self, matcher_io: &mut MatcherIO) {
+        (**self).finished(matcher_io);
     }
 }
 
@@ -623,29 +623,49 @@ fn build_matcher_tree(
             "-empty" => Some(EmptyMatcher::new().into_box()),
             "-exec" | "-execdir" => {
                 let mut arg_index = i + 1;
-                while arg_index < args.len() && args[arg_index] != ";" {
-                    if args[arg_index - 1] == "{}" && args[arg_index] == "+" {
-                        // MultiExecMatcher isn't written yet
-                        return Err(From::from(format!(
-                            "{} [args...] + isn't supported yet. \
-                             Only {} [args...] ;",
-                            args[i], args[i]
-                        )));
-                    }
+                while arg_index < args.len()
+                    && args[arg_index] != ";"
+                    && (args[arg_index - 1] != "{}" || args[arg_index] != "+")
+                {
                     arg_index += 1;
                 }
-                if arg_index < i + 2 || arg_index == args.len() {
+                let required_arg = if arg_index < args.len() && args[arg_index] == "+" {
+                    3
+                } else {
+                    2
+                };
+                if arg_index < i + required_arg || arg_index == args.len() {
                     // at the minimum we need the executable and the ';'
+                    // or the executable and the '{} +'
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let expression = args[i];
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
-                Some(
-                    SingleExecMatcher::new(executable, exec_args, expression == "-execdir")?
-                        .into_box(),
-                )
+                match args[arg_index] {
+                    ";" => Some(
+                        SingleExecMatcher::new(executable, exec_args, expression == "-execdir")?
+                            .into_box(),
+                    ),
+                    "+" => {
+                        if exec_args.iter().filter(|x| matches!(**x, "{}")).count() == 1 {
+                            Some(
+                                MultiExecMatcher::new(
+                                    executable,
+                                    &exec_args[0..exec_args.len() - 1],
+                                    expression == "-execdir",
+                                )?
+                                .into_box(),
+                            )
+                        } else {
+                            return Err(From::from(
+                                "Only one instance of {} is supported with -execdir ... +",
+                            ));
+                        }
+                    }
+                    _ => unreachable!("Encountered unexpected value {}", args[arg_index]),
+                }
             }
             #[cfg(unix)]
             "-inum" => {
@@ -1576,6 +1596,30 @@ mod tests {
         } else {
             panic!("parsing argument list with exec and no executable should fail");
         }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no executable should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "foo", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no brackets should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "{}", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and no executable should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing argument list with exec and + not following {{}} should fail");
+        }
     }
 
     #[test]
@@ -1590,6 +1634,18 @@ mod tests {
         let mut config = Config::default();
         build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+", ";"], &mut config)
             .expect("only {} + should be considered a multi-exec");
+    }
+
+    #[test]
+    fn build_top_level_multi_exec_too_many_holders() {
+        let mut config = Config::default();
+        if let Err(e) =
+            build_top_level_matcher(&["-exec", "foo", "{}", "foo", "{}", "+", ";"], &mut config)
+        {
+            assert!(e.to_string().contains("Only one instance of {}"));
+        } else {
+            panic!("parsing argument list with more than one {{}} for + should fail");
+        }
     }
 
     #[test]

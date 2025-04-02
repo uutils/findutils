@@ -10,6 +10,7 @@ use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
 use std::io::{stderr, stdout, Write};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
 use walkdir::WalkDir;
@@ -175,6 +176,9 @@ fn process_dir(
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
     let mut it = walkdir.into_iter();
+    // As WalkDir seems not providing a function to check its stack,
+    // using current_dir is a workaround to check leaving directory.
+    let mut current_dir: Option<PathBuf> = None;
     while let Some(result) = it.next() {
         match WalkEntry::from_walkdir(result, config.follow) {
             Err(err) => {
@@ -183,6 +187,14 @@ fn process_dir(
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
+
+                let new_dir = entry.path().parent().map(|x| x.to_path_buf());
+                if new_dir != current_dir {
+                    if let Some(dir) = current_dir.take() {
+                        matcher.finished_dir(dir.as_path(), &mut matcher_io);
+                    }
+                    current_dir = new_dir;
+                }
 
                 matcher.matches(&entry, &mut matcher_io);
                 match matcher_io.exit_code() {
@@ -198,6 +210,17 @@ fn process_dir(
                 }
             }
         }
+    }
+
+    let mut matcher_io = matchers::MatcherIO::new(deps);
+    if let Some(dir) = current_dir.take() {
+        matcher.finished_dir(dir.as_path(), &mut matcher_io);
+    }
+    matcher.finished(&mut matcher_io);
+    // This is implemented for exec +.
+    match matcher_io.exit_code() {
+        0 => {}
+        code => ret = code,
     }
 
     ret
