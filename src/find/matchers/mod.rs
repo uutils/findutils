@@ -717,19 +717,9 @@ fn build_matcher_tree(
                 }
 
                 i += 1;
-                let mut matcher = UserMatcher::from_user_name(user);
-                if matcher.uid().is_none() {
-                    // If it's not a valid user name, it may be a UID
-                    match user.parse::<u32>() {
-                        Ok(uid) => matcher = UserMatcher::from_uid(uid),
-                        _ => {
-                            return Err(From::from(format!(
-                                "{} is not the name of a known user",
-                                user
-                            )))
-                        }
-                    }
-                }
+                let matcher = UserMatcher::from_user_name(user)
+                    .or_else(|| Some(UserMatcher::from_uid(user.parse::<u32>().ok()?)))
+                    .ok_or_else(|| format!("{user} is not the name of a known user"))?;
                 Some(matcher.into_box())
             }
             "-nouser" => Some(NoUserMatcher {}.into_box()),
@@ -738,12 +728,9 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 // check if the argument is a number
-                let uid = args[i + 1].parse::<u32>();
-                if uid.is_err() {
-                    return Err(From::from(format!("{} is not a number", args[i + 1])));
-                }
+                let uid = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(UserMatcher::from_uid(uid.unwrap()).into_box())
+                Some(UserMatcher::from_comparable(uid).into_box())
             }
             "-group" => {
                 if i >= args.len() - 1 {
@@ -759,19 +746,9 @@ fn build_matcher_tree(
                 }
 
                 i += 1;
-                let mut matcher = GroupMatcher::from_group_name(group);
-                if matcher.gid().is_none() {
-                    // If it's not a valid group name, it may be a GID
-                    match group.parse::<u32>() {
-                        Ok(gid) => matcher = GroupMatcher::from_gid(gid),
-                        _ => {
-                            return Err(From::from(format!(
-                                "{} is not the name of an existing group",
-                                group
-                            )))
-                        }
-                    }
-                }
+                let matcher = GroupMatcher::from_group_name(group)
+                    .or_else(|| Some(GroupMatcher::from_gid(group.parse::<u32>().ok()?)))
+                    .ok_or_else(|| format!("{group} is not the name of an existing group"))?;
                 Some(matcher.into_box())
             }
             "-nogroup" => Some(NoGroupMatcher {}.into_box()),
@@ -780,15 +757,9 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 // check if the argument is a number
-                let gid = args[i + 1].parse::<u32>();
-                if gid.is_err() {
-                    return Err(From::from(format!(
-                        "find: invalid argument `{}' to `-gid'",
-                        args[i + 1]
-                    )));
-                }
+                let gid = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
-                Some(GroupMatcher::from_gid(gid.unwrap()).into_box())
+                Some(GroupMatcher::from_comparable(gid).into_box())
             }
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {

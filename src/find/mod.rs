@@ -1172,6 +1172,27 @@ mod tests {
             assert_eq!(rc, 0);
         }
 
+        // test -uid +N, -uid -N
+        if uid > 0 {
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &[
+                    "find",
+                    "./test_data/simple/subdir",
+                    "-uid",
+                    &format!("+{}", uid - 1),
+                    "-uid",
+                    &format!("-{}", uid + 1),
+                ],
+                &deps,
+            );
+            assert_eq!(rc, 0);
+            assert_eq!(
+                deps.get_output_as_string(),
+                "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"
+            );
+        }
+
         // test empty uid
         let deps = FakeDependencies::new();
         let rc = find_main(&["find", "./test_data/simple/subdir", "-uid", ""], &deps);
@@ -1237,6 +1258,27 @@ mod tests {
                 &deps,
             );
             assert_eq!(rc, 0);
+        }
+
+        // test -gid +N, -gid -N
+        if gid > 0 {
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &[
+                    "find",
+                    "./test_data/simple/subdir",
+                    "-gid",
+                    &format!("+{}", gid - 1),
+                    "-gid",
+                    &format!("-{}", gid + 1),
+                ],
+                &deps,
+            );
+            assert_eq!(rc, 0);
+            assert_eq!(
+                deps.get_output_as_string(),
+                "./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n"
+            );
         }
 
         // test empty gid

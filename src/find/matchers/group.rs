@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use super::{Matcher, MatcherIO, WalkEntry};
+use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
 
 #[cfg(unix)]
 use nix::unistd::Group;
@@ -11,63 +11,39 @@ use nix::unistd::Group;
 use std::os::unix::fs::MetadataExt;
 
 pub struct GroupMatcher {
-    gid: Option<u32>,
+    gid: ComparableValue,
 }
 
 impl GroupMatcher {
     #[cfg(unix)]
-    pub fn from_group_name(group: &str) -> Self {
+    pub fn from_group_name(group: &str) -> Option<Self> {
         // get gid from group name
-        let Ok(group) = Group::from_name(group) else {
-            return Self { gid: None };
-        };
-
-        let Some(group) = group else {
-            // This if branch is to determine whether a certain group exists in the system.
-            // If a certain group does not exist in the system,
-            // the result will need to be returned according to
-            // the flag bit of whether to invert the result.
-            return Self { gid: None };
-        };
-
-        Self {
-            gid: Some(group.gid.as_raw()),
-        }
+        let group = Group::from_name(group).ok()??;
+        let gid = group.gid.as_raw();
+        Some(Self::from_gid(gid))
     }
 
-    #[cfg(unix)]
     pub fn from_gid(gid: u32) -> Self {
-        Self { gid: Some(gid) }
+        Self::from_comparable(ComparableValue::EqualTo(gid as u64))
+    }
+
+    pub fn from_comparable(gid: ComparableValue) -> Self {
+        Self { gid }
     }
 
     #[cfg(windows)]
-    pub fn from_group_name(_group: &str) -> GroupMatcher {
-        GroupMatcher { gid: None }
-    }
-
-    #[cfg(windows)]
-    pub fn from_gid(_gid: u32) -> GroupMatcher {
-        GroupMatcher { gid: None }
-    }
-
-    pub fn gid(&self) -> &Option<u32> {
-        &self.gid
+    pub fn from_group_name(_group: &str) -> Option<Self> {
+        None
     }
 }
 
 impl Matcher for GroupMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        let Ok(metadata) = file_info.metadata() else {
-            return false;
-        };
-
-        let file_gid = metadata.gid();
-
-        // When matching the -group parameter in find/matcher/mod.rs,
-        // it has been judged that the group does not exist and an error is returned.
-        // So use unwarp() directly here.
-        self.gid.unwrap() == file_gid
+        match file_info.metadata() {
+            Ok(metadata) => self.gid.matches(metadata.gid().into()),
+            Err(_) => false,
+        }
     }
 
     #[cfg(windows)]
@@ -136,7 +112,8 @@ mod tests {
             .unwrap()
             .name;
 
-        let matcher = super::GroupMatcher::from_group_name(file_group.as_str());
+        let matcher =
+            super::GroupMatcher::from_group_name(file_group.as_str()).expect("group should exist");
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "group should match"
@@ -146,18 +123,13 @@ mod tests {
         let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
         let matcher = GroupMatcher::from_group_name(time_string.as_str());
         assert!(
-            matcher.gid().is_none(),
+            matcher.is_none(),
             "group name {} should not exist",
             time_string
         );
 
         // Testing group id
         let matcher = GroupMatcher::from_gid(file_gid);
-        assert!(
-            matcher.gid().is_some(),
-            "group id {} should exist",
-            file_gid
-        );
         assert!(
             matcher.matches(&file_info, &mut matcher_io),
             "group id should match"
