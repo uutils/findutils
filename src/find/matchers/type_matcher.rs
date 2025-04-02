@@ -10,7 +10,8 @@ use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
-    file_type: FileType,
+    file_type: Option<FileType>,
+    chained_file_types: Option<Vec<FileType>>
 }
 
 fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
@@ -39,8 +40,24 @@ fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
 
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let file_type = parse(type_string)?;
-        Ok(Self { file_type })
+        if type_string.contains(","){
+            let chained_type_list = type_string
+            .split(',')
+            .map(|s| {
+                if s.is_empty() {
+                    Err(From::from("Empty type in comma-separated list"))
+                } else {
+                    parse(s)
+                }
+            })
+            .collect::<Result<Vec<FileType>, _>>()?;
+        }else{
+            let single_file_type = parse(type_string)?;
+        }
+        Ok(Self { 
+            file_type:Some(),
+            chained_file_types:None 
+        })
     }
 }
 
