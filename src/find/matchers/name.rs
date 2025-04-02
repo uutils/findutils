@@ -23,6 +23,15 @@ impl NameMatcher {
 impl Matcher for NameMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let name = file_info.file_name().to_string_lossy();
+
+        #[cfg(unix)]
+        if name.len() > 1 && name.chars().all(|x| x == '/') {
+            self.pattern.matches("/")
+        } else {
+            self.pattern.matches(&name)
+        }
+
+        #[cfg(windows)]
         self.pattern.matches(&name)
     }
 }
@@ -32,7 +41,6 @@ mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
     use crate::find::tests::FakeDependencies;
-
     use std::io::ErrorKind;
 
     #[cfg(unix)]
@@ -125,5 +133,23 @@ mod tests {
         let matcher = NameMatcher::new("linK?f", true);
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn slash_match_returns_true() {
+        let dir_to_match = get_dir_entry_for("///", "");
+        let matcher = NameMatcher::new("/", true);
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&dir_to_match, &mut deps.new_matcher_io()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn only_one_slash() {
+        let dir_to_match = get_dir_entry_for("/", "");
+        let matcher = NameMatcher::new("/", false);
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&dir_to_match, &mut deps.new_matcher_io()));
     }
 }

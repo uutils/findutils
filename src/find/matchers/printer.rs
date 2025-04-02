@@ -17,8 +17,8 @@ pub enum PrintDelimiter {
 impl std::fmt::Display for PrintDelimiter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PrintDelimiter::Newline => writeln!(f),
-            PrintDelimiter::Null => write!(f, "\0"),
+            Self::Newline => writeln!(f),
+            Self::Null => write!(f, "\0"),
         }
     }
 }
@@ -37,7 +37,13 @@ impl Printer {
         }
     }
 
-    fn print(&self, file_info: &WalkEntry, mut out: impl Write, print_error_message: bool) {
+    fn print(
+        &self,
+        file_info: &WalkEntry,
+        matcher_io: &mut MatcherIO,
+        mut out: impl Write,
+        print_error_message: bool,
+    ) {
         match write!(
             out,
             "{}{}",
@@ -54,7 +60,7 @@ impl Printer {
                         e
                     )
                     .unwrap();
-                    uucore::error::set_exit_code(1);
+                    matcher_io.set_exit_code(1);
                 }
             }
         }
@@ -65,10 +71,11 @@ impl Printer {
 impl Matcher for Printer {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, file, true);
+            self.print(file_info, matcher_io, file, true);
         } else {
             self.print(
                 file_info,
+                matcher_io,
                 &mut *matcher_io.deps.get_output().borrow_mut(),
                 false,
             );
@@ -124,11 +131,6 @@ mod tests {
         let deps = FakeDependencies::new();
 
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
-
-        // Reset the exit code global variable in case we run another test after this one
-        // See https://github.com/uutils/coreutils/issues/5777
-        uucore::error::set_exit_code(0);
-
         assert!(deps.get_output_as_string().is_empty());
     }
 }

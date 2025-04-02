@@ -90,9 +90,9 @@ impl Follow {
     /// Check whether to follow a path of the given depth.
     pub fn follow_at_depth(self, depth: usize) -> bool {
         match self {
-            Follow::Never => false,
-            Follow::Roots => depth == 0,
-            Follow::Always => true,
+            Self::Never => false,
+            Self::Roots => depth == 0,
+            Self::Always => true,
         }
     }
 
@@ -255,18 +255,18 @@ pub enum ComparableValue {
 impl ComparableValue {
     fn matches(&self, value: u64) -> bool {
         match *self {
-            ComparableValue::MoreThan(limit) => value > limit,
-            ComparableValue::EqualTo(limit) => value == limit,
-            ComparableValue::LessThan(limit) => value < limit,
+            Self::MoreThan(limit) => value > limit,
+            Self::EqualTo(limit) => value == limit,
+            Self::LessThan(limit) => value < limit,
         }
     }
 
     /// same as matches, but takes a signed value
     fn imatches(&self, value: i64) -> bool {
         match *self {
-            ComparableValue::MoreThan(limit) => value >= 0 && (value as u64) > limit,
-            ComparableValue::EqualTo(limit) => value >= 0 && (value as u64) == limit,
-            ComparableValue::LessThan(limit) => value < 0 || (value as u64) < limit,
+            Self::MoreThan(limit) => value >= 0 && (value as u64) > limit,
+            Self::EqualTo(limit) => value >= 0 && (value as u64) == limit,
+            Self::LessThan(limit) => value < 0 || (value as u64) < limit,
         }
     }
 }
@@ -920,21 +920,21 @@ fn build_matcher_tree(
                             let time = args[i + 1];
                             let newer_time_type = NewerOptionType::from_str(x_option.as_str());
                             // Convert args to unix timestamps. (expressed in numeric types)
-                            let comparable_time = match parse_date_str_to_timestamps(time) {
-                                Some(timestamp) => timestamp,
-                                None => {
-                                    return Err(From::from(format!(
-                                        "find: I cannot figure out how to interpret ‘{}’ as a date or time",
-                                        args[i + 1]
-                                    )))
-                                }
+                            let Some(comparable_time) = parse_date_str_to_timestamps(time) else {
+                                return Err(From::from(format!(
+                                    "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                                    args[i + 1]
+                                )));
                             };
                             i += 1;
                             Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
                         } else {
                             let file_path = args[i + 1];
                             i += 1;
-                            Some(NewerOptionMatcher::new(x_option, y_option, file_path)?.into_box())
+                            Some(
+                                NewerOptionMatcher::new(&x_option, &y_option, file_path)?
+                                    .into_box(),
+                            )
                         }
                     }
                     None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
@@ -1704,7 +1704,7 @@ mod tests {
         let x_options = ["a", "B", "c", "m"];
         let y_options = ["a", "B", "c", "m", "t"];
 
-        for &x in x_options.iter() {
+        for &x in &x_options {
             for &y in &y_options {
                 let eq: (String, String) = (String::from(x), String::from(y));
                 let arg = parse_str_to_newer_args(&format!("-newer{x}{y}").to_string()).unwrap();

@@ -16,10 +16,10 @@ pub struct UserMatcher {
 
 impl UserMatcher {
     #[cfg(unix)]
-    pub fn from_user_name(user: &str) -> UserMatcher {
+    pub fn from_user_name(user: &str) -> Self {
         // get uid from user name
         let Ok(user) = User::from_name(user) else {
-            return UserMatcher { uid: None };
+            return Self { uid: None };
         };
 
         let Some(user) = user else {
@@ -27,17 +27,17 @@ impl UserMatcher {
             // If a certain user does not exist in the system,
             // the result will need to be returned according to
             // the flag bit of whether to invert the result.
-            return UserMatcher { uid: None };
+            return Self { uid: None };
         };
 
-        UserMatcher {
+        Self {
             uid: Some(user.uid.as_raw()),
         }
     }
 
     #[cfg(unix)]
-    pub fn from_uid(uid: u32) -> UserMatcher {
-        UserMatcher { uid: Some(uid) }
+    pub fn from_uid(uid: u32) -> Self {
+        Self { uid: Some(uid) }
     }
 
     #[cfg(windows)]

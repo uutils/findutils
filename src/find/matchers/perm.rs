@@ -31,9 +31,9 @@ pub enum ComparisonType {
 impl ComparisonType {
     fn mode_bits_match(self, pattern: u32, value: u32) -> bool {
         match self {
-            ComparisonType::Exact => (0o7777 & value) == pattern,
-            ComparisonType::AtLeast => (value & pattern) == pattern,
-            ComparisonType::AnyOf => pattern == 0 || (value & pattern) > 0,
+            Self::Exact => (0o7777 & value) == pattern,
+            Self::AtLeast => (value & pattern) == pattern,
+            Self::AnyOf => pattern == 0 || (value & pattern) > 0,
         }
     }
 }

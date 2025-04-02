@@ -16,10 +16,10 @@ pub struct GroupMatcher {
 
 impl GroupMatcher {
     #[cfg(unix)]
-    pub fn from_group_name(group: &str) -> GroupMatcher {
+    pub fn from_group_name(group: &str) -> Self {
         // get gid from group name
         let Ok(group) = Group::from_name(group) else {
-            return GroupMatcher { gid: None };
+            return Self { gid: None };
         };
 
         let Some(group) = group else {
@@ -27,17 +27,17 @@ impl GroupMatcher {
             // If a certain group does not exist in the system,
             // the result will need to be returned according to
             // the flag bit of whether to invert the result.
-            return GroupMatcher { gid: None };
+            return Self { gid: None };
         };
 
-        GroupMatcher {
+        Self {
             gid: Some(group.gid.as_raw()),
         }
     }
 
     #[cfg(unix)]
-    pub fn from_gid(gid: u32) -> GroupMatcher {
-        GroupMatcher { gid: Some(gid) }
+    pub fn from_gid(gid: u32) -> Self {
+        Self { gid: Some(gid) }
     }
 
     #[cfg(windows)]

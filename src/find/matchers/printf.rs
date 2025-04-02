@@ -38,18 +38,18 @@ enum TimeFormat {
 impl TimeFormat {
     fn apply(&self, time: SystemTime) -> Result<Cow<'static, str>, Box<dyn Error>> {
         let formatted = match self {
-            TimeFormat::SinceEpoch => {
+            Self::SinceEpoch => {
                 let duration = time.duration_since(SystemTime::UNIX_EPOCH)?;
                 format!("{}.{:09}0", duration.as_secs(), duration.subsec_nanos())
             }
-            TimeFormat::Ctime => {
+            Self::Ctime => {
                 const CTIME_FORMAT: &str = "%a %b %d %H:%M:%S.%f0 %Y";
 
                 DateTime::<Local>::from(time)
                     .format(CTIME_FORMAT)
                     .to_string()
             }
-            TimeFormat::Strftime(format) => {
+            Self::Strftime(format) => {
                 // Handle a special case
                 let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S%.f0");
                 DateTime::<Local>::from(time)

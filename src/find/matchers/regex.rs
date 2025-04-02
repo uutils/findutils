@@ -50,10 +50,10 @@ impl RegexType {
 impl fmt::Display for RegexType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RegexType::Emacs => write!(f, "emacs"),
-            RegexType::Grep => write!(f, "grep"),
-            RegexType::PosixBasic => write!(f, "posix-basic"),
-            RegexType::PosixExtended => write!(f, "posix-extended"),
+            Self::Emacs => write!(f, "emacs"),
+            Self::Grep => write!(f, "grep"),
+            Self::PosixBasic => write!(f, "posix-basic"),
+            Self::PosixExtended => write!(f, "posix-extended"),
         }
     }
 }

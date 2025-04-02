@@ -300,7 +300,7 @@ enum CommandResult {
 
 impl CommandResult {
     fn combine(&mut self, other: Self) {
-        if matches!(*self, CommandResult::Success) {
+        if matches!(*self, Self::Success) {
             *self = other;
         }
     }
@@ -320,13 +320,13 @@ enum CommandExecutionError {
 impl Display for CommandExecutionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CommandExecutionError::UrgentlyFailed => write!(f, "Command exited with code 255"),
-            CommandExecutionError::Killed { signal } => {
+            Self::UrgentlyFailed => write!(f, "Command exited with code 255"),
+            Self::Killed { signal } => {
                 write!(f, "Command was killed with signal {signal}")
             }
-            CommandExecutionError::CannotRun(err) => write!(f, "Command could not be run: {err}"),
-            CommandExecutionError::NotFound => write!(f, "Command not found"),
-            CommandExecutionError::Unknown => write!(f, "Unknown error running command"),
+            Self::CannotRun(err) => write!(f, "Command could not be run: {err}"),
+            Self::NotFound => write!(f, "Command not found"),
+            Self::Unknown => write!(f, "Unknown error running command"),
         }
     }
 }
@@ -648,10 +648,10 @@ enum XargsError {
 impl Display for XargsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            XargsError::ArgumentTooLarge => write!(f, "Argument too large"),
-            XargsError::CommandExecution(e) => write!(f, "{e}"),
-            XargsError::Io(e) => write!(f, "{e}"),
-            XargsError::Untyped(s) => write!(f, "{s}"),
+            Self::ArgumentTooLarge => write!(f, "Argument too large"),
+            Self::CommandExecution(e) => write!(f, "{e}"),
+            Self::Io(e) => write!(f, "{e}"),
+            Self::Untyped(s) => write!(f, "{s}"),
         }
     }
 }
@@ -696,7 +696,7 @@ impl InputProcessOptions {
         max_lines: Option<usize>,
         no_run_if_empty: bool,
     ) -> Self {
-        InputProcessOptions {
+        Self {
             exit_if_pass_char_limit,
             max_args,
             max_lines,
@@ -706,11 +706,11 @@ impl InputProcessOptions {
 }
 
 fn process_input(
-    builder_options: CommandBuilderOptions,
+    builder_options: &CommandBuilderOptions,
     mut args: Box<dyn ArgumentReader>,
     options: &InputProcessOptions,
 ) -> Result<CommandResult, XargsError> {
-    let mut current_builder = CommandBuilder::new(&builder_options);
+    let mut current_builder = CommandBuilder::new(builder_options);
     let mut have_pending_command = false;
     let mut result = CommandResult::Success;
 
@@ -726,7 +726,7 @@ fn process_input(
                 result.combine(current_builder.execute()?);
             }
 
-            current_builder = CommandBuilder::new(&builder_options);
+            current_builder = CommandBuilder::new(builder_options);
             if let Err(ExhaustedCommandSpace { .. }) = current_builder.add_arg(arg) {
                 return Err(XargsError::ArgumentTooLarge);
             }
@@ -1031,7 +1031,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     };
 
     let result = process_input(
-        builder_options,
+        &builder_options,
         args,
         &InputProcessOptions::new(
             options.exit_if_pass_char_limit,
