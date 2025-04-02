@@ -1163,17 +1163,14 @@ mod tests {
         );
 
         // test uid
-        let deps = FakeDependencies::new();
-        let rc = find_main(
-            &[
-                "find",
-                "./test_data/simple/subdir",
-                "-uid",
-                &uid.to_string(),
-            ],
-            &deps,
-        );
-        assert_eq!(rc, 0);
+        for arg in ["-uid", "-user"] {
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &["find", "./test_data/simple/subdir", arg, &uid.to_string()],
+                &deps,
+            );
+            assert_eq!(rc, 0);
+        }
 
         // test empty uid
         let deps = FakeDependencies::new();
@@ -1233,17 +1230,14 @@ mod tests {
         );
 
         // test gid
-        let deps = FakeDependencies::new();
-        let rc = find_main(
-            &[
-                "find",
-                "./test_data/simple/subdir",
-                "-gid",
-                gid.to_string().as_str(),
-            ],
-            &deps,
-        );
-        assert_eq!(rc, 0);
+        for arg in ["-gid", "-group"] {
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &["find", "./test_data/simple/subdir", arg, &gid.to_string()],
+                &deps,
+            );
+            assert_eq!(rc, 0);
+        }
 
         // test empty gid
         let deps = FakeDependencies::new();

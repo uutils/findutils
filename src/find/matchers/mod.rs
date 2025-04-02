@@ -717,16 +717,20 @@ fn build_matcher_tree(
                 }
 
                 i += 1;
-                let matcher = UserMatcher::from_user_name(user);
-                match matcher.uid() {
-                    Some(_) => Some(matcher.into_box()),
-                    None => {
-                        return Err(From::from(format!(
-                            "{} is not the name of a known user",
-                            user
-                        )))
+                let mut matcher = UserMatcher::from_user_name(user);
+                if matcher.uid().is_none() {
+                    // If it's not a valid user name, it may be a UID
+                    match user.parse::<u32>() {
+                        Ok(uid) => matcher = UserMatcher::from_uid(uid),
+                        _ => {
+                            return Err(From::from(format!(
+                                "{} is not the name of a known user",
+                                user
+                            )))
+                        }
                     }
                 }
+                Some(matcher.into_box())
             }
             "-nouser" => Some(NoUserMatcher {}.into_box()),
             "-uid" => {
@@ -755,16 +759,20 @@ fn build_matcher_tree(
                 }
 
                 i += 1;
-                let matcher = GroupMatcher::from_group_name(group);
-                match matcher.gid() {
-                    Some(_) => Some(matcher.into_box()),
-                    None => {
-                        return Err(From::from(format!(
-                            "{} is not the name of an existing group",
-                            group
-                        )))
+                let mut matcher = GroupMatcher::from_group_name(group);
+                if matcher.gid().is_none() {
+                    // If it's not a valid group name, it may be a GID
+                    match group.parse::<u32>() {
+                        Ok(gid) => matcher = GroupMatcher::from_gid(gid),
+                        _ => {
+                            return Err(From::from(format!(
+                                "{} is not the name of an existing group",
+                                group
+                            )))
+                        }
                     }
                 }
+                Some(matcher.into_box())
             }
             "-nogroup" => Some(NoGroupMatcher {}.into_box()),
             "-gid" => {
