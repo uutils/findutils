@@ -26,6 +26,7 @@ struct Config {
     exit_with: Option<ExitWith>,
     print_stdin: bool,
     no_print_cwd: bool,
+    sort: bool,
     destination_dir: Option<String>,
 }
 
@@ -73,7 +74,7 @@ fn write_content(mut f: impl Write, config: &Config, args: &[String]) {
 }
 
 fn main() {
-    let args = env::args().collect::<Vec<String>>();
+    let mut args = env::args().collect::<Vec<String>>();
     if args.len() < 2 || args[1] == "-h" || args[1] == "--help" {
         usage();
     }
@@ -105,11 +106,18 @@ fn main() {
                 "--print_stdin" => {
                     config.print_stdin = true;
                 }
+                "--sort" => {
+                    config.sort = true;
+                }
                 _ => {
                     usage();
                 }
             }
         }
+    }
+
+    if config.sort {
+        args[2..].sort();
     }
 
     if let Some(destination_dir) = &config.destination_dir {
