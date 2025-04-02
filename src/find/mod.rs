@@ -26,6 +26,8 @@ pub struct Config {
     today_start: bool,
     no_leaf_dirs: bool,
     follow: Follow,
+    new_paths: Option<Vec<String>>,
+    files0_argument: Option<String>,
 }
 
 impl Default for Config {
@@ -44,6 +46,8 @@ impl Default for Config {
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
             follow: Follow::Never,
+            new_paths: None, // This option exclusively for -files0-from argument.
+            files0_argument: None, //This option also is used for file0-from
         }
     }
 }
@@ -132,6 +136,16 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         paths.push(".".to_string());
     }
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
+    if let Some(new_paths) = &config.new_paths {
+        if paths.len() == 1 && paths[0] == "." {
+            paths = new_paths.to_vec();
+        } else {
+            return Err(From::from(format!(
+                "extra operand '{}'\nfile operands cannot be combined with -files0-from",
+                paths[0]
+            )));
+        }
+    }
     Ok(ParsedInfo {
         matcher,
         paths,
@@ -259,6 +273,7 @@ Early alpha implementation. Currently the only expressions supported are
  -iname case-insensitive_filename_pattern
  -ilname case-insensitive_filename_pattern
  -regextype type
+ -files0-from
  -regex pattern
  -iregex pattern
  -type type_char

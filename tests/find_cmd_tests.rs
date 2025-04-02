@@ -74,6 +74,125 @@ fn two_matchers_one_matches() {
         .stdout(predicate::str::is_empty());
 }
 
+#[serial(working_dir)]
+#[test]
+fn files0_empty_file() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-files0-from", "./test_data/simple/abbbc"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::is_empty());
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_file_basic_success() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-files0-from", "./test_data/simple/abbbc"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::is_empty());
+
+    #[cfg(unix)]
+    {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        let test_file = temp_dir.path().join("test_files0");
+        let mut file = File::create(&test_file).expect("created test file");
+        file.write_all(b"./test_data/\0./test_data/simple/\0")
+            .expect("file write error");
+
+        Command::cargo_bin("find")
+            .expect("found binary")
+            .args(["-files0-from", &test_file.display().to_string()])
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty())
+            .stdout(predicate::str::contains("/test_data/"));
+    }
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_empty_pipe() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-files0-from", "-"])
+        .write_stdin(b"")
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::is_empty());
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_pipe_basic() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .write_stdin(b"./test_data/simple\0./test_data/links")
+        .args(["-files0-from", "-"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("./test_data/"));
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_pipe_double_nul() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .write_stdin(b"./test_data/simple\0\0./test_data/links")
+        .args(["-files0-from", "-"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("invalid zero-length file name"))
+        .stdout(predicate::str::contains("./test_data/"));
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_no_file() {
+    #[cfg(unix)]
+    {
+        Command::cargo_bin("find")
+            .expect("found binary")
+            .args(["-files0-from", "xyz.nonexistentFile"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("No such file or directory"))
+            .stdout(predicate::str::is_empty());
+    }
+    #[cfg(windows)]
+    {
+        Command::cargo_bin("find")
+            .expect("found binary")
+            .args(["-files0-from", "xyz.nonexistantFile"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "The system cannot find the file specified.",
+            ))
+            .stdout(predicate::str::is_empty());
+    }
+}
+
+#[serial(working_dir)]
+#[test]
+fn files0_basic() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .arg("-files0-from")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("missing argument to -files0-from"))
+        .stdout(predicate::str::is_empty());
+}
+
 #[test]
 fn matcher_with_side_effects_at_end() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();

@@ -31,15 +31,6 @@ pub mod time;
 mod type_matcher;
 mod user;
 
-use ::regex::Regex;
-use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
-use fs::FileSystemMatcher;
-use ls::Ls;
-use std::fs::{File, Metadata};
-use std::path::Path;
-use std::time::SystemTime;
-use std::{error::Error, str::FromStr};
-
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
@@ -67,6 +58,18 @@ use self::time::{
 };
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
+use ::regex::Regex;
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use fs::FileSystemMatcher;
+use ls::Ls;
+use std::{
+    error::Error,
+    fs::{File, Metadata},
+    io::Read,
+    path::Path,
+    str::FromStr,
+    time::SystemTime,
+};
 
 use super::{Config, Dependencies};
 
@@ -837,7 +840,9 @@ fn build_matcher_tree(
             }
             ")" => {
                 if !expecting_bracket {
-                    return Err(From::from("you have too many ')'"));
+                    return Err(From::from(
+                        "invalid expression: expected expression before closing parentheses ')'.",
+                    ));
                 }
 
                 let bracket = args[i - 1];
@@ -912,6 +917,14 @@ fn build_matcher_tree(
                 config.version_requested = true;
                 None
             }
+            "-files0-from" => {
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let _ = config.files0_argument.insert(args[i + 1].to_string());
+                i += 1;
+                Some(TrueMatcher.into_box())
+            }
 
             _ => {
                 match parse_str_to_newer_args(args[i]) {
@@ -969,7 +982,49 @@ fn build_matcher_tree(
              did not see one.",
         ));
     }
+    if config.files0_argument.is_some() {
+        parse_files0_args(config)?;
+    }
     Ok((i, top_level_matcher.build()))
+}
+
+// https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html
+// This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
+// eg. dummy | find -files0-from -
+// eg. find -files0-from rust.txt -name "cargo"
+fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
+    let mode = config.files0_argument.as_ref().unwrap();
+    let mut buffer = Vec::new();
+    let new_paths = config.new_paths.insert(Vec::new());
+
+    if mode == "-" {
+        std::io::stdin().read_to_end(&mut buffer)?;
+    } else {
+        let mut file =
+            File::open(mode).map_err(|e| format!("cannot open '{}' for reading: {}", mode, e))?;
+        file.read_to_end(&mut buffer)?;
+    }
+
+    let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
+    // if the pipe/file ends with ASCII NULL
+    if buffer_split.last().is_some_and(|s| s.is_empty()) {
+        buffer_split.remove(buffer_split.len() - 1);
+    }
+
+    let mut string_segments: Vec<String> = buffer_split
+        .iter()
+        .filter_map(|s| std::str::from_utf8(s).ok())
+        .map(|s| s.to_string())
+        .collect();
+    // empty starting point checker
+    if string_segments.iter().any(|s| s.is_empty()) {
+        eprintln!("find: invalid zero-length file name");
+        // remove the empty ones so as to avoid file not found error
+        string_segments.retain(|s| !s.is_empty());
+    }
+
+    new_paths.extend(string_segments);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1293,7 +1348,9 @@ mod tests {
             &["-type", "f", "(", "-name", "*.txt", ")", ")"],
             &mut config,
         ) {
-            assert!(e.to_string().contains("too many ')'"));
+            assert!(e
+                .to_string()
+                .contains("expected expression before closing parentheses ')'"));
         } else {
             panic!("parsing argument list with too many closing brackets should fail");
         }
