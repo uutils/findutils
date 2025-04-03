@@ -45,17 +45,24 @@ fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
 
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let mut single_file_type = None;
-        let mut chained_type_list = None;
-        if type_string.contains(",") {
+        let mut single_file_type: Option<FileType> = None;
+        let mut chained_type_list: Option<Vec<FileType>> = None;
+        if type_string.contains(',') {
+            let mut seen = std::collections::HashSet::new();
+            
             chained_type_list = Some(
                 type_string
                     .split(',')
                     .map(|s| {
-                        if s.is_empty() {
+                        let trimmed = s.trim();
+                        if trimmed.is_empty() {
                             Err(From::from("Empty type in comma-separated list"))
+                        } else if !seen.insert(trimmed) {
+                            return Err(From::from(format!(
+                                "Duplicate file type '{s}' in the argument list to -type"
+                            )))
                         } else {
-                            parse(s)
+                            parse(trimmed)
                         }
                     })
                     .collect::<Result<Vec<FileType>, _>>()?,
@@ -117,6 +124,8 @@ impl Matcher for XtypeMatcher {
         }
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {
