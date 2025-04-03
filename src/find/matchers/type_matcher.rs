@@ -11,7 +11,7 @@ use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
     file_type: Option<FileType>,
-    chained_file_types: Option<Vec<FileType>>
+    chained_file_types: Option<Vec<FileType>>,
 }
 
 fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
@@ -29,6 +29,11 @@ fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
                 "Type argument {type_string} not supported yet"
             )))
         }
+        "" => {
+            return Err(From::from(
+                "Arguments to -type should contain at least one letter",
+            ))
+        }
         _ => {
             return Err(From::from(format!(
                 "Unrecognised type argument {type_string}"
@@ -40,30 +45,42 @@ fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
 
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        if type_string.contains(","){
-            let chained_type_list = type_string
-            .split(',')
-            .map(|s| {
-                if s.is_empty() {
-                    Err(From::from("Empty type in comma-separated list"))
-                } else {
-                    parse(s)
-                }
-            })
-            .collect::<Result<Vec<FileType>, _>>()?;
-        }else{
-            let single_file_type = parse(type_string)?;
+        let mut single_file_type = None;
+        let mut chained_type_list = None;
+        if type_string.contains(",") {
+            chained_type_list = Some(
+                type_string
+                    .split(',')
+                    .map(|s| {
+                        if s.is_empty() {
+                            Err(From::from("Empty type in comma-separated list"))
+                        } else {
+                            parse(s)
+                        }
+                    })
+                    .collect::<Result<Vec<FileType>, _>>()?,
+            );
+        } else {
+            single_file_type = Some(parse(type_string)?);
         }
-        Ok(Self { 
-            file_type:Some(),
-            chained_file_types:None 
+        Ok(Self {
+            file_type: single_file_type,
+            chained_file_types: chained_type_list,
         })
     }
 }
 
 impl Matcher for TypeMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        file_info.file_type() == self.file_type
+        if self.chained_file_types.is_some() {
+            self.chained_file_types
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|entry| *entry == file_info.file_type())
+        } else {
+            file_info.file_type() == self.file_type.unwrap()
+        }
     }
 }
 
