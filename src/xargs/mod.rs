@@ -799,11 +799,13 @@ fn normalize_options<'a>(
             );
                 let lines_index = matches
                     .indices_of(options::MAX_LINES)
-                    .and_then(|v| v.last());
-                let args_index = matches.indices_of(options::MAX_ARGS).and_then(|v| v.last());
+                    .and_then(|mut v| v.next_back());
+                let args_index = matches
+                    .indices_of(options::MAX_ARGS)
+                    .and_then(|mut v| v.next_back());
                 let replace_index = [options::REPLACE, options::REPLACE_I]
                     .iter()
-                    .flat_map(|o| matches.indices_of(o).and_then(|v| v.last()))
+                    .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
                     .max();
                 if lines_index > args_index && lines_index > replace_index {
                     (None, options.max_lines, &None)
@@ -817,8 +819,8 @@ fn normalize_options<'a>(
 
     let delimiter = match (options.delimiter, options.null) {
         (Some(delimiter), true) => {
-            if matches.indices_of(options::NULL).unwrap().last()
-                > matches.indices_of(options::DELIMITER).unwrap().last()
+            if matches.indices_of(options::NULL).unwrap().next_back()
+                > matches.indices_of(options::DELIMITER).unwrap().next_back()
             {
                 Some(b'\0')
             } else {
