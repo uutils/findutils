@@ -20,7 +20,15 @@ jobs:
           repository: gnu-mirror-unofficial/findutils
           path: findutils.gnu
           ref: 5768a03ddfb5e18b1682e339d6cdd24ff721c510
-          submodules: true
+          submodules: false
+
+      - name: Override submodule URL and initialize submodules
+        # Use github instead of upstream git server
+        run: |
+          git submodule sync --recursive
+          git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+          git submodule update --init --recursive --depth 1
+        working-directory: findutils.gnu
       - name: Install `rust` toolchain
         run: |
           ## Install `rust` toolchain
