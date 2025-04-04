@@ -401,7 +401,7 @@ fn format_directive<'entry>(
             // even though it's arguably not 100% correct.
             if *large_blocks {
                 // Ceiling divide in half.
-                (blocks + 1) / 2
+                blocks.div_ceil(2)
             } else {
                 blocks
             }
