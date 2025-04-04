@@ -202,7 +202,7 @@ jobs:
     steps:
       - name: List Annotations
         uses: actions/github-script@v7
-        
+
         with:
           script: |
             let runs = await github.rest.checks.listForRef({
@@ -222,7 +222,7 @@ jobs:
                 repo: context.repo.repo,
                 check_run_id: result.id
               });
-              
+
               run.data.forEach(data => {
                 annotations.data.push({
                   run: result.name,
@@ -232,7 +232,7 @@ jobs:
             }
 
             // Remove duplicate items.
-            annotations.data = annotations.data.filter((value, index, self) => 
+            annotations.data = annotations.data.filter((value, index, self) =>
               self.findIndex(v => v.annotation.message === value.annotation.message) === index);
 
             let fs = require('fs');
