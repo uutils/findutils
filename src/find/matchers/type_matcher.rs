@@ -49,7 +49,7 @@ impl TypeMatcher {
         let mut chained_type_list: Option<Vec<FileType>> = None;
         if type_string.contains(',') {
             let mut seen = std::collections::HashSet::new();
-            
+
             chained_type_list = Some(
                 type_string
                     .split(',')
@@ -60,7 +60,7 @@ impl TypeMatcher {
                         } else if !seen.insert(trimmed) {
                             return Err(From::from(format!(
                                 "Duplicate file type '{s}' in the argument list to -type"
-                            )))
+                            )));
                         } else {
                             parse(trimmed)
                         }
@@ -68,6 +68,11 @@ impl TypeMatcher {
                     .collect::<Result<Vec<FileType>, _>>()?,
             );
         } else {
+            if type_string.len() > 1 {
+                return Err(From::from(
+                    "Must separate multiple arguments to -type using: ','",
+                ));
+            }
             single_file_type = Some(parse(type_string)?);
         }
         Ok(Self {
@@ -124,8 +129,6 @@ impl Matcher for XtypeMatcher {
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
