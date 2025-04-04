@@ -124,6 +124,7 @@ fn find_exec_multi() {
             "-exec",
             &path_to_testing_commandline(),
             temp_dir_path.as_ref(),
+            "--sort",
             "(",
             "-o",
             "{}",
@@ -145,7 +146,7 @@ fn find_exec_multi() {
     assert_eq!(
         s,
         fix_up_slashes(&format!(
-            "cwd={}\nargs=\n(\n-o\n./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n",
+            "cwd={}\nargs=\n(\n--sort\n-o\n./test_data/simple/abbbc\n./test_data/simple/subdir/ABBBC\n",
             env::current_dir().unwrap().to_string_lossy()
         ))
     );
@@ -165,9 +166,12 @@ fn find_execdir_multi() {
         &[
             "find",
             &fix_up_slashes("./test_data/simple"),
+            "-maxdepth",
+            "1",
             "-execdir",
             &path_to_testing_commandline(),
             temp_dir_path.as_ref(),
+            "--sort",
             ")",
             "{}",
             "+",
@@ -188,7 +192,7 @@ fn find_execdir_multi() {
     assert_eq!(
         s,
         fix_up_slashes(&format!(
-            "cwd={}/test_data\nargs=\n)\n./simple\n",
+            "cwd={}/test_data\nargs=\n)\n--sort\n./simple\n",
             env::current_dir().unwrap().to_string_lossy()
         ))
     );
@@ -199,18 +203,7 @@ fn find_execdir_multi() {
     assert_eq!(
         s,
         fix_up_slashes(&format!(
-            "cwd={}/test_data/simple\nargs=\n)\n./abbbc\n./subdir\n",
-            env::current_dir().unwrap().to_string_lossy()
-        ))
-    );
-    let mut f = File::open(temp_dir.path().join("3.txt")).expect("Failed to open output file");
-    let mut s = String::new();
-    f.read_to_string(&mut s)
-        .expect("failed to read output file");
-    assert_eq!(
-        s,
-        fix_up_slashes(&format!(
-            "cwd={}/test_data/simple/subdir\nargs=\n)\n./ABBBC\n",
+            "cwd={}/test_data/simple\nargs=\n)\n--sort\n./abbbc\n./subdir\n",
             env::current_dir().unwrap().to_string_lossy()
         ))
     );
