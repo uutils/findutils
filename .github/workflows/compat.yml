@@ -20,7 +20,15 @@ jobs:
           repository: gnu-mirror-unofficial/findutils
           path: findutils.gnu
           ref: 5768a03ddfb5e18b1682e339d6cdd24ff721c510
-          submodules: true
+          submodules: false
+
+      - name: Override submodule URL and initialize submodules
+        # Use github instead of upstream git server
+        run: |
+          git submodule sync --recursive
+          git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+          git submodule update --init --recursive --depth 1
+        working-directory: findutils.gnu
       - name: Install `rust` toolchain
         run: |
           ## Install `rust` toolchain
@@ -202,7 +210,7 @@ jobs:
     steps:
       - name: List Annotations
         uses: actions/github-script@v7
-        
+
         with:
           script: |
             let runs = await github.rest.checks.listForRef({
@@ -222,7 +230,7 @@ jobs:
                 repo: context.repo.repo,
                 check_run_id: result.id
               });
-              
+
               run.data.forEach(data => {
                 annotations.data.push({
                   run: result.name,
@@ -232,7 +240,7 @@ jobs:
             }
 
             // Remove duplicate items.
-            annotations.data = annotations.data.filter((value, index, self) => 
+            annotations.data = annotations.data.filter((value, index, self) =>
               self.findIndex(v => v.annotation.message === value.annotation.message) === index);
 
             let fs = require('fs');
