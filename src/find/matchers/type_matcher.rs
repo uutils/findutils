@@ -98,16 +98,48 @@ impl Matcher for TypeMatcher {
 
 /// Like [TypeMatcher], but toggles whether symlinks are followed.
 pub struct XtypeMatcher {
-    file_type: FileType,
+    file_type: Option<FileType>,
+    chained_file_types: Option<Vec<FileType>>,
 }
 
 impl XtypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let file_type = parse(type_string)?;
-        Ok(Self { file_type })
+        let mut single_file_type: Option<FileType> = None;
+        let mut chained_type_list: Option<Vec<FileType>> = None;
+        if type_string.contains(',') {
+            let mut seen = std::collections::HashSet::new();
+
+            chained_type_list = Some(
+                type_string
+                    .split(',')
+                    .map(|s| {
+                        let trimmed = s.trim();
+                        if trimmed.is_empty() {
+                            Err(From::from("Empty type in comma-separated list"))
+                        } else if !seen.insert(trimmed) {
+                            return Err(From::from(format!(
+                                "Duplicate file type '{s}' in the argument list to -type"
+                            )));
+                        } else {
+                            parse(trimmed)
+                        }
+                    })
+                    .collect::<Result<Vec<FileType>, _>>()?,
+            );
+        } else {
+            if type_string.len() > 1 {
+                return Err(From::from(
+                    "Must separate multiple arguments to -type using: ','",
+                ));
+            }
+            single_file_type = Some(parse(type_string)?);
+        }
+        Ok(Self {
+            file_type: single_file_type,
+            chained_file_types: chained_type_list,
+        })
     }
 }
-
 impl Matcher for XtypeMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let follow = if file_info.follow() {
@@ -116,16 +148,35 @@ impl Matcher for XtypeMatcher {
             Follow::Always
         };
 
-        let file_type = follow
+        let file_type_result = follow
             .metadata(file_info)
             .map(|m| m.file_type())
             .map(FileType::from);
 
-        match file_type {
-            Ok(file_type) if file_type == self.file_type => true,
-            // Since GNU find 4.10, ELOOP will match -xtype l
-            Err(e) if self.file_type.is_symlink() && e.is_loop() => true,
-            _ => false,
+        if let Some(types) = &self.chained_file_types {
+            for expected_type in types {
+                match &file_type_result {
+                    Ok(actual_type) => {
+                        if actual_type == expected_type {
+                            return true;
+                        }
+                    }
+                    Err(e) => {
+                        // Since GNU find 4.10, ELOOP will match -xtype l
+                        if e.is_loop() && *expected_type == FileType::Symlink {
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        } else {
+            // Single type check
+            let expected_type = self.file_type.unwrap(); // Safe due to struct invariants
+            match file_type_result {
+                Ok(actual_type) => actual_type == expected_type,
+                Err(e) => e.is_loop() && expected_type == FileType::Symlink,
+            }
         }
     }
 }
