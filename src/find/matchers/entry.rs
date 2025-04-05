@@ -278,7 +278,7 @@ impl WalkEntry {
             Entry::Explicit(path, _) => {
                 // Path::file_name() only works if the last component is normal
                 path.components()
-                    .last()
+                    .next_back()
                     .map(|c| c.as_os_str())
                     .unwrap_or_else(|| path.as_os_str())
             }
