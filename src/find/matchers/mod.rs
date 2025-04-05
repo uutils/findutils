@@ -246,6 +246,7 @@ impl Matcher for Box<dyn Matcher> {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum ComparableValue {
     MoreThan(u64),
     EqualTo(u64),
@@ -311,7 +312,7 @@ fn convert_arg_to_comparable_value(
     option_name: &str,
     value_as_string: &str,
 ) -> Result<ComparableValue, Box<dyn Error>> {
-    let re = Regex::new(r"^([+-]?)(\d+)$")?;
+    let re = Regex::new(r"^([-+]?)[-+]?(\d+)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok(match &groups[1] {
@@ -331,7 +332,7 @@ fn convert_arg_to_comparable_value_and_suffix(
     option_name: &str,
     value_as_string: &str,
 ) -> Result<(ComparableValue, String), Box<dyn Error>> {
-    let re = Regex::new(r"([+-]?)(\d+)(.*)$")?;
+    let re = Regex::new(r"([-+]?)[-+]?(\d+)(.*)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok((
@@ -1679,6 +1680,31 @@ mod tests {
         } else {
             panic!("-perm with no mode pattern should fail");
         }
+    }
+
+    #[test]
+    fn convert_arg_to_comparable_value_test() {
+        assert_eq!(
+            convert_arg_to_comparable_value("test", "10").unwrap(),
+            ComparableValue::EqualTo(10),
+        );
+        assert_eq!(
+            convert_arg_to_comparable_value("test", "+10").unwrap(),
+            ComparableValue::MoreThan(10),
+        );
+        assert_eq!(
+            convert_arg_to_comparable_value("test", "-10").unwrap(),
+            ComparableValue::LessThan(10),
+        );
+
+        assert_eq!(
+            convert_arg_to_comparable_value("test", "-+10").unwrap(),
+            ComparableValue::LessThan(10),
+        );
+        assert_eq!(
+            convert_arg_to_comparable_value("test", "++10").unwrap(),
+            ComparableValue::MoreThan(10),
+        );
     }
 
     #[test]
