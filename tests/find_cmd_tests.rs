@@ -1174,7 +1174,7 @@ fn find_ls() {
 
 #[test]
 #[cfg(unix)]
-fn find_slashs() {
+fn find_slashes() {
     Command::cargo_bin("find")
         .expect("found binary")
         .args(["///", "-maxdepth", "0", "-name", "/"])
