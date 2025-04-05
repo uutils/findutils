@@ -337,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn chained_arguments_type(){
+    fn chained_arguments_type() {
         assert!(TypeMatcher::new("").is_err());
         assert!(TypeMatcher::new("f,f").is_err());
         assert!(TypeMatcher::new("f,").is_err());
