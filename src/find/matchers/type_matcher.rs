@@ -341,8 +341,46 @@ mod tests {
         assert!(TypeMatcher::new("").is_err());
         assert!(TypeMatcher::new("f,f").is_err());
         assert!(TypeMatcher::new("f,").is_err());
+        assert!(TypeMatcher::new("x,y").is_err());
+        assert!(TypeMatcher::new("fd").is_err());
+
         assert!(XtypeMatcher::new("").is_err());
         assert!(XtypeMatcher::new("f,f").is_err());
         assert!(XtypeMatcher::new("f,").is_err());
+        assert!(XtypeMatcher::new("x,y").is_err());
+        assert!(XtypeMatcher::new("fd").is_err());
+    }
+
+    #[test]
+    fn type_matcher_multiple_valid_types() {
+        let deps = FakeDependencies::new();
+        let file = get_dir_entry_for("test_data/simple", "abbbc");
+        let dir = get_dir_entry_for("test_data", "simple");
+        let symlink = get_dir_entry_for("test_data/links", "link-f");
+
+        let matcher = TypeMatcher::new("f,d").unwrap();
+        assert!(matcher.matches(&file, &mut deps.new_matcher_io()));
+        assert!(matcher.matches(&dir, &mut deps.new_matcher_io()));
+        assert!(!matcher.matches(&symlink, &mut deps.new_matcher_io()));
+
+        let matcher = TypeMatcher::new("l,d").unwrap();
+        assert!(!matcher.matches(&file, &mut deps.new_matcher_io()));
+        assert!(matcher.matches(&dir, &mut deps.new_matcher_io()));
+        assert!(matcher.matches(&symlink, &mut deps.new_matcher_io()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xtype_matcher_mixed_types_with_symlinks() {
+        let deps = FakeDependencies::new();
+
+        // Regular file through symlink
+        let entry = get_dir_entry_follow("test_data/links", "link-f", Follow::Always);
+        let matcher = XtypeMatcher::new("f,l").unwrap();
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+
+        // Broken symlink
+        let broken_entry = get_dir_entry_for("test_data/links", "link-missing");
+        assert!(matcher.matches(&broken_entry, &mut deps.new_matcher_io()));
     }
 }
