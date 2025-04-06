@@ -114,7 +114,7 @@ impl Matcher for XtypeMatcher {
             false
         } else {
             // Single type check
-            let expected_type = self.file_type.unwrap(); // Safe due to struct invariants
+            let expected_type = self.file_type.unwrap();
             if let Ok(actual_type) = &file_type_result {
                 *actual_type == expected_type
             } else {
@@ -360,5 +360,10 @@ mod tests {
         // Broken symlink
         let broken_entry = get_dir_entry_for("test_data/links", "link-missing");
         assert!(matcher.matches(&broken_entry, &mut deps.new_matcher_io()));
+
+        //looping symlink
+        let matcher2 = XtypeMatcher::new("l").unwrap();
+        let looping_entry = get_dir_entry_for("test_data/links", "link-loop");
+        assert!(matcher2.matches(&looping_entry, &mut deps.new_matcher_io()))
     }
 }
