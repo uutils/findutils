@@ -100,17 +100,14 @@ impl Matcher for XtypeMatcher {
 
         if let Some(types) = &self.chained_file_types {
             for expected_type in types {
-                match &file_type_result {
-                    Ok(actual_type) => {
-                        if actual_type == expected_type {
-                            return true;
-                        }
+                if let Ok(actual_type) = &file_type_result {
+                    if *actual_type == *expected_type {
+                        return true;
                     }
-                    Err(e) => {
-                        // Since GNU find 4.10, ELOOP will match -xtype l
-                        if e.is_loop() && *expected_type == FileType::Symlink {
-                            return true;
-                        }
+                } else if let Err(e) = &file_type_result {
+                    // Since GNU find 4.10, ELOOP will match -xtype l
+                    if e.is_loop() && *expected_type == FileType::Symlink {
+                        return true;
                     }
                 }
             }
@@ -118,9 +115,11 @@ impl Matcher for XtypeMatcher {
         } else {
             // Single type check
             let expected_type = self.file_type.unwrap(); // Safe due to struct invariants
-            match file_type_result {
-                Ok(actual_type) => actual_type == expected_type,
-                Err(e) => e.is_loop() && expected_type == FileType::Symlink,
+            if let Ok(actual_type) = &file_type_result {
+                *actual_type == expected_type
+            } else {
+                let e = file_type_result.as_ref().unwrap_err();
+                e.is_loop() && expected_type == FileType::Symlink
             }
         }
     }
