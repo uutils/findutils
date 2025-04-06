@@ -364,6 +364,6 @@ mod tests {
         //looping symlink
         let matcher2 = XtypeMatcher::new("l").unwrap();
         let looping_entry = get_dir_entry_for("test_data/links", "link-loop");
-        assert!(matcher2.matches(&looping_entry, &mut deps.new_matcher_io()))
+        assert!(matcher2.matches(&looping_entry, &mut deps.new_matcher_io()));
     }
 }
