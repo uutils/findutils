@@ -390,23 +390,18 @@ fn format_directive<'entry>(
 
         FormatDirective::Blocks { large_blocks } => {
             #[cfg(unix)]
-            let blocks = meta()?.blocks();
+            let len = meta()?.blocks() * STANDARD_BLOCK_SIZE;
             #[cfg(not(unix))]
-            // Estimate using a ceiling division by the block size.
-            let blocks = (meta()?.len() + STANDARD_BLOCK_SIZE - 1) / STANDARD_BLOCK_SIZE;
+            let len = meta()?.len();
 
             // GNU find says it returns the number of 512-byte blocks for %b,
             // but in reality it just returns the number of blocks, *regardless
             // of their size on the filesystem*. That behavior is copied here,
             // even though it's arguably not 100% correct.
-            if *large_blocks {
-                // Ceiling divide in half.
-                blocks.div_ceil(2)
-            } else {
-                blocks
-            }
-            .to_string()
-            .into()
+            let bs = if *large_blocks {1024} else {512};
+            let blocks = len.div_ceil(bs);
+            
+            blocks.to_string().into()
         }
 
         #[cfg(not(unix))]
