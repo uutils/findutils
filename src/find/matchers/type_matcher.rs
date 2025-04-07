@@ -17,7 +17,7 @@ pub struct TypeMatcher {
     chained_file_types: ChainedTypeList,
 }
 
-fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
+fn parse(type_string: &str, mode: &str) -> Result<FileType, Box<dyn Error>> {
     let file_type = match type_string {
         "f" => FileType::Regular,
         "d" => FileType::Directory,
@@ -28,14 +28,21 @@ fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
         "s" => FileType::Socket,
         // D: door (Solaris)
         "D" => {
-            return Err(From::from(format!(
-                "Type argument {type_string} not supported yet"
-            )))
+            #[cfg(not(target_os = "solaris"))]
+            {
+                return Err(From::from(format!("{mode} D is not supported because Solaris doors are not supported on the platform find was compiled on.")));
+            }
+            #[cfg(target_os = "solaris")]
+            {
+                return Err(From::from(format!(
+                    "Type argument {type_string} not supported yet"
+                )));
+            }
         }
         "" => {
-            return Err(From::from(
-                "Arguments to -type should contain at least one letter",
-            ))
+            return Err(From::from(format!(
+                "Arguments to {mode} should contain at least one letter"
+            )))
         }
         _ => {
             return Err(From::from(format!(
@@ -48,7 +55,7 @@ fn parse(type_string: &str) -> Result<FileType, Box<dyn Error>> {
 
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let (single_file_type, chained_type_list) = type_creator(type_string)?;
+        let (single_file_type, chained_type_list) = type_creator(type_string, "-type")?;
         Ok(Self {
             file_type: single_file_type,
             chained_file_types: chained_type_list,
@@ -78,7 +85,7 @@ pub struct XtypeMatcher {
 
 impl XtypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let (single_file_type, chained_type_list) = type_creator(type_string)?;
+        let (single_file_type, chained_type_list) = type_creator(type_string, "-xtype")?;
         Ok(Self {
             file_type: single_file_type,
             chained_file_types: chained_type_list,
@@ -125,7 +132,10 @@ impl Matcher for XtypeMatcher {
     }
 }
 
-fn type_creator(type_string: &str) -> Result<(SingleTypeList, ChainedTypeList), Box<dyn Error>> {
+fn type_creator(
+    type_string: &str,
+    mode: &str,
+) -> Result<(SingleTypeList, ChainedTypeList), Box<dyn Error>> {
     let mut single_file_type: SingleTypeList = None;
     let mut chained_type_list: ChainedTypeList = None;
     if type_string.contains(',') {
@@ -137,24 +147,24 @@ fn type_creator(type_string: &str) -> Result<(SingleTypeList, ChainedTypeList), 
                 .map(|s| {
                     let trimmed = s.trim();
                     if trimmed.is_empty() {
-                        Err(From::from("Empty type in comma-separated list"))
+                        Err(From::from(format!("find: Last file type in list argument to {mode} is missing, i.e., list is ending on: ','")))
                     } else if !seen.insert(trimmed) {
                         return Err(From::from(format!(
-                            "Duplicate file type '{s}' in the argument list to -type"
+                            "Duplicate file type '{s}' in the argument list to {mode}"
                         )));
                     } else {
-                        parse(trimmed)
+                        parse(trimmed,mode)
                     }
                 })
                 .collect::<Result<Vec<FileType>, _>>()?,
         );
     } else {
         if type_string.len() > 1 {
-            return Err(From::from(
-                "Must separate multiple arguments to -type using: ','",
-            ));
+            return Err(From::from(format!(
+                "Must separate multiple arguments to {mode} using: ','"
+            )));
         }
-        single_file_type = Some(parse(type_string)?);
+        single_file_type = Some(parse(type_string, mode)?);
     }
     Ok((single_file_type, chained_type_list))
 }
