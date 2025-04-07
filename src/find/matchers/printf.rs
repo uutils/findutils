@@ -398,9 +398,9 @@ fn format_directive<'entry>(
             // but in reality it just returns the number of blocks, *regardless
             // of their size on the filesystem*. That behavior is copied here,
             // even though it's arguably not 100% correct.
-            let bs = if *large_blocks {1024} else {512};
+            let bs = if *large_blocks { 1024 } else { 512 };
             let blocks = len.div_ceil(bs);
-            
+
             blocks.to_string().into()
         }
 
