@@ -83,6 +83,14 @@ fn multiple_matcher_success() {
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "f,d,l", "-name", "abbbc"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
 }
 
 #[test]
@@ -124,6 +132,48 @@ fn multiple_matcher_failure() {
     Command::cargo_bin("find")
         .expect("found binary")
         .args(["-type", "x,y", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unrecognised type argument"))
+        .stdout(predicate::str::is_empty());
+    // x-type tests below
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "fd", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Must separate multiple arguments"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "f,", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("list is ending on: ','"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "f,f", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Duplicate file type"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "should contain at least one letter",
+        ))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "x,y", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Unrecognised type argument"))
