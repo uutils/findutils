@@ -8,13 +8,12 @@ use std::error::Error;
 
 use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 
-type SingleTypeList = Option<FileType>;
-type ChainedTypeList = Option<Vec<FileType>>;
+type TypeList = Option<Vec<FileType>>;
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
-    file_type: SingleTypeList,
-    chained_file_types: ChainedTypeList,
+    file_type: TypeList,
+    chained_file_types: TypeList,
 }
 
 fn parse(type_string: &str, mode: &str) -> Result<FileType, Box<dyn Error>> {
@@ -72,15 +71,15 @@ impl Matcher for TypeMatcher {
                 .iter()
                 .any(|entry| *entry == file_info.file_type())
         } else {
-            file_info.file_type() == self.file_type.unwrap()
+            file_info.file_type() == self.file_type.as_ref().unwrap()[0]
         }
     }
 }
 
 /// Like [TypeMatcher], but toggles whether symlinks are followed.
 pub struct XtypeMatcher {
-    file_type: SingleTypeList,
-    chained_file_types: ChainedTypeList,
+    file_type: TypeList,
+    chained_file_types: TypeList,
 }
 
 impl XtypeMatcher {
@@ -121,7 +120,7 @@ impl Matcher for XtypeMatcher {
             false
         } else {
             // Single type check
-            let expected_type = self.file_type.unwrap();
+            let expected_type = self.file_type.as_ref().unwrap()[0];
             if let Ok(actual_type) = &file_type_result {
                 *actual_type == expected_type
             } else {
@@ -132,12 +131,9 @@ impl Matcher for XtypeMatcher {
     }
 }
 
-fn type_creator(
-    type_string: &str,
-    mode: &str,
-) -> Result<(SingleTypeList, ChainedTypeList), Box<dyn Error>> {
-    let mut single_file_type: SingleTypeList = None;
-    let mut chained_type_list: ChainedTypeList = None;
+fn type_creator(type_string: &str, mode: &str) -> Result<(TypeList, TypeList), Box<dyn Error>> {
+    let mut single_file_type: TypeList = None;
+    let mut chained_type_list: TypeList = None;
     if type_string.contains(',') {
         let mut seen = std::collections::HashSet::new();
 
@@ -164,7 +160,7 @@ fn type_creator(
                 "Must separate multiple arguments to {mode} using: ','"
             )));
         }
-        single_file_type = Some(parse(type_string, mode)?);
+        single_file_type = Some(vec![parse(type_string, mode)?]);
     }
     Ok((single_file_type, chained_type_list))
 }
