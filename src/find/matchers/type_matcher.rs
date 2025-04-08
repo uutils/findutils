@@ -8,12 +8,11 @@ use std::error::Error;
 
 use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 
-type TypeList = Option<Vec<FileType>>;
+type TypeList = Vec<FileType>;
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
     file_type: TypeList,
-    chained_file_types: TypeList,
 }
 
 fn parse(type_string: &str, mode: &str) -> Result<FileType, Box<dyn Error>> {
@@ -54,40 +53,31 @@ fn parse(type_string: &str, mode: &str) -> Result<FileType, Box<dyn Error>> {
 
 impl TypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let (single_file_type, chained_type_list) = type_creator(type_string, "-type")?;
+        let main_file_type = type_creator(type_string, "-type")?;
         Ok(Self {
-            file_type: single_file_type,
-            chained_file_types: chained_type_list,
+            file_type: main_file_type,
         })
     }
 }
 
 impl Matcher for TypeMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        if self.chained_file_types.is_some() {
-            self.chained_file_types
-                .as_ref()
-                .unwrap()
-                .iter()
-                .any(|entry| *entry == file_info.file_type())
-        } else {
-            file_info.file_type() == self.file_type.as_ref().unwrap()[0]
-        }
+        self.file_type
+            .iter()
+            .any(|entry| *entry == file_info.file_type())
     }
 }
 
 /// Like [TypeMatcher], but toggles whether symlinks are followed.
 pub struct XtypeMatcher {
     file_type: TypeList,
-    chained_file_types: TypeList,
 }
 
 impl XtypeMatcher {
     pub fn new(type_string: &str) -> Result<Self, Box<dyn Error>> {
-        let (single_file_type, chained_type_list) = type_creator(type_string, "-xtype")?;
+        let main_file_type = type_creator(type_string, "-xtype")?;
         Ok(Self {
-            file_type: single_file_type,
-            chained_file_types: chained_type_list,
+            file_type: main_file_type,
         })
     }
 }
@@ -104,41 +94,27 @@ impl Matcher for XtypeMatcher {
             .map(|m| m.file_type())
             .map(FileType::from);
 
-        if let Some(types) = &self.chained_file_types {
-            for expected_type in types {
-                if let Ok(actual_type) = &file_type_result {
-                    if *actual_type == *expected_type {
-                        return true;
-                    }
-                } else if let Err(e) = &file_type_result {
-                    // Since GNU find 4.10, ELOOP will match -xtype l
-                    if e.is_loop() && *expected_type == FileType::Symlink {
-                        return true;
-                    }
+        for expected_type in &self.file_type {
+            if let Ok(file_type) = file_type_result {
+                if file_type == *expected_type {
+                    return true;
+                }
+            } else if let Err(e) = &file_type_result {
+                // Since GNU find 4.10, ELOOP will match -xtype l
+                if e.is_loop() && *expected_type == FileType::Symlink {
+                    return true;
                 }
             }
-            false
-        } else {
-            // Single type check
-            let expected_type = self.file_type.as_ref().unwrap()[0];
-            if let Ok(actual_type) = &file_type_result {
-                *actual_type == expected_type
-            } else {
-                let e = file_type_result.as_ref().unwrap_err();
-                e.is_loop() && expected_type == FileType::Symlink
-            }
         }
+        false
     }
 }
 
-fn type_creator(type_string: &str, mode: &str) -> Result<(TypeList, TypeList), Box<dyn Error>> {
-    let mut single_file_type: TypeList = None;
-    let mut chained_type_list: TypeList = None;
+fn type_creator(type_string: &str, mode: &str) -> Result<TypeList, Box<dyn Error>> {
     if type_string.contains(',') {
         let mut seen = std::collections::HashSet::new();
 
-        chained_type_list = Some(
-            type_string
+        let file_type = type_string
                 .split(',')
                 .map(|s| {
                     let trimmed = s.trim();
@@ -152,17 +128,17 @@ fn type_creator(type_string: &str, mode: &str) -> Result<(TypeList, TypeList), B
                         parse(trimmed,mode)
                     }
                 })
-                .collect::<Result<Vec<FileType>, _>>()?,
-        );
+                .collect::<Result<Vec<FileType>, _>>()?;
+        Ok(file_type)
     } else {
         if type_string.len() > 1 {
             return Err(From::from(format!(
                 "Must separate multiple arguments to {mode} using: ','"
             )));
         }
-        single_file_type = Some(vec![parse(type_string, mode)?]);
+        let file_type = vec![parse(type_string, mode)?];
+        Ok(file_type)
     }
-    Ok((single_file_type, chained_type_list))
 }
 
 #[cfg(test)]
