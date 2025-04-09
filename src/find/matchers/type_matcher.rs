@@ -8,7 +8,7 @@ use std::error::Error;
 
 use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 
-type TypeList = Vec<FileType>;
+type TypeList = std::collections::HashSet<FileType>;
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
@@ -106,34 +106,33 @@ impl Matcher for XtypeMatcher {
 }
 
 fn type_creator(type_string: &str, mode: &str) -> Result<TypeList, Box<dyn Error>> {
+    let mut file_types = std::collections::HashSet::new();
+
     if type_string.contains(',') {
         let mut seen = std::collections::HashSet::new();
 
-        let file_type = type_string
-                .split(',')
-                .map(|s| {
-                    let trimmed = s.trim();
-                    if trimmed.is_empty() {
-                        Err(From::from(format!("find: Last file type in list argument to {mode} is missing, i.e., list is ending on: ','")))
-                    } else if !seen.insert(trimmed) {
-                        return Err(From::from(format!(
-                            "Duplicate file type '{s}' in the argument list to {mode}"
-                        )));
-                    } else {
-                        parse(trimmed,mode)
-                    }
-                })
-                .collect::<Result<Vec<FileType>, _>>()?;
-        Ok(file_type)
+        for part in type_string.split(',') {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                return Err(From::from(format!("find: Last file type in list argument to {mode} is missing, i.e., list is ending on: ','")));
+            } else if !seen.insert(trimmed) {
+                return Err(From::from(format!(
+                    "Duplicate file type '{part}' in the argument list to {mode}"
+                )));
+            } else {
+                file_types.insert(parse(trimmed, mode)?);
+            }
+        }
     } else {
         if type_string.len() > 1 {
             return Err(From::from(format!(
                 "Must separate multiple arguments to {mode} using: ','"
             )));
         }
-        let file_type = vec![parse(type_string, mode)?];
-        Ok(file_type)
+        file_types.insert(parse(type_string, mode)?);
     }
+
+    Ok(file_types)
 }
 
 #[cfg(test)]
