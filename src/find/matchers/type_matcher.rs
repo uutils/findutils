@@ -62,9 +62,7 @@ impl TypeMatcher {
 
 impl Matcher for TypeMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        self.file_type
-            .iter()
-            .any(|entry| *entry == file_info.file_type())
+        self.file_type.contains(&file_info.file_type())
     }
 }
 
