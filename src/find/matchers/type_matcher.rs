@@ -109,18 +109,16 @@ fn type_creator(type_string: &str, mode: &str) -> Result<TypeList, Box<dyn Error
     let mut file_types = std::collections::HashSet::new();
 
     if type_string.contains(',') {
-        let mut seen = std::collections::HashSet::new();
-
         for part in type_string.split(',') {
             let trimmed = part.trim();
             if trimmed.is_empty() {
                 return Err(From::from(format!("find: Last file type in list argument to {mode} is missing, i.e., list is ending on: ','")));
-            } else if !seen.insert(trimmed) {
+            }
+            let file_type = parse(trimmed, mode)?;
+            if !file_types.insert(file_type) {
                 return Err(From::from(format!(
                     "Duplicate file type '{part}' in the argument list to {mode}"
                 )));
-            } else {
-                file_types.insert(parse(trimmed, mode)?);
             }
         }
     } else {
