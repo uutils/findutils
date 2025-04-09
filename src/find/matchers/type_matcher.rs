@@ -91,22 +91,17 @@ impl Matcher for XtypeMatcher {
 
         let file_type_result = follow
             .metadata(file_info)
-            .map(|m| m.file_type())
-            .map(FileType::from);
+            .map(|m| m.file_type().into())
+            .or_else(|e| {
+                if e.is_loop() {
+                    Ok(FileType::Symlink)
+                } else {
+                    Err(e)
+                }
+            })
+            .unwrap_or(FileType::Unknown);
 
-        for expected_type in &self.file_type {
-            if let Ok(file_type) = file_type_result {
-                if file_type == *expected_type {
-                    return true;
-                }
-            } else if let Err(e) = &file_type_result {
-                // Since GNU find 4.10, ELOOP will match -xtype l
-                if e.is_loop() && *expected_type == FileType::Symlink {
-                    return true;
-                }
-            }
-        }
-        false
+        self.file_type.contains(&file_type_result)
     }
 }
 
