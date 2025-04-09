@@ -4,15 +4,13 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::error::Error;
-
 use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
-
-type TypeList = std::collections::HashSet<FileType>;
+use std::collections::HashSet;
+use std::error::Error;
 
 /// This matcher checks the type of the file.
 pub struct TypeMatcher {
-    file_type: TypeList,
+    file_type: HashSet<FileType>,
 }
 
 fn parse(type_string: &str, mode: &str) -> Result<FileType, Box<dyn Error>> {
@@ -68,7 +66,7 @@ impl Matcher for TypeMatcher {
 
 /// Like [TypeMatcher], but toggles whether symlinks are followed.
 pub struct XtypeMatcher {
-    file_type: TypeList,
+    file_type: HashSet<FileType>,
 }
 
 impl XtypeMatcher {
@@ -103,7 +101,7 @@ impl Matcher for XtypeMatcher {
     }
 }
 
-fn type_creator(type_string: &str, mode: &str) -> Result<TypeList, Box<dyn Error>> {
+fn type_creator(type_string: &str, mode: &str) -> Result<HashSet<FileType>, Box<dyn Error>> {
     let mut file_types = std::collections::HashSet::new();
 
     if type_string.contains(',') {
