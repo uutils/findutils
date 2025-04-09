@@ -179,6 +179,7 @@ fn process_dir(
     // As WalkDir seems not providing a function to check its stack,
     // using current_dir is a workaround to check leaving directory.
     let mut current_dir: Option<PathBuf> = None;
+    let mut depth = 0;
     while let Some(result) = it.next() {
         match WalkEntry::from_walkdir(result, config.follow) {
             Err(err) => {
@@ -188,11 +189,16 @@ fn process_dir(
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
 
-                let new_dir = entry.path().parent().map(|x| x.to_path_buf());
-                if new_dir != current_dir {
+                let new_dir = entry
+                    .path()
+                    .parent()
+                    .or_else(|| Some(entry.path()))
+                    .map(|x| x.to_path_buf());
+                if entry.depth() != depth || new_dir != current_dir {
                     if let Some(dir) = current_dir.take() {
                         matcher.finished_dir(dir.as_path(), &mut matcher_io);
                     }
+                    depth = entry.depth();
                     current_dir = new_dir;
                 }
 
