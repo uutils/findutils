@@ -87,7 +87,7 @@ impl Matcher for XtypeMatcher {
             Follow::Always
         };
 
-        let file_type_result = follow
+        let file_type = follow
             .metadata(file_info)
             .map(|m| m.file_type().into())
             .or_else(|e| {
@@ -99,7 +99,7 @@ impl Matcher for XtypeMatcher {
             })
             .unwrap_or(FileType::Unknown);
 
-        self.file_type.contains(&file_type_result)
+        self.file_type.contains(&file_type)
     }
 }
 
