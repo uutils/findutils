@@ -217,12 +217,19 @@ fn find_execdir_multi_in_root_directory() {
         .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
     let deps = FakeDependencies::new();
+
+    let cwd = env::current_dir().expect("no current directory");
+    let root_dir = cwd
+        .ancestors()
+        .last()
+        .expect("current directory has no root");
+
     // only look at files because the "size" of a directory is a system (and filesystem)
     // dependent thing and we want these tests to be universal.
     let rc = find_main(
         &[
             "find",
-            &fix_up_slashes("/"),
+            &fix_up_slashes(&root_dir.to_string_lossy()),
             "-maxdepth",
             "0",
             "-execdir",
@@ -246,5 +253,12 @@ fn find_execdir_multi_in_root_directory() {
     let mut s = String::new();
     f.read_to_string(&mut s)
         .expect("failed to read output file");
-    assert_eq!(s, "cwd=/\nargs=\n)\n--sort\n/\n");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\n)\n--sort\n{}\n",
+            root_dir.to_string_lossy(),
+            root_dir.to_string_lossy(),
+        ))
+    );
 }

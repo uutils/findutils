@@ -1576,9 +1576,10 @@ mod tests {
 
     #[test]
     fn test_finished_in_root_directory() {
-        let mut config = Config::default();
-        config.max_depth = 1;
-
+        let config = Config {
+            max_depth: 1,
+            ..Default::default()
+        };
         let deps = FakeDependencies::new();
         let mut quit = false;
         let matcher = FakeMatcher::new();
