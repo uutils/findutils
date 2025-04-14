@@ -11,7 +11,7 @@ authors = ["uutils developers"]
 
 [dependencies]
 chrono = "0.4.40"
-clap = "4.5"
+clap = { version = "4.5", features = ["env"] }
 faccess = "0.2.4"
 walkdir = "2.5"
 regex = "1.11"
@@ -32,6 +32,10 @@ pretty_assertions = "1.4.1"
 [[bin]]
 name = "find"
 path = "src/find/main.rs"
+
+[[bin]]
+name = "locate"
+path = "src/locate/main.rs"
 
 [[bin]]
 name = "xargs"
