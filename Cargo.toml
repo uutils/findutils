@@ -12,7 +12,7 @@ authors = ["uutils developers"]
 [dependencies]
 argmax = "0.4.0"
 chrono = "0.4.45"
-clap = "4.6"
+clap = { version = "4.6", features = ["env"] }
 faccess = "0.2.4"
 nix = { version = "0.31", features = ["fs", "user"] }
 onig = { version = "6.5", default-features = false }
@@ -30,6 +30,10 @@ uutests = "0.9.0"
 [[bin]]
 name = "find"
 path = "src/find/main.rs"
+
+[[bin]]
+name = "locate"
+path = "src/locate/main.rs"
 
 [[bin]]
 name = "xargs"
