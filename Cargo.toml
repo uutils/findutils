@@ -19,6 +19,8 @@ onig = { version = "6.5", default-features = false }
 regex = "1.12"
 uucore = { version = "0.9.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
+itertools = "0.14.0"
+quick-error = "2.0.1"
 
 [dev-dependencies]
 ctor = "1.0"
@@ -34,6 +36,10 @@ path = "src/find/main.rs"
 [[bin]]
 name = "locate"
 path = "src/locate/main.rs"
+
+[[bin]]
+name = "updatedb"
+path = "src/updatedb/main.rs"
 
 [[bin]]
 name = "xargs"
