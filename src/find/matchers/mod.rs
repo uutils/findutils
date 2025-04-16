@@ -74,6 +74,7 @@ use std::{
 use super::{Config, Dependencies};
 
 pub use entry::{FileType, WalkEntry, WalkError};
+pub use regex::RegexType;
 
 /// Symlink following mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
