@@ -69,6 +69,42 @@ mod tests {
     }
 
     #[test]
+    fn test_locate_statistics() {
+        Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .args(["abbbc", "--statistics", "--database=test_data_db"])
+            .assert()
+            .success();
+    }
+
+    #[test]
+    fn test_locate_regex() {
+        Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .args(["abbbc", "--regex", "--database=test_data_db"])
+            .assert()
+            .success();
+    }
+
+    #[test]
+    fn test_locate_all() {
+        Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .args(["abb", "bbc", "--regex", "--database=test_data_db"])
+            .assert()
+            .success();
+    }
+
+    #[test]
+    fn test_locate_all_regex() {
+        Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .args(["abb", "b*c", "--regex", "--database=test_data_db"])
+            .assert()
+            .success();
+    }
+
+    #[test]
     fn test_updatedb() {
         Command::cargo_bin("updatedb")
             .expect("couldn't find updatedb binary")

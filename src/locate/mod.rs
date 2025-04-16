@@ -145,6 +145,7 @@ impl Statistics {
     }
 }
 
+#[derive(Debug)]
 enum Patterns {
     String(Vec<String>),
     Regex(Vec<Regex>),
@@ -154,14 +155,14 @@ impl Patterns {
     fn any_match(&self, entry: &str) -> bool {
         match self {
             Self::String(v) => v.iter().any(|s| entry.contains(s)),
-            Self::Regex(v) => v.iter().any(|r| r.is_match(entry)),
+            Self::Regex(v) => v.iter().any(|r| r.find(entry).is_some()),
         }
     }
 
     fn all_match(&self, entry: &str) -> bool {
         match self {
             Self::String(v) => v.iter().all(|s| entry.contains(s)),
-            Self::Regex(v) => v.iter().all(|r| r.is_match(entry)),
+            Self::Regex(v) => v.iter().all(|r| r.find(entry).is_some()),
         }
     }
 }
@@ -234,15 +235,12 @@ impl From<ArgMatches> for ParsedInfo {
             .unwrap()
             .cloned()
             .collect();
-        let patterns = if let Some(ty) = value
-            .get_flag("regex")
-            .then(|| {
-                value
-                    .get_one::<String>("regextype")
-                    .and_then(|s| RegexType::from_str(s.as_str()).ok())
-            })
-            .flatten()
-        {
+        let patterns = if let Some(ty) = value.get_flag("regex").then(|| {
+            value
+                .get_one::<String>("regextype")
+                .and_then(|s| RegexType::from_str(s.as_str()).ok())
+                .unwrap_or(RegexType::Emacs)
+        }) {
             Patterns::Regex(
                 patterns
                     .into_iter()
@@ -638,7 +636,7 @@ pub fn locate_main(args: &[&str]) -> i32 {
                 Error::NoMatches => {}
                 _ => writeln!(&mut stderr(), "Error: {e}").unwrap(),
             }
-            1
+            e.code()
         }
     }
 }
