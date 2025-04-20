@@ -70,18 +70,7 @@ use self::time::{
 };
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
-use ::regex::Regex;
-use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
-use fs::FileSystemMatcher;
-use ls::Ls;
-use std::{
-    error::Error,
-    fs::{File, Metadata},
-    io::Read,
-    path::Path,
-    str::FromStr,
-    time::SystemTime,
-};
+use std::io::Read;
 
 use super::{Config, Dependencies};
 

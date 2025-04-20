@@ -72,7 +72,7 @@ impl Printer {
 impl Matcher for Printer {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, file.as_ref(), true);
+            self.print(file_info, matcher_io, file.as_ref(), true);
         } else {
             self.print(
                 file_info,
