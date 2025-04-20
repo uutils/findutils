@@ -285,10 +285,9 @@ impl ComparableValue {
 }
 
 // Used on file output arguments.
-// Based on path inode or file_index check if the file already has been specified.
 // If yes, use the same file pointer.
 struct FileMemoizer {
-    mem: HashMap<u64, Arc<File>>,
+    mem: HashMap<FileInformation, Arc<File>>,
 }
 impl FileMemoizer {
     fn new() -> Self {
@@ -297,30 +296,22 @@ impl FileMemoizer {
         }
     }
     fn get_or_create_file(&mut self, path: &str) -> Result<Arc<File>, Box<dyn Error>> {
-        let path = Path::new(path);
-        let file_id = self.get_file_id(path);
-        if file_id.is_err() {
-            let file = Arc::new(File::create(path)?);
-            self.mem.insert(self.get_file_id(path)?, file.clone());
-            return Ok(file);
+        let mut file_info = FileInformation::from_path(path, true);
+        match file_info {
+            Ok(info) => {
+                let file = self
+                    .mem
+                    .entry(info)
+                    .or_insert(Arc::new(File::create(path)?));
+                Ok(file.clone())
+            }
+            Err(_) => {
+                let file = Arc::new(File::create(path)?);
+                file_info = FileInformation::from_path(path, true);
+                self.mem.insert(file_info?, file.clone());
+                Ok(file)
+            }
         }
-
-        let file = self
-            .mem
-            .entry(file_id.unwrap())
-            .or_insert(Arc::new(File::create(path)?));
-        Ok(file.clone())
-    }
-
-    fn get_file_id(&self, path: &Path) -> Result<u64, Box<dyn Error>> {
-        let file_info = FileInformation::from_path(path, true)?;
-        #[cfg(windows)]
-        let file_inode = file_info.file_index();
-
-        #[cfg(unix)]
-        let file_inode = file_info.inode();
-
-        Ok(file_inode)
     }
 }
 
