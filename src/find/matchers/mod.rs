@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 mod access;
+mod context;
 mod delete;
 mod empty;
 mod entry;
@@ -60,8 +61,10 @@ use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
 use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use context::ContextMatcher;
 use fs::FileSystemMatcher;
 use ls::Ls;
+use std::fs::exists;
 use std::{
     error::Error,
     fs::{File, Metadata},
@@ -773,6 +776,16 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 Some(PermMatcher::new(args[i])?.into_box())
+            }
+            "-context" => {
+                if !exists("/sys/fs/selinux/enforce").unwrap_or(false) {
+                    return Err(From::from(format!("SELinux is not enabled")));
+                }
+                if i >= args.len() - 1 {
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                i += 1;
+                Some(ContextMatcher::new(args[i])?.into_box())
             }
             "-prune" => Some(PruneMatcher::new().into_box()),
             "-quit" => Some(QuitMatcher.into_box()),
