@@ -156,7 +156,7 @@ impl ContextMatcher {
 
     #[cfg(not(target_os = "linux"))]
     pub fn new(_pattern: &str) -> Result<Self, Box<dyn Error>> {
-        Self {}
+        Ok(Self {})
     }
 }
 
