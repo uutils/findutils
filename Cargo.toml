@@ -19,6 +19,8 @@ onig = { version = "6.4", default-features = false }
 uucore = { version = "0.0.30", features = ["entries", "fs", "fsext", "mode"] }
 nix = { version = "0.30", features = ["fs", "user"] }
 argmax = "0.3.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 xattr = "1.5.0"
 
 [dev-dependencies]
