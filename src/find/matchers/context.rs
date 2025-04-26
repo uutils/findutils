@@ -5,15 +5,17 @@
 
 #[cfg(target_os = "linux")]
 use nix::{libc::SELINUX_MAGIC, sys::statvfs::FsFlags};
+
+use std::error::Error;
 #[cfg(target_os = "linux")]
 use std::{
-    error::Error,
     fs::File,
     io::{stderr, BufRead, BufReader, Read, Write},
 };
 
 #[cfg(target_os = "linux")]
-use super::{glob::Pattern, Matcher, MatcherIO, WalkEntry};
+use super::glob::Pattern;
+use super::{Matcher, MatcherIO, WalkEntry};
 
 #[cfg(target_os = "linux")]
 const XATTR_NAME_SELINUX: &str = "security.selinux";
