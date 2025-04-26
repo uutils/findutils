@@ -64,7 +64,6 @@ use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use context::ContextMatcher;
 use fs::FileSystemMatcher;
 use ls::Ls;
-use std::fs::exists;
 use std::{
     error::Error,
     fs::{File, Metadata},
@@ -778,9 +777,6 @@ fn build_matcher_tree(
                 Some(PermMatcher::new(args[i])?.into_box())
             }
             "-context" => {
-                if !exists("/sys/fs/selinux/enforce").unwrap_or(false) {
-                    return Err(From::from(format!("SELinux is not enabled")));
-                }
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
