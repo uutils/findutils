@@ -35,10 +35,7 @@ fn verify_selinux_mnt(mnt: &str) -> bool {
     use nix::sys::statfs::{statfs, FsType};
     use nix::sys::statvfs::statvfs;
 
-    let stat = match statfs(mnt) {
-        Ok(stat) => stat,
-        Err(_) => return false,
-    };
+    let Ok(stat) = statfs(mnt) else { return false };
 
     if stat.filesystem_type() == FsType(SELINUX_MAGIC) {
         match statvfs(mnt) {
@@ -60,17 +57,14 @@ fn verify_selinux_mnt(mnt: &str) -> bool {
 /// check if the SELinux filesystem is listed.
 #[cfg(target_os = "linux")]
 fn selinuxfs_exists() -> bool {
-    let fp = match File::open("/proc/filesystems") {
-        Ok(f) => f,
-        Err(_) => return true, // Fail as if it exists
+    let Ok(fp) = File::open("/proc/filesystems") else {
+        return true; // Fail as if it exists
     };
 
     let reader = BufReader::new(fp);
-    for line in reader.lines() {
-        if let Ok(line) = line {
-            if line.contains(SELINUX_FS) {
-                return true;
-            }
+    for line in reader.lines().map_while(Result::ok) {
+        if line.contains(SELINUX_FS) {
+            return true;
         }
     }
     false
@@ -91,22 +85,16 @@ fn get_selinux_mnt() -> Option<String> {
         return None;
     }
 
-    let fp = match File::open("/proc/mounts") {
-        Ok(f) => f,
-        Err(_) => return None,
+    let Ok(fp) = File::open("/proc/mounts") else {
+        return None;
     };
 
     let reader = BufReader::new(fp);
-    for line in reader.lines() {
-        if let Ok(line) = line {
-            let mut parts = line.splitn(3, ' ');
-            if let (Some(_), Some(mnt), Some(fs_type)) = (parts.next(), parts.next(), parts.next())
-            {
-                if fs_type.starts_with(SELINUX_FS) {
-                    if verify_selinux_mnt(mnt) {
-                        return Some(mnt.to_string());
-                    }
-                }
+    for line in reader.lines().map_while(Result::ok) {
+        let mut parts = line.splitn(3, ' ');
+        if let (Some(_), Some(mnt), Some(fs_type)) = (parts.next(), parts.next(), parts.next()) {
+            if fs_type.starts_with(SELINUX_FS) && verify_selinux_mnt(mnt) {
+                return Some(mnt.to_string());
             }
         }
     }
@@ -116,22 +104,20 @@ fn get_selinux_mnt() -> Option<String> {
 /// Check if SELinux is enforced.
 #[cfg(target_os = "linux")]
 fn get_selinux_enforced() -> Result<bool, Box<dyn Error>> {
-    let mnt = match get_selinux_mnt() {
-        Some(mnt) => mnt,
-        None => return Ok(false),
+    let Some(mnt) = get_selinux_mnt() else {
+        return Ok(false);
     };
 
     let path = format!("{mnt}/enforce");
-    let mut fd = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => return Ok(false),
+    let Ok(mut fd) = File::open(path) else {
+        return Ok(false);
     };
 
     let mut buf = String::with_capacity(20);
     if fd.read_to_string(&mut buf).is_err() {
         return Ok(false);
     }
-    let enforce = i8::from_str_radix(&buf, 10)?;
+    let enforce = buf.parse::<i32>()?;
 
     Ok(enforce != 0)
 }
@@ -186,7 +172,7 @@ impl Matcher for ContextMatcher {
                 return false;
             }
         };
-        return self.pattern.matches(&selinux_ctx);
+        self.pattern.matches(&selinux_ctx)
     }
 
     #[cfg(not(target_os = "linux"))]
