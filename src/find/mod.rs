@@ -179,6 +179,7 @@ fn process_dir(
     // As WalkDir seems not providing a function to check its stack,
     // using current_dir is a workaround to check leaving directory.
     let mut current_dir: Option<PathBuf> = None;
+    let mut depth = 0;
     while let Some(result) = it.next() {
         match WalkEntry::from_walkdir(result, config.follow) {
             Err(err) => {
@@ -188,11 +189,16 @@ fn process_dir(
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
 
-                let new_dir = entry.path().parent().map(|x| x.to_path_buf());
-                if new_dir != current_dir {
+                let new_dir = entry
+                    .path()
+                    .parent()
+                    .or_else(|| Some(entry.path()))
+                    .map(|x| x.to_path_buf());
+                if entry.depth() != depth || new_dir != current_dir {
                     if let Some(dir) = current_dir.take() {
                         matcher.finished_dir(dir.as_path(), &mut matcher_io);
                     }
+                    depth = entry.depth();
                     current_dir = new_dir;
                 }
 
@@ -327,6 +333,7 @@ pub fn find_main(args: &[&str], deps: &dyn Dependencies) -> i32 {
 #[cfg(test)]
 mod tests {
 
+    use std::cell::Cell;
     use std::fs;
     use std::io::{Cursor, ErrorKind, Read};
     use std::time::Duration;
@@ -341,6 +348,7 @@ mod tests {
     use crate::find::matchers::time::ChangeTime;
     use crate::find::matchers::MatcherIO;
 
+    use super::matchers::Matcher;
     use super::*;
 
     #[cfg(windows)]
@@ -394,6 +402,37 @@ mod tests {
 
         fn now(&self) -> SystemTime {
             self.now
+        }
+    }
+
+    // A fake matcher struct that records finished and finished_dir arguments.
+    pub struct FakeMatcher {
+        pub finished_dir_result: RefCell<Vec<PathBuf>>,
+        pub finished_result: Cell<u32>,
+    }
+
+    impl FakeMatcher {
+        pub fn new() -> Self {
+            Self {
+                finished_dir_result: RefCell::new(Vec::new()),
+                finished_result: Cell::new(0),
+            }
+        }
+    }
+
+    impl Matcher for FakeMatcher {
+        fn matches(&self, _: &WalkEntry, _: &mut MatcherIO) -> bool {
+            true
+        }
+
+        fn finished_dir(&self, finished_directory: &std::path::Path, _: &mut MatcherIO) {
+            self.finished_dir_result
+                .borrow_mut()
+                .push(finished_directory.to_path_buf());
+        }
+
+        fn finished(&self, _: &mut MatcherIO) {
+            self.finished_result.set(self.finished_result.get() + 1);
         }
     }
 
@@ -1533,5 +1572,23 @@ mod tests {
         let rc = find_main(&["find", "./test_data/simple/subdir", "-ls"], &deps);
 
         assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn test_finished_in_root_directory() {
+        let config = Config {
+            max_depth: 1,
+            ..Default::default()
+        };
+        let deps = FakeDependencies::new();
+        let mut quit = false;
+        let matcher = FakeMatcher::new();
+        process_dir("/", &config, &deps, &matcher, &mut quit);
+
+        let dir_result = matcher.finished_dir_result.borrow();
+        assert_eq!(dir_result.len(), 2);
+        assert_eq!(dir_result[0], PathBuf::from("/"));
+        assert_eq!(dir_result[1], PathBuf::from("/"));
+        assert_eq!(matcher.finished_result.get(), 1);
     }
 }
