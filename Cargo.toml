@@ -17,13 +17,13 @@ walkdir = "2.5"
 regex = "1.11"
 onig = { version = "6.4", default-features = false }
 uucore = { version = "0.0.30", features = ["entries", "fs", "fsext", "mode"] }
-nix = { version = "0.29", features = ["fs", "user"] }
+nix = { version = "0.30", features = ["fs", "user"] }
 argmax = "0.3.1"
 
 [dev-dependencies]
 assert_cmd = "2"
 filetime = "0.2"
-nix = { version = "0.29", features = ["fs"] }
+nix = { version = "0.30", features = ["fs"] }
 predicates = "3"
 serial_test = "3.2"
 tempfile = "3"
