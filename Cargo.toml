@@ -10,7 +10,7 @@ description = "Rust implementation of GNU findutils"
 authors = ["uutils developers"]
 
 [dependencies]
-chrono = "0.4.40"
+chrono = "0.4.41"
 clap = "4.5"
 faccess = "0.2.4"
 walkdir = "2.5"
