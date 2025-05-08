@@ -74,6 +74,112 @@ fn two_matchers_one_matches() {
         .stdout(predicate::str::is_empty());
 }
 
+#[test]
+fn multiple_matcher_success() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-type", "f,d,l", "-name", "abbbc"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "f,d,l", "-name", "abbbc"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::contains("abbbc"));
+}
+
+#[test]
+fn multiple_matcher_failure() {
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-type", "fd", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Must separate multiple arguments"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-type", "f,", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("list is ending on: ','"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-type", "f,f", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Duplicate file type"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-type", "", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "should contain at least one letter",
+        ))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-type", "x,y", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unrecognised type argument"))
+        .stdout(predicate::str::is_empty());
+    // x-type tests below
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "fd", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Must separate multiple arguments"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "f,", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("list is ending on: ','"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "f,f", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Duplicate file type"))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "should contain at least one letter",
+        ))
+        .stdout(predicate::str::is_empty());
+
+    Command::cargo_bin("find")
+        .expect("found binary")
+        .args(["-xtype", "x,y", "-name", "abbb"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unrecognised type argument"))
+        .stdout(predicate::str::is_empty());
+}
+
 #[serial(working_dir)]
 #[test]
 fn files0_empty_file() {
@@ -745,7 +851,9 @@ fn find_with_user_predicate() {
         .args(["test_data", "-user", " "])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("is not the name of a known user"))
+        .stderr(predicate::str::contains(
+            "invalid user name or UID argument to -user",
+        ))
         .stdout(predicate::str::is_empty());
 }
 
@@ -815,7 +923,7 @@ fn find_with_group_predicate() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "is not the name of an existing group",
+            "invalid group name or GID argument to -group:",
         ))
         .stdout(predicate::str::is_empty());
 }
@@ -929,7 +1037,7 @@ fn find_age_range() {
                 .failure()
                 .code(1)
                 .stderr(predicate::str::contains(
-                    "Error: Expected a decimal integer (with optional + or - prefix) argument to",
+                    "find: Expected a decimal integer (with optional + or - prefix) argument to",
                 ))
                 .stdout(predicate::str::is_empty());
         }

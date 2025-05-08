@@ -721,7 +721,9 @@ fn build_matcher_tree(
                 i += 1;
                 let matcher = UserMatcher::from_user_name(user)
                     .or_else(|| Some(UserMatcher::from_uid(user.parse::<u32>().ok()?)))
-                    .ok_or_else(|| format!("{user} is not the name of a known user"))?;
+                    .ok_or_else(|| {
+                        format!("invalid user name or UID argument to -user: '{user}'")
+                    })?;
                 Some(matcher.into_box())
             }
             "-nouser" => Some(NoUserMatcher {}.into_box()),
@@ -750,7 +752,9 @@ fn build_matcher_tree(
                 i += 1;
                 let matcher = GroupMatcher::from_group_name(group)
                     .or_else(|| Some(GroupMatcher::from_gid(group.parse::<u32>().ok()?)))
-                    .ok_or_else(|| format!("{group} is not the name of an existing group"))?;
+                    .ok_or_else(|| {
+                        format!("invalid group name or GID argument to -group: '{group}'")
+                    })?;
                 Some(matcher.into_box())
             }
             "-nogroup" => Some(NoGroupMatcher {}.into_box()),

@@ -24,7 +24,7 @@ enum Entry {
 }
 
 /// File types.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum FileType {
     Unknown,
     Fifo,
