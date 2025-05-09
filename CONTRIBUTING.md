@@ -180,7 +180,7 @@ To ensure easy collaboration, we have guidelines for using Git and GitHub.
 ### Commit messages
 
 You can read this section in the Git book to learn how to write good commit
-messages: https://git-scm.com/book/ch5-2.html.
+messages: https://git-scm.com/book/en/v2/Distributed-Git-Contributing-to-a-Project.
 
 In addition, here are a few examples for a summary line when committing to
 uutils:
