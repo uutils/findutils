@@ -26,6 +26,7 @@ quick-error = "2.0.1"
 ctor = "1.0"
 filetime = "0.2"
 nix = { version = "0.31", features = ["fs"] }
+rstest = "0.25.0"
 tempfile = "3"
 uutests = "0.9.0"
 

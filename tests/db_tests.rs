@@ -9,6 +9,7 @@ mod common;
 use std::process::Command;
 
 use assert_cmd::{assert::OutputAssertExt, cargo::CommandCargoExt};
+use rstest::rstest;
 
 use crate::common::test_helpers::fix_up_slashes;
 
@@ -85,12 +86,21 @@ fn test_locate_statistics() {
         .success();
 }
 
-#[test]
+#[rstest]
+#[case("emacs")]
+#[case("grep")]
+#[case("posix-basic")]
+#[case("posix-extended")]
 #[cfg(not(windows))]
-fn test_locate_regex() {
+fn test_locate_regex(#[case] input: &str) {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
-        .args(["abbbc", "--regex", DB_FLAG])
+        .args([
+            "abbbc",
+            "--regex",
+            format!("--regextype={input}").as_str(),
+            DB_FLAG,
+        ])
         .assert()
         .success();
 }
@@ -100,7 +110,7 @@ fn test_locate_regex() {
 fn test_locate_all() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
-        .args(["abb", "bbc", "--regex", DB_FLAG])
+        .args(["abb", "bbc", "--all", DB_FLAG])
         .assert()
         .success();
 }
@@ -110,7 +120,7 @@ fn test_locate_all() {
 fn test_locate_all_regex() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
-        .args(["abb", "b*c", "--regex", DB_FLAG])
+        .args(["abb", "b*c", "--all", "--regex", DB_FLAG])
         .assert()
         .success();
 }
