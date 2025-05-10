@@ -6,12 +6,18 @@
 
 mod common;
 
-use std::process::Command;
+use std::{fs::File, io, process::Command};
 
 use assert_cmd::{assert::OutputAssertExt, cargo::CommandCargoExt};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
-use crate::common::test_helpers::fix_up_slashes;
+#[fixture]
+fn add_special_files() -> io::Result<()> {
+    File::create("test_data/db/abc def")?;
+    File::create("test_data/db/abc\ndef")?;
+    File::create("test_data/db/✨sparkles✨")?;
+    Ok(())
+}
 
 #[cfg(not(windows))]
 const DB_FLAG: &str = "--database=test_data_db";
@@ -76,14 +82,16 @@ fn test_locate_non_existing() {
         .failure();
 }
 
-#[test]
+#[rstest]
 #[cfg(not(windows))]
-fn test_locate_statistics() {
-    Command::cargo_bin("locate")
-        .expect("couldn't find locate binary")
-        .args(["abbbc", "--statistics", DB_FLAG])
-        .assert()
-        .success();
+fn test_locate_statistics(add_special_files: io::Result<()>) {
+    if add_special_files.is_ok() {
+        Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .args(["abbbc", "--statistics", DB_FLAG])
+            .assert()
+            .success();
+    }
 }
 
 #[rstest]
@@ -125,15 +133,12 @@ fn test_locate_all_regex() {
         .success();
 }
 
-#[test]
+#[rstest]
 #[cfg(not(windows))]
-fn test_updatedb() {
+fn test_updatedb(_add_special_files: io::Result<()>) {
     Command::cargo_bin("updatedb")
         .expect("couldn't find updatedb binary")
-        .args([
-            fix_up_slashes("--localpaths=./test_data"),
-            fix_up_slashes("--output=/dev/null"),
-        ])
+        .args(["--localpaths=./test_data", "--output=/dev/null"])
         .assert()
         .success();
 }

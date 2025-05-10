@@ -220,7 +220,7 @@ impl Iterator for Frcoder<'_> {
         // if the prefix delta exceeds 0x7f, we use 0x80 to signal that the next two bytes comprise
         // the delta
         let mut out = Vec::new();
-        if diff > 0x7f {
+        if diff.abs() > 0x7f {
             out.push(0x80);
             out.extend((diff as i16).to_be_bytes());
         } else {
