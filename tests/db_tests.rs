@@ -60,7 +60,7 @@ fn test_locate_match_basename() {
 fn test_locate_existing() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
-        .args(["abbbc", "--existing", "--database={DB}"])
+        .args(["abbbc", "--existing", DB_FLAG])
         .assert()
         .success();
 }
@@ -122,7 +122,7 @@ fn test_updatedb() {
         .expect("couldn't find updatedb binary")
         .args([
             fix_up_slashes("--localpaths=./test_data"),
-            fix_up_slashes("--output=./test_data_db"),
+            fix_up_slashes("--output=/dev/null"),
         ])
         .assert()
         .success();
