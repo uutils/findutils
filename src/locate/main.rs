@@ -1,4 +1,3 @@
-// Copyright 2017 Google Inc.
 //
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,5 +12,8 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
+    // TODO: locate currently uses UNIX-specific OsString APIs. If those can be worked around, locate
+    // should function normally on Windows. If and when that happens, make sure to make a separate
+    // windows test database with \ instead of /.
     println!("locate is unsupported on Windows");
 }
