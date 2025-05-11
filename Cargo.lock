@@ -339,10 +339,10 @@ dependencies = [
  "itertools",
  "nix 0.31.3",
  "onig",
- "quick-error",
  "regex",
  "rstest",
  "tempfile",
+ "thiserror",
  "uucore",
  "uutests",
  "walkdir",
@@ -818,12 +818,6 @@ checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
 ]
-
-[[package]]
-name = "quick-error"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
 name = "quote"

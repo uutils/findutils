@@ -19,7 +19,7 @@ use chrono::{DateTime, Local, TimeDelta};
 use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
 use itertools::Itertools;
 use onig::{Regex, RegexOptions, Syntax};
-use quick_error::quick_error;
+use thiserror::Error;
 use uucore::error::{ClapErrorWrapper, UClapError, UError, UResult};
 
 use crate::{find::matchers::RegexType, updatedb::DbFormat};
@@ -55,22 +55,21 @@ pub enum ExistenceMode {
     NotPresent,
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {
-        NoMatches {}
-        InvalidDbType { display("Unknown database type") }
-        InvalidDb(path: String) { display("locate database {path} is corrupt or invalid") }
-        IoErr(err: io::Error) { from() source(err) display("{err}") }
-        ClapErr(err: ClapErrorWrapper) { from() source(err) display("{err}") }
-        /// General copy error
-        Error(err: String) {
-            display("{err}")
-            from(err: String) -> (err)
-            from(err: &'static str) -> (err.to_string())
-        }
-
-    }
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("no matches found")]
+    NoMatches,
+    #[error("Unknown database type")]
+    InvalidDbType,
+    #[error("locate database {0} is corrupt or invalid")]
+    InvalidDb(String),
+    #[error("{0}")]
+    IoErr(#[from] io::Error),
+    #[error("{0}")]
+    ClapErr(#[from] ClapErrorWrapper),
+    /// General copy error
+    #[error("{0}")]
+    Error(String),
 }
 
 type LocateResult<T> = Result<T, Error>;
@@ -221,8 +220,8 @@ impl From<ArgMatches> for ParsedInfo {
                 .next_back()
                 .map(|s| match s.as_str() {
                     "existing" => ExistenceMode::Present,
-                    "statistics" => ExistenceMode::NotPresent,
-                    _ => unreachable!(),
+                    "non-existing" => ExistenceMode::NotPresent,
+                    s => unreachable!("{s}"),
                 })
                 .unwrap_or_default(),
             follow_symlinks: value.get_flag("follow") || !value.get_flag("nofollow"),

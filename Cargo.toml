@@ -20,7 +20,7 @@ regex = "1.12"
 uucore = { version = "0.9.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
 itertools = "0.14.0"
-quick-error = "2.0.1"
+thiserror = "2.0.12"
 
 [dev-dependencies]
 ctor = "1.0"
