@@ -21,6 +21,8 @@ fn add_special_files() -> io::Result<()> {
 
 #[cfg(not(windows))]
 const DB_FLAG: &str = "--database=test_data_db";
+#[cfg(not(windows))]
+const INVALID_DB_FLAG: &str = "--database=invalid_db";
 
 #[test]
 #[cfg(not(windows))]
@@ -131,6 +133,16 @@ fn test_locate_all_regex() {
         .args(["abb", "b*c", "--all", "--regex", DB_FLAG])
         .assert()
         .success();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_locate_invalid_db() {
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["test_data", INVALID_DB_FLAG])
+        .assert()
+        .failure();
 }
 
 #[rstest]
