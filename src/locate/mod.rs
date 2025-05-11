@@ -17,6 +17,7 @@ use std::{
 
 use chrono::{DateTime, Local, TimeDelta};
 use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
+use itertools::Itertools;
 use onig::{Regex, RegexOptions, Syntax};
 use quick_error::quick_error;
 use uucore::error::{ClapErrorWrapper, UClapError, UError, UResult};
@@ -59,6 +60,7 @@ quick_error! {
     pub enum Error {
         NoMatches {}
         InvalidDbType { display("Unknown database type") }
+        InvalidDb(path: String) { display("locate database {path} is corrupt or invalid") }
         IoErr(err: io::Error) { from() source(err) display("{err}") }
         ClapErr(err: ClapErrorWrapper) { from() source(err) display("{err}") }
         /// General copy error
@@ -412,7 +414,7 @@ struct DbReader {
 }
 
 impl Iterator for DbReader {
-    type Item = CString;
+    type Item = LocateResult<CString>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // 1 byte for the prefix delta
@@ -438,7 +440,9 @@ impl Iterator for DbReader {
                 .collect::<Vec<_>>()
         });
         if (prefix.as_ref().map(|v| v.len()).unwrap_or(0) as isize) < size {
-            return None;
+            return Some(Err(Error::InvalidDb(
+                self.path.to_string_lossy().to_string(),
+            )));
         }
         let res = CString::from_vec_with_nul(
             prefix
@@ -450,7 +454,7 @@ impl Iterator for DbReader {
         )
         .ok()?;
         self.prev = Some(res.clone());
-        Some(res)
+        Some(Ok(res))
     }
 }
 
@@ -590,29 +594,33 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                     // find matches
                     let count = dbreader
                         .by_ref()
-                        .filter(|s| match_entry(s.as_c_str(), &config, &patterns))
-                        .take(config.limit.unwrap_or(usize::MAX))
-                        .inspect(|s| {
-                            if config.mode == Mode::Normal || config.print {
-                                if config.null_bytes {
-                                    print!("{}\0", s.to_string_lossy());
-                                } else {
-                                println!("{}", s.to_string_lossy());}
-                            }
-                            if config.mode == Mode::Statistics {
-                                stats.add_match(s);
-                            }
-                        })
-                        .count();
+                        .process_results(|iter|
+                            iter
+                                .filter(|s| match_entry(s.as_c_str(), &config, &patterns))
+                                .take(config.limit.unwrap_or(usize::MAX))
+                                .inspect(|s| {
+                                    if config.mode == Mode::Normal || config.print {
+                                        if config.null_bytes {
+                                            print!("{}\0", s.to_string_lossy());
+                                        } else {
+                                            println!("{}", s.to_string_lossy());
+                                        }
+                                    }
+                                    if config.mode == Mode::Statistics {
+                                        stats.add_match(s);
+                                    }
+                                })
+                                .count()
+                        );
 
                     // print the rest of the statistics description
-                    if config.mode == Mode::Statistics {
+                    if config.mode == Mode::Statistics && count.is_ok() {
                         stats.print(&dbreader);
                     }
 
                     count
                 })
-                .sum::<usize>();
+                .try_fold(0, |acc, e| e.map(|e| acc + e))?;
 
             if config.mode == Mode::Count {
                 println!("{count}");
