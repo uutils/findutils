@@ -186,3 +186,13 @@ fn test_updatedb(_add_special_files: io::Result<()>) {
         .assert()
         .success();
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_updatedb_invalid_flag() {
+    Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .args(["--unknown"])
+        .assert()
+        .failure();
+}
