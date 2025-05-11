@@ -92,7 +92,7 @@ fn test_locate_statistics(add_special_files: io::Result<()>) {
     if add_special_files.is_ok() {
         Command::cargo_bin("locate")
             .expect("couldn't find locate binary")
-            .args(["abbbc", "--statistics", DB_FLAG])
+            .args(["", "--statistics", DB_FLAG])
             .assert()
             .success();
     }
