@@ -510,7 +510,7 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     };
     let entry = name.to_string_lossy();
 
-    (match config.all {
+    let patterns_match = match config.all {
         false => {
             if entry.chars().any(|c| r"*?[]\".contains(c)) {
                 // TODO: parse metacharacters
@@ -527,17 +527,23 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
                 patterns.all_match(entry.as_ref())
             }
         }
-    }) && ((match config.existing {
+    };
+
+    let existence_matches = match config.existing {
         ExistenceMode::Any => true,
-        ExistenceMode::Present => PathBuf::from(entry.to_string()).exists(),
-        ExistenceMode::NotPresent => !PathBuf::from(entry.to_string()).exists(),
-    }) || {
-        if config.follow_symlinks {
-            fs::symlink_metadata(PathBuf::from(entry.to_string())).is_ok()
-        } else {
-            false
+        ExistenceMode::Present => {
+            PathBuf::from(entry.to_string()).exists()
+                || config.follow_symlinks
+                    && fs::symlink_metadata(PathBuf::from(entry.to_string())).is_ok()
         }
-    })
+        ExistenceMode::NotPresent => {
+            !PathBuf::from(entry.to_string()).exists()
+                || config.follow_symlinks
+                    && fs::symlink_metadata(PathBuf::from(entry.to_string())).is_err()
+        }
+    };
+
+    patterns_match && existence_matches
 }
 
 fn do_locate(args: &[&str]) -> LocateResult<()> {
