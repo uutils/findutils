@@ -23,6 +23,7 @@ itertools = "0.14.0"
 thiserror = "2.0.12"
 
 [dev-dependencies]
+assert_cmd = "2"
 ctor = "1.0"
 filetime = "0.2"
 nix = { version = "0.31", features = ["fs"] }
