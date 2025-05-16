@@ -1,0 +1,3 @@
+[env]
+# TODO remove when https://github.com/rust-onig/rust-onig/issues/196 is fixed
+CFLAGS='-std=gnu17'

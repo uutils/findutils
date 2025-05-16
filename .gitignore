@@ -1,7 +1,6 @@
 target
 .gitignore
 .project
-.cargo
 .settings
 test_data/links/link-*
 /public/
