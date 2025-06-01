@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::cell::RefCell;
+use std::env;
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{stderr, Write};
@@ -12,6 +13,27 @@ use std::path::Path;
 use std::process::Command;
 
 use super::{Matcher, MatcherIO, WalkEntry};
+
+fn check_path_integrity() -> Result<(), Box<dyn Error>> {
+    let path_dirs = env::var("PATH")?;
+    for dir_entry in env::split_paths(&path_dirs) {
+        // We can securely unwrap (or expect) the value of dir_entry string
+        // conversion on message error cause the env::var returns an VarError
+        // variant that indicates if the variable (in this case PATH) contains
+        // invalid Unicode data.
+        let dir_entry_str = dir_entry.to_str().expect("Unexpected conversion error");
+        if !dir_entry.is_absolute() || dir_entry.is_file() || dir_entry_str.is_empty() {
+            return Err(format!(
+                "The PATH environment variable contains non-absolute paths, \
+                 files, or empty paths. Segment that caused the error: '{}'",
+                dir_entry_str
+            )
+            .into());
+        }
+    }
+
+    Ok(())
+}
 
 enum Arg {
     FileArg(Vec<OsString>),
@@ -30,6 +52,10 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
+        if exec_in_parent_dir {
+            check_path_integrity()?;
+        }
+
         let transformed_args = args
             .iter()
             .map(|&a| {
@@ -112,6 +138,10 @@ impl MultiExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
+        if exec_in_parent_dir {
+            check_path_integrity()?;
+        }
+
         let transformed_args = args.iter().map(OsString::from).collect();
 
         Ok(Self {
