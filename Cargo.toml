@@ -19,6 +19,8 @@ onig = { version = "6.5", default-features = false }
 uucore = { version = "0.0.30", features = ["entries", "fs", "fsext", "mode"] }
 nix = { version = "0.30", features = ["fs", "user"] }
 argmax = "0.3.1"
+uutests = { version = "0.0.30" }
+ctor = "0.4.1"
 
 [dev-dependencies]
 assert_cmd = "2"
