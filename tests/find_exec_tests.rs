@@ -208,3 +208,57 @@ fn find_execdir_multi() {
         ))
     );
 }
+
+#[test]
+fn find_execdir_multi_in_root_directory() {
+    let temp_dir = Builder::new()
+        .prefix("find_execdir_multi_in_root_directory")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let deps = FakeDependencies::new();
+
+    let cwd = env::current_dir().expect("no current directory");
+    let root_dir = cwd
+        .ancestors()
+        .last()
+        .expect("current directory has no root");
+
+    // only look at files because the "size" of a directory is a system (and filesystem)
+    // dependent thing and we want these tests to be universal.
+    let rc = find_main(
+        &[
+            "find",
+            &fix_up_slashes(&root_dir.to_string_lossy()),
+            "-maxdepth",
+            "0",
+            "-execdir",
+            &path_to_testing_commandline(),
+            temp_dir_path.as_ref(),
+            "--sort",
+            ")",
+            "{}",
+            "+",
+        ],
+        &deps,
+    );
+
+    assert_eq!(rc, 0);
+    // exec has side effects, so we won't output anything unless -print is
+    // explicitly passed in.
+    assert_eq!(deps.get_output_as_string(), "");
+
+    // check the executable ran as expected
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\n)\n--sort\n{}\n",
+            root_dir.to_string_lossy(),
+            root_dir.to_string_lossy(),
+        ))
+    );
+}
