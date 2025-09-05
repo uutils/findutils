@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: List Annotations
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
@@ -46,7 +46,7 @@ jobs:
       - run: unzip comment.zip
 
       - name: Comment on PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
