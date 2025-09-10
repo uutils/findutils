@@ -1009,9 +1009,9 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "uucore"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d52e9182faf0952030e96fdfa76e733ef10981cad31a89bc790d3410f85b7f0c"
+checksum = "7203e48e80ac344450cba5323d8b4a71967ec1e81ae4022775ada90d2b0e08ac"
 dependencies = [
  "bstr",
  "clap",
@@ -1033,9 +1033,9 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8624767e57fc437268b166c09c8f6d1461bf7dc8ffe86b4f0bd3b36aca1253bc"
+checksum = "449e64ce116ed0cc8c5897bd8706d36aed1ec027b647494df4eae6996d8d59de"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1044,9 +1044,9 @@ dependencies = [
 
 [[package]]
 name = "uuhelp_parser"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e54f43a40bcb9c63b41f48698c03ae07604358e707cca7372f1ffa21a0b76a81"
+checksum = "9c9e4945611996e885dc4eeae23f3d6f20cfb6e8f4bad4985c2222bbcf9a9745"
 
 [[package]]
 name = "wait-timeout"
