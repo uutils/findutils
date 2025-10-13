@@ -318,7 +318,7 @@ pub fn find_main(args: &[&str], deps: &dyn Dependencies) -> i32 {
     match do_find(&args[1..], deps) {
         Ok(ret) => ret,
         Err(e) => {
-            writeln!(&mut stderr(), "Error: {e}").unwrap();
+            writeln!(&mut stderr(), "find: {e}").unwrap();
             1
         }
     }

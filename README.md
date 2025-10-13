@@ -20,8 +20,8 @@ bash util/build-gnu.sh tests/misc/help-version.sh
 
 ## Comparing with GNU
 
-![Evolution over time - GNU testsuite](https://github.com/uutils/findutils-tracking/blob/main/gnu-results.png?raw=true)
-![Evolution over time - BFS testsuite](https://github.com/uutils/findutils-tracking/blob/main/bfs-results.png?raw=true)
+![Evolution over time - GNU testsuite](https://github.com/uutils/findutils-tracking/blob/main/gnu-results.svg?raw=true)
+![Evolution over time - BFS testsuite](https://github.com/uutils/findutils-tracking/blob/main/bfs-results.svg?raw=true)
 
 ## Build/run with BFS
 

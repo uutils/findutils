@@ -446,7 +446,8 @@ fn format_directive<'entry>(
                 uucore::fsext::read_fs_list().expect("Could not find the filesystem info");
             fs_list
                 .into_iter()
-                .find(|fs| fs.dev_id == dev_id)
+                .filter(|fs| fs.dev_id == dev_id)
+                .next_back()
                 .map_or_else(String::new, |fs| fs.fs_type)
                 .into()
         }
