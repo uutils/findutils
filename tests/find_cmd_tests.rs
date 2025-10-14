@@ -43,17 +43,12 @@ fn fix_up_regex_slashes(re: &str) -> String {
 
 #[test]
 fn no_args() {
-     new_ucmd!()
-        //.arg("--invalid-argument")
+    let ts = TestScenario::new("find");
+    ts.cmd(env!("CARGO_BIN_EXE_find"))
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .fails_with_code(1)
-        .no_stdout();
-    // let ts = TestScenario::new("find");
-    // ts.cmd(env!("CARGO_BIN_EXE_find"))
-    //     .current_dir(env!("CARGO_MANIFEST_DIR"))
-    //     .succeeds()
-    //     .no_stderr()
-    //     .stdout_contains("test_data");
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("test_data");
 }
 
 #[serial(working_dir)]
