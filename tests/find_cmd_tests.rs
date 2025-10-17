@@ -264,27 +264,28 @@ fn files0_pipe_double_nul() {
 #[serial(working_dir)]
 #[test]
 fn files0_no_file() {
+    let scene = TestScenario::new("find");
+    let option: Vec<_> = "-files0-from xyz.nonexistentFile"
+        .split(' ')
+        .collect::<Vec<_>>();
+
     #[cfg(unix)]
     {
-        Command::cargo_bin("find")
-            .expect("found binary")
-            .args(["-files0-from", "xyz.nonexistentFile"])
-            .assert()
-            .failure()
-            .stderr(predicate::str::contains("No such file or directory"))
-            .stdout(predicate::str::is_empty());
+        scene
+            .ucmd()
+            .args(&option)
+            .fails_with_code(1)
+            .stderr_contains("No such file or directory")
+            .no_stdout();
     }
     #[cfg(windows)]
     {
-        Command::cargo_bin("find")
-            .expect("found binary")
-            .args(["-files0-from", "xyz.nonexistantFile"])
-            .assert()
-            .failure()
-            .stderr(predicate::str::contains(
-                "The system cannot find the file specified.",
-            ))
-            .stdout(predicate::str::is_empty());
+        scene
+            .ucmd()
+            .args(&option)
+            .fails_with_code(1)
+            .stderr_contains("The system cannot find the file specified.")
+            .no_stdout();
     }
 }
 
