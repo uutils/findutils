@@ -41,6 +41,7 @@ fn fix_up_regex_slashes(re: &str) -> String {
     re.to_owned()
 }
 
+#[serial(working_dir)]
 #[test]
 fn no_args() {
     let ts = TestScenario::new("find");
