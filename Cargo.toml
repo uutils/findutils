@@ -41,11 +41,13 @@ path = "src/xargs/main.rs"
 name = "testing-commandline"
 path = "src/testing/commandline/main.rs"
 
-# The profile that 'cargo dist' will build with
-[profile.dist]
-inherits = "release"
+[profile.release]
 lto = "thin"
+codegen-units = 1
 
+[profile.release-fast]
+inherits = "release"
+panic = "abort"
 
 [lints.clippy]
 multiple_crate_versions = "allow"
