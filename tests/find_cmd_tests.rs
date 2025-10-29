@@ -16,6 +16,8 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::{env, io::ErrorKind};
 use tempfile::Builder;
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
@@ -42,12 +44,12 @@ fn fix_up_regex_slashes(re: &str) -> String {
 #[serial(working_dir)]
 #[test]
 fn no_args() {
-    Command::cargo_bin("find")
-        .expect("found binary")
-        .assert()
-        .success()
-        .stderr(predicate::str::is_empty())
-        .stdout(predicate::str::contains("test_data"));
+    let ts = TestScenario::new("find");
+    ts.cmd(env!("CARGO_BIN_EXE_find"))
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("test_data");
 }
 
 #[serial(working_dir)]
@@ -263,27 +265,28 @@ fn files0_pipe_double_nul() {
 #[serial(working_dir)]
 #[test]
 fn files0_no_file() {
+    let scene = TestScenario::new("find");
+    let option: Vec<_> = "-files0-from xyz.nonexistentFile"
+        .split(' ')
+        .collect::<Vec<_>>();
+
     #[cfg(unix)]
     {
-        Command::cargo_bin("find")
-            .expect("found binary")
-            .args(["-files0-from", "xyz.nonexistentFile"])
-            .assert()
-            .failure()
-            .stderr(predicate::str::contains("No such file or directory"))
-            .stdout(predicate::str::is_empty());
+        scene
+            .ucmd()
+            .args(&option)
+            .fails_with_code(1)
+            .stderr_contains("No such file or directory")
+            .no_stdout();
     }
     #[cfg(windows)]
     {
-        Command::cargo_bin("find")
-            .expect("found binary")
-            .args(["-files0-from", "xyz.nonexistantFile"])
-            .assert()
-            .failure()
-            .stderr(predicate::str::contains(
-                "The system cannot find the file specified.",
-            ))
-            .stdout(predicate::str::is_empty());
+        scene
+            .ucmd()
+            .args(&option)
+            .fails_with_code(1)
+            .stderr_contains("The system cannot find the file specified.")
+            .no_stdout();
     }
 }
 
@@ -813,15 +816,13 @@ fn find_time() {
 
 #[test]
 fn expression_empty_parentheses() {
-    Command::cargo_bin("find")
-        .expect("found binary")
-        .args(["-true", "(", ")"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "empty parentheses are not allowed",
-        ))
-        .stdout(predicate::str::is_empty());
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-true")
+        .arg("(")
+        .arg(")")
+        .fails()
+        .stderr_contains("empty parentheses are not allowed")
+        .no_stdout();
 }
 
 #[test]
