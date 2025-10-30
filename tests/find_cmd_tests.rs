@@ -8,7 +8,7 @@
 // Note: the `serial` macro is used on tests that make assumptions about the
 // working directory, since we have at least one test that needs to change it.
 
-use assert_cmd::Command;
+use assert_cmd::cargo_bin_cmd;
 use predicates::prelude::*;
 use regex::Regex;
 use serial_test::serial;
@@ -42,8 +42,7 @@ fn fix_up_regex_slashes(re: &str) -> String {
 #[serial(working_dir)]
 #[test]
 fn no_args() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
@@ -53,8 +52,7 @@ fn no_args() {
 #[serial(working_dir)]
 #[test]
 fn two_matchers_both_match() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "d", "-name", "test_data"])
         .assert()
         .success()
@@ -65,8 +63,7 @@ fn two_matchers_both_match() {
 #[serial(working_dir)]
 #[test]
 fn two_matchers_one_matches() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "f", "-name", "test_data"])
         .assert()
         .success()
@@ -76,16 +73,14 @@ fn two_matchers_one_matches() {
 
 #[test]
 fn multiple_matcher_success() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "f,d,l", "-name", "abbbc"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc"));
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-xtype", "f,d,l", "-name", "abbbc"])
         .assert()
         .success()
@@ -95,32 +90,28 @@ fn multiple_matcher_success() {
 
 #[test]
 fn multiple_matcher_failure() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "fd", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Must separate multiple arguments"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "f,", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("list is ending on: ','"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "f,f", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Duplicate file type"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "", "-name", "abbb"])
         .assert()
         .failure()
@@ -129,40 +120,35 @@ fn multiple_matcher_failure() {
         ))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-type", "x,y", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Unrecognised type argument"))
         .stdout(predicate::str::is_empty());
     // x-type tests below
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-xtype", "fd", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Must separate multiple arguments"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-xtype", "f,", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("list is ending on: ','"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-xtype", "f,f", "-name", "abbb"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Duplicate file type"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-xtype", "", "-name", "abbb"])
         .assert()
         .failure()
@@ -171,8 +157,7 @@ fn multiple_matcher_failure() {
         ))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-xtype", "x,y", "-name", "abbb"])
         .assert()
         .failure()
@@ -183,8 +168,7 @@ fn multiple_matcher_failure() {
 #[serial(working_dir)]
 #[test]
 fn files0_empty_file() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-files0-from", "./test_data/simple/abbbc"])
         .assert()
         .success()
@@ -195,8 +179,7 @@ fn files0_empty_file() {
 #[serial(working_dir)]
 #[test]
 fn files0_file_basic_success() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-files0-from", "./test_data/simple/abbbc"])
         .assert()
         .success()
@@ -211,8 +194,7 @@ fn files0_file_basic_success() {
         file.write_all(b"./test_data/\0./test_data/simple/\0")
             .expect("file write error");
 
-        Command::cargo_bin("find")
-            .expect("found binary")
+        cargo_bin_cmd!("find")
             .args(["-files0-from", &test_file.display().to_string()])
             .assert()
             .success()
@@ -224,8 +206,7 @@ fn files0_file_basic_success() {
 #[serial(working_dir)]
 #[test]
 fn files0_empty_pipe() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-files0-from", "-"])
         .write_stdin(b"")
         .assert()
@@ -237,8 +218,7 @@ fn files0_empty_pipe() {
 #[serial(working_dir)]
 #[test]
 fn files0_pipe_basic() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .write_stdin(b"./test_data/simple\0./test_data/links")
         .args(["-files0-from", "-"])
         .assert()
@@ -250,8 +230,7 @@ fn files0_pipe_basic() {
 #[serial(working_dir)]
 #[test]
 fn files0_pipe_double_nul() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .write_stdin(b"./test_data/simple\0\0./test_data/links")
         .args(["-files0-from", "-"])
         .assert()
@@ -265,8 +244,7 @@ fn files0_pipe_double_nul() {
 fn files0_no_file() {
     #[cfg(unix)]
     {
-        Command::cargo_bin("find")
-            .expect("found binary")
+        cargo_bin_cmd!("find")
             .args(["-files0-from", "xyz.nonexistentFile"])
             .assert()
             .failure()
@@ -275,8 +253,7 @@ fn files0_no_file() {
     }
     #[cfg(windows)]
     {
-        Command::cargo_bin("find")
-            .expect("found binary")
+        cargo_bin_cmd!("find")
             .args(["-files0-from", "xyz.nonexistantFile"])
             .assert()
             .failure()
@@ -290,8 +267,7 @@ fn files0_no_file() {
 #[serial(working_dir)]
 #[test]
 fn files0_basic() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .arg("-files0-from")
         .assert()
         .failure()
@@ -307,8 +283,7 @@ fn matcher_with_side_effects_at_end() {
     let test_file = temp_dir.path().join("test");
     File::create(&test_file).expect("created test file");
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-name", "test", "-delete"])
         .assert()
         .success()
@@ -327,8 +302,7 @@ fn matcher_with_side_effects_in_front() {
     let test_file = temp_dir.path().join("test");
     File::create(&test_file).expect("created test file");
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-delete", "-name", "test"])
         .assert()
         .success()
@@ -352,8 +326,7 @@ fn delete_on_dot_dir() {
     env::set_current_dir(temp_dir.path()).expect("working dir changed");
 
     // "." should be matched (confirmed by the print), but not deleted.
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([".", "-delete", "-print"])
         .assert()
         .success()
@@ -373,24 +346,21 @@ fn regex_types() {
     let test_file = temp_dir.path().join("teeest");
     File::create(test_file).expect("created test file");
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-regex", &fix_up_regex_slashes(".*/tE+st")])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-iregex", &fix_up_regex_slashes(".*/tE+st")])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("teeest"));
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             &temp_dir_path,
             "-regextype",
@@ -403,8 +373,7 @@ fn regex_types() {
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("teeest"));
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             &temp_dir_path,
             "-regextype",
@@ -417,8 +386,7 @@ fn regex_types() {
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("teeest"));
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             &temp_dir_path,
             "-regextype",
@@ -431,8 +399,7 @@ fn regex_types() {
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("teeest"));
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             &temp_dir_path,
             "-regextype",
@@ -451,8 +418,7 @@ fn empty_files() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-empty"])
         .assert()
         .success()
@@ -462,8 +428,7 @@ fn empty_files() {
     let test_file_path = temp_dir.path().join("test");
     let mut test_file = File::create(&test_file_path).unwrap();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-empty"])
         .assert()
         .success()
@@ -476,8 +441,7 @@ fn empty_files() {
     let subdir_path = temp_dir.path().join("subdir");
     std::fs::create_dir(&subdir_path).unwrap();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-empty", "-sorted"])
         .assert()
         .success()
@@ -491,8 +455,7 @@ fn empty_files() {
     write!(test_file, "x").unwrap();
     test_file.sync_all().unwrap();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([&temp_dir_path, "-empty", "-sorted"])
         .assert()
         .success()
@@ -571,8 +534,7 @@ fn find_printf() {
         }
     }
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             &fix_up_slashes("./test_data/simple"),
             "-sorted",
@@ -594,8 +556,7 @@ fn find_printf() {
         )));
 
     fs::create_dir_all("a").expect("Failed to create directory 'a'");
-    let output = Command::cargo_bin("find")
-        .expect("found binary")
+    let output = cargo_bin_cmd!("find")
         .args(["a", "-printf", "%A+"])
         .assert()
         .success()
@@ -615,8 +576,7 @@ fn find_printf() {
         "Output did not match expected timestamp format"
     );
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             &fix_up_slashes("./test_data/links"),
             "-sorted",
@@ -649,20 +609,17 @@ fn find_printf() {
 #[serial(working_dir)]
 #[test]
 fn find_perm() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-perm", "+rwx"])
         .assert()
         .success();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-perm", "u+rwX"])
         .assert()
         .success();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-perm", "u=g"])
         .assert()
         .success();
@@ -680,8 +637,7 @@ fn find_inum() {
         .ino()
         .to_string();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-inum", &inum])
         .assert()
         .success()
@@ -692,8 +648,7 @@ fn find_inum() {
 #[cfg(not(unix))]
 #[test]
 fn find_inum() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-inum", "1"])
         .assert()
         .failure()
@@ -705,8 +660,7 @@ fn find_inum() {
 #[serial(working_dir)]
 #[test]
 fn find_links() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-links", "1"])
         .assert()
         .success()
@@ -717,8 +671,7 @@ fn find_links() {
 #[cfg(not(unix))]
 #[test]
 fn find_links() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-links", "1"])
         .assert()
         .failure()
@@ -732,16 +685,14 @@ fn find_mount_xdev() {
     // Make sure that -mount/-xdev doesn't prune unexpectedly.
     // TODO: Test with a mount point in the search.
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-mount"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc"));
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-xdev"])
         .assert()
         .success()
@@ -752,16 +703,14 @@ fn find_mount_xdev() {
 #[serial(working_dir)]
 #[test]
 fn find_accessible() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-readable"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty())
         .stdout(predicate::str::contains("abbbc"));
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-writable"])
         .assert()
         .success()
@@ -769,8 +718,7 @@ fn find_accessible() {
         .stdout(predicate::str::contains("abbbc"));
 
     #[cfg(unix)]
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-executable"])
         .assert()
         .success()
@@ -792,8 +740,7 @@ fn find_time() {
     ];
     tests.iter().for_each(|flag| {
         args.iter().for_each(|arg| {
-            Command::cargo_bin("find")
-                .expect("found binary")
+            cargo_bin_cmd!("find")
                 .args(["./test_data/simple", flag, arg])
                 .assert()
                 .success()
@@ -801,8 +748,7 @@ fn find_time() {
         });
 
         exception_args.iter().for_each(|arg| {
-            Command::cargo_bin("find")
-                .expect("found binary")
+            cargo_bin_cmd!("find")
                 .args([".", flag, arg])
                 .assert()
                 .failure()
@@ -813,8 +759,7 @@ fn find_time() {
 
 #[test]
 fn expression_empty_parentheses() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["-true", "(", ")"])
         .assert()
         .failure()
@@ -831,23 +776,20 @@ fn find_with_user_predicate() {
     // Considering the different test environments,
     // the test code can only use a specific default user to perform the test,
     // such as the root user on Linux.
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-user", "root"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-user", ""])
         .assert()
         .failure()
         .stderr(predicate::str::contains("empty"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-user", " "])
         .assert()
         .failure()
@@ -860,8 +802,7 @@ fn find_with_user_predicate() {
 #[test]
 #[serial(working_dir)]
 fn find_with_nouser_predicate() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-nouser"])
         .assert()
         .success()
@@ -879,8 +820,7 @@ fn find_with_uid_predicate() {
     let path = Path::new("./test_data");
     let uid = path.metadata().unwrap().uid();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-uid", &uid.to_string()])
         .assert()
         .success()
@@ -894,31 +834,27 @@ fn find_with_group_predicate() {
     // the test code can only use a specific default user group for the test,
     // such as the root user group on Linux.
     #[cfg(target_os = "linux")]
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-group", "root"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
 
     #[cfg(target_os = "macos")]
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-group", "staff"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-group", ""])
         .assert()
         .failure()
         .stderr(predicate::str::contains("empty"))
         .stdout(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-group", " "])
         .assert()
         .failure()
@@ -931,8 +867,7 @@ fn find_with_group_predicate() {
 #[test]
 #[serial(working_dir)]
 fn find_with_nogroup_predicate() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-nogroup"])
         .assert()
         .success()
@@ -950,8 +885,7 @@ fn find_with_gid_predicate() {
     let path = Path::new("./test_data");
     let gid = path.metadata().unwrap().gid();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data", "-gid", &gid.to_string()])
         .assert()
         .success()
@@ -973,8 +907,7 @@ fn find_newer_xy() {
     for x in options {
         for y in options {
             let arg = &format!("-newer{x}{y}");
-            Command::cargo_bin("find")
-                .expect("found binary")
+            cargo_bin_cmd!("find")
                 .args([
                     "./test_data/simple/subdir",
                     arg,
@@ -998,8 +931,7 @@ fn find_newer_xy() {
 
     for arg in args {
         for time in times {
-            Command::cargo_bin("find")
-                .expect("found binary")
+            cargo_bin_cmd!("find")
                 .args(["./test_data/simple/subdir", arg, time])
                 .assert()
                 .success()
@@ -1019,8 +951,7 @@ fn find_age_range() {
 
     for arg in args {
         for time in times {
-            Command::cargo_bin("find")
-                .expect("the time should match")
+            cargo_bin_cmd!("find")
                 .args(["test_data/simple", arg, time])
                 .assert()
                 .success()
@@ -1030,8 +961,7 @@ fn find_age_range() {
 
     for arg in args {
         for time_string in time_strings {
-            Command::cargo_bin("find")
-                .expect("the time should not match")
+            cargo_bin_cmd!("find")
                 .args(["test_data/simple", arg, time_string])
                 .assert()
                 .failure()
@@ -1057,8 +987,7 @@ fn find_fs() {
     let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
 
     // match fs type
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["./test_data/simple/subdir", "-fstype", &target_fs_type])
         .assert()
         .success()
@@ -1066,8 +995,7 @@ fn find_fs() {
         .stderr(predicate::str::is_empty());
 
     // not match fs type
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             "./test_data/simple/subdir",
             "-fstype",
@@ -1079,16 +1007,14 @@ fn find_fs() {
         .stderr(predicate::str::is_empty());
 
     // not contain fstype text.
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["./test_data/simple/subdir", "-fstype"])
         .assert()
         .failure()
         .stdout(predicate::str::is_empty());
 
     // void fstype
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["./test_data/simple/subdir", "-fstype", " "])
         .assert()
         .success()
@@ -1100,8 +1026,7 @@ fn find_fs() {
     let target_fs_type = get_file_system_type(path, &empty_cache).unwrap();
 
     // working with broken links
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["./test_data/links", "-fstype", &target_fs_type])
         .assert()
         .success()
@@ -1120,8 +1045,7 @@ fn find_samefile() {
     let _ = fs::remove_file("test_data/links/hard_link");
     fs::hard_link("test_data/links/abbbc", "test_data/links/hard_link").unwrap();
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             "./test_data/links/abbbc",
             "-samefile",
@@ -1133,16 +1057,14 @@ fn find_samefile() {
         .stderr(predicate::str::is_empty());
 
     // test . path
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([".", "-samefile", "."])
         .assert()
         .success()
         .stdout(predicate::str::contains("."))
         .stderr(predicate::str::is_empty());
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([".", "-samefile", "./test_data/links/abbbc"])
         .assert()
         .success()
@@ -1152,8 +1074,7 @@ fn find_samefile() {
         .stderr(predicate::str::is_empty());
 
     // test not exist file
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([".", "-samefile", "./test_data/links/not-exist-file"])
         .assert()
         .failure()
@@ -1166,8 +1087,7 @@ fn find_samefile() {
 #[test]
 #[serial(working_dir)]
 fn find_noleaf() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data/simple/subdir", "-noleaf"])
         .assert()
         .success()
@@ -1178,16 +1098,14 @@ fn find_noleaf() {
 #[test]
 #[serial(working_dir)]
 fn find_daystart() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["./test_data/simple/subdir", "-daystart", "-mtime", "0"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
 
     // twice -daystart should be matched
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             "./test_data/simple/subdir",
             "-daystart",
@@ -1208,8 +1126,7 @@ fn find_fprinter() {
     for p in &printer {
         let _ = fs::remove_file(format!("test_data/find_{p}"));
 
-        Command::cargo_bin("find")
-            .expect("found binary")
+        cargo_bin_cmd!("find")
             .args([
                 "test_data/simple",
                 format!("-{p}").as_str(),
@@ -1233,8 +1150,7 @@ fn find_fprinter() {
 #[test]
 #[serial(working_dir)]
 fn find_follow() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["test_data/links/link-f", "-follow"])
         .assert()
         .success()
@@ -1247,8 +1163,7 @@ fn find_follow() {
 fn find_fprintf() {
     let _ = fs::remove_file("test_data/find_fprintf");
 
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args([
             "test_data/simple",
             "-fprintf",
@@ -1272,8 +1187,7 @@ fn find_fprintf() {
 #[test]
 #[serial(working_dir)]
 fn find_ls() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["./test_data/simple/subdir", "-ls"])
         .assert()
         .success()
@@ -1283,8 +1197,7 @@ fn find_ls() {
 #[test]
 #[cfg(unix)]
 fn find_slashes() {
-    Command::cargo_bin("find")
-        .expect("found binary")
+    cargo_bin_cmd!("find")
         .args(["///", "-maxdepth", "0", "-name", "/"])
         .assert()
         .success()
