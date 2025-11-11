@@ -989,22 +989,22 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         )
         .arg(
             Arg::new(options::EOF)
-                .short('e')
-                .long(options::EOF)
+                .short('E')
                 .num_args(1)
                 .value_name("eof-string")
                 .help(
-                    "If specified, stop processing the input upon reaching an input\
+                    "If specified, stop processing the input upon reaching an input \
                         item that matches eof-string",
                 )
                 .value_parser(clap::value_parser!(String)),
         )
         .arg(
             Arg::new(options::EOF_E)
-                .short('E')
-                .num_args(1)
+                .short('e')
+                .long(options::EOF)
+                .num_args(0..=1)
                 .value_name("eof-string")
-                .help("Alias for -e")
+                .help("Alias for -E")
                 .overrides_with(options::EOF)
                 .value_parser(clap::value_parser!(String)),
         )

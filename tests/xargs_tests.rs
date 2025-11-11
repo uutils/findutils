@@ -552,3 +552,16 @@ fn xargs_version() {
             .stdout(predicate::str::starts_with("xargs "));
     }
 }
+
+#[test]
+fn xargs_eof() {
+    for option_style in [vec!["-ecd"], vec!["-E", "cd"], vec!["--eof", "cd"]] {
+        cargo_bin_cmd!("xargs")
+            .args(option_style.as_slice())
+            .write_stdin("ab cd ef")
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty())
+            .stdout(predicate::str::diff("ab\n"));
+    }
+}
