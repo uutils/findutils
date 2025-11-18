@@ -643,6 +643,7 @@ where
 struct EofArgumentReader {
     reader: Box<dyn ArgumentReader>,
     eof_delimiter: OsString,
+    eof_found: bool,
 }
 
 impl EofArgumentReader {
@@ -650,25 +651,25 @@ impl EofArgumentReader {
         Self {
             reader,
             eof_delimiter: eof_delimiter.into(),
+            eof_found: false,
         }
     }
 }
 
 impl ArgumentReader for EofArgumentReader {
     fn next(&mut self) -> io::Result<Option<Argument>> {
-        match self.reader.next() {
-            Err(e) => Err(e),
-            Ok(arg) => match arg {
-                None => Ok(None),
-                Some(arg) => {
-                    if arg.arg == self.eof_delimiter {
-                        Ok(None)
-                    } else {
-                        Ok(Some(arg))
-                    }
+        Ok(if self.eof_found {
+            None
+        } else {
+            self.reader.next()?.and_then(|arg| {
+                if arg.arg == self.eof_delimiter {
+                    self.eof_found = true;
+                    None
+                } else {
+                    Some(arg)
                 }
-            },
-        }
+            })
+        })
     }
 }
 
@@ -1370,6 +1371,7 @@ mod tests {
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap(), None);
+        assert_eq!(wrapper.next().unwrap(), None);
 
         let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
             b"abc define undef undefined ghi",
@@ -1380,6 +1382,23 @@ mod tests {
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("undef"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("undefined"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
+        assert_eq!(wrapper.next().unwrap(), None);
+
+        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
+            Chunk::Data(b"abc "),
+            Chunk::Error(io::ErrorKind::Interrupted),
+            Chunk::Data(b"deF "),
+            Chunk::Error(io::ErrorKind::BrokenPipe),
+            Chunk::Data(b"ghi "),
+            Chunk::Data(b"def "),
+            Chunk::Error(io::ErrorKind::BrokenPipe),
+        ]));
+        let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
+        assert!(wrapper.next().err().unwrap().kind() == io::ErrorKind::BrokenPipe);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
+        assert_eq!(wrapper.next().unwrap(), None);
         assert_eq!(wrapper.next().unwrap(), None);
     }
 
