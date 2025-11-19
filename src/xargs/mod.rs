@@ -21,6 +21,8 @@ mod options {
 
     pub const ARG_FILE: &str = "arg-file";
     pub const DELIMITER: &str = "delimiter";
+    pub const EOF: &str = "eof";
+    pub const EOF_E: &str = "eof-E";
     pub const EXIT: &str = "exit";
     pub const MAX_ARGS: &str = "max-args";
     pub const MAX_CHARS: &str = "max-chars";
@@ -44,6 +46,7 @@ struct Options {
     null: bool,
     replace: Option<String>,
     verbose: bool,
+    eof_delimiter: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -637,6 +640,39 @@ where
     }
 }
 
+struct EofArgumentReader {
+    reader: Box<dyn ArgumentReader>,
+    eof_delimiter: OsString,
+    eof_found: bool,
+}
+
+impl EofArgumentReader {
+    fn new(reader: Box<dyn ArgumentReader>, eof_delimiter: &String) -> Self {
+        Self {
+            reader,
+            eof_delimiter: eof_delimiter.into(),
+            eof_found: false,
+        }
+    }
+}
+
+impl ArgumentReader for EofArgumentReader {
+    fn next(&mut self) -> io::Result<Option<Argument>> {
+        Ok(if self.eof_found {
+            None
+        } else {
+            self.reader.next()?.and_then(|arg| {
+                if arg.arg == self.eof_delimiter {
+                    self.eof_found = true;
+                    None
+                } else {
+                    Some(arg)
+                }
+            })
+        })
+    }
+}
+
 #[derive(Debug)]
 enum XargsError {
     ArgumentTooLarge,
@@ -952,6 +988,27 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .overrides_with(options::REPLACE)
                 .value_parser(clap::value_parser!(String)),
         )
+        .arg(
+            Arg::new(options::EOF)
+                .short('E')
+                .num_args(1)
+                .value_name("eof-string")
+                .help(
+                    "If specified, stop processing the input upon reaching an input \
+                        item that matches eof-string",
+                )
+                .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+            Arg::new(options::EOF_E)
+                .short('e')
+                .long(options::EOF)
+                .num_args(0..=1)
+                .value_name("eof-string")
+                .help("Alias for -E")
+                .overrides_with(options::EOF)
+                .value_parser(clap::value_parser!(String)),
+        )
         .try_get_matches_from(args);
 
     let matches = match matches {
@@ -988,6 +1045,13 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 })
             }),
         verbose: matches.get_flag(options::VERBOSE),
+        eof_delimiter: [options::EOF_E, options::EOF].iter().find_map(|&option| {
+            matches.contains_id(option).then(|| {
+                matches
+                    .get_one::<String>(option)
+                    .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
+            })
+        }),
     };
 
     let (max_args, max_lines, replace, delimiter) = normalize_options(&options, &matches);
@@ -1026,11 +1090,15 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         Box::new(io::stdin())
     };
 
-    let args: Box<dyn ArgumentReader> = if let Some(delimiter) = delimiter {
+    let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = delimiter {
         Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
     } else {
         Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
     };
+
+    if let Some(eof_delimiter) = options.eof_delimiter {
+        args = Box::new(EofArgumentReader::new(args, &eof_delimiter));
+    }
 
     let result = process_input(
         &builder_options,
@@ -1291,6 +1359,47 @@ mod tests {
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("ab \""));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("xy' z"));
         assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_eof_argument_reader() {
+        let filter = String::from("def");
+
+        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
+            b"abc def ghi",
+        )]));
+        let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(wrapper.next().unwrap(), None);
+        assert_eq!(wrapper.next().unwrap(), None);
+
+        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
+            b"abc define undef undefined ghi",
+        )]));
+        let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("define"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("undef"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("undefined"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
+        assert_eq!(wrapper.next().unwrap(), None);
+
+        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
+            Chunk::Data(b"abc "),
+            Chunk::Error(io::ErrorKind::Interrupted),
+            Chunk::Data(b"deF "),
+            Chunk::Error(io::ErrorKind::BrokenPipe),
+            Chunk::Data(b"ghi "),
+            Chunk::Data(b"def "),
+            Chunk::Error(io::ErrorKind::BrokenPipe),
+        ]));
+        let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
+        assert!(wrapper.next().err().unwrap().kind() == io::ErrorKind::BrokenPipe);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
+        assert_eq!(wrapper.next().unwrap(), None);
+        assert_eq!(wrapper.next().unwrap(), None);
     }
 
     #[test]
