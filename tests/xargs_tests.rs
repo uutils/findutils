@@ -106,7 +106,7 @@ fn xargs_max_args() {
 
 #[test]
 fn xargs_max_lines() {
-    for arg in ["-L2", "--max-lines=2"] {
+    for arg in ["-L2", "--max-lines=2", "-l2"] {
         cargo_bin_cmd!("xargs")
             .arg(arg)
             .write_stdin("ab cd\nef\ngh i\n\njkl\n")
@@ -115,6 +115,13 @@ fn xargs_max_lines() {
             .stderr(predicate::str::is_empty())
             .stdout(predicate::str::diff("ab cd ef\ngh i jkl\n"));
     }
+    cargo_bin_cmd!("xargs")
+        .arg("-l")
+        .write_stdin("ab cd\nef\ngh i\n\njkl\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff("ab cd\nef\ngh i\njkl\n"));
 }
 
 #[test]
