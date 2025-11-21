@@ -27,6 +27,7 @@ mod options {
     pub const MAX_ARGS: &str = "max-args";
     pub const MAX_CHARS: &str = "max-chars";
     pub const MAX_LINES: &str = "max-lines";
+    pub const MAX_LINES_L: &str = "max-lines-l";
     pub const MAX_PROCS: &str = "max-procs";
     pub const NO_RUN_IF_EMPTY: &str = "no-run-if-empty";
     pub const NULL: &str = "null";
@@ -928,6 +929,17 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .value_parser(validate_positive_usize),
         )
         .arg(
+            Arg::new(options::MAX_LINES_L)
+                .short('l')
+                .num_args(0..=1)
+                .help(
+                    "Equivalent to -L, but with a default value of 1 if max-lines \
+                    is unspecified",
+                )
+                .value_name("max-lines")
+                .value_parser(validate_positive_usize),
+        )
+        .arg(
             Arg::new(options::MAX_PROCS)
                 .short('P')
                 .long(options::MAX_PROCS)
@@ -1032,7 +1044,15 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         exit_if_pass_char_limit: matches.get_flag(options::EXIT),
         max_args: matches.get_one::<usize>(options::MAX_ARGS).copied(),
         max_chars: matches.get_one::<usize>(options::MAX_CHARS).copied(),
-        max_lines: matches.get_one::<usize>(options::MAX_LINES).copied(),
+        max_lines: [options::MAX_LINES, options::MAX_LINES_L]
+            .iter()
+            .find_map(|&option| {
+                matches.contains_id(option).then(|| {
+                    matches
+                        .get_one::<usize>(option)
+                        .map_or_else(|| 1, std::borrow::ToOwned::to_owned)
+                })
+            }),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
         replace: [options::REPLACE_I, options::REPLACE]
