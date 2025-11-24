@@ -812,10 +812,17 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn normalize_options<'a>(
     options: &'a Options,
     matches: &'a clap::ArgMatches,
-) -> (Option<usize>, Option<usize>, &'a Option<String>, Option<u8>) {
+) -> (
+    Option<usize>,
+    Option<usize>,
+    &'a Option<String>,
+    Option<u8>,
+    &'a Option<String>,
+) {
     let (max_args, max_lines, replace) =
         match (options.max_args, options.max_lines, &options.replace) {
             // These 3 options are mutually exclusive.
@@ -871,7 +878,13 @@ fn normalize_options<'a>(
         (None, false) => replace.as_ref().map(|_| b'\n'),
     };
 
-    (max_args, max_lines, replace, delimiter)
+    let eof_delimiter = if delimiter.is_some() {
+        &None
+    } else {
+        &options.eof_delimiter
+    };
+
+    (max_args, max_lines, replace, delimiter, eof_delimiter)
 }
 
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
@@ -1007,7 +1020,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .value_name("eof-string")
                 .help(
                     "If specified, stop processing the input upon reaching an input \
-                        item that matches eof-string",
+                        item that matches eof-string (ignored if -d or -0 is used)",
                 )
                 .value_parser(clap::value_parser!(String)),
         )
@@ -1074,7 +1087,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }),
     };
 
-    let (max_args, max_lines, replace, delimiter) = normalize_options(&options, &matches);
+    let (max_args, max_lines, replace, delimiter, eof_delimiter) =
+        normalize_options(&options, &matches);
 
     let action = match matches.get_many::<OsString>(options::COMMAND) {
         Some(args) if args.len() > 0 => {
@@ -1116,8 +1130,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
     };
 
-    if let Some(eof_delimiter) = options.eof_delimiter {
-        args = Box::new(EofArgumentReader::new(args, &eof_delimiter));
+    if let Some(eof_delimiter) = eof_delimiter {
+        args = Box::new(EofArgumentReader::new(args, eof_delimiter));
     }
 
     let result = process_input(

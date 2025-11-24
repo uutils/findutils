@@ -571,4 +571,12 @@ fn xargs_eof() {
             .stderr(predicate::str::is_empty())
             .stdout(predicate::str::diff("ab\n"));
     }
+
+    cargo_bin_cmd!("xargs")
+        .args(["-0", "-Ecd"])
+        .write_stdin("ab\0cd\0ef")
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .stdout(predicate::str::diff("ab cd ef\n"));
 }
