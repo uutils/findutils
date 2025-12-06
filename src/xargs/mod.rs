@@ -812,7 +812,6 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
     }
 }
 
-#[allow(clippy::type_complexity)]
 fn normalize_options<'a>(options: &'a Options, matches: &'a clap::ArgMatches) -> Options {
     let (max_args, max_lines, replace) =
         match (options.max_args, options.max_lines, &options.replace) {
