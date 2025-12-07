@@ -812,7 +812,7 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
     }
 }
 
-fn normalize_options<'a>(options: &'a Options, matches: &'a clap::ArgMatches) -> Options {
+fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     let (max_args, max_lines, replace) =
         match (options.max_args, options.max_lines, &options.replace) {
             // These 3 options are mutually exclusive.
@@ -821,7 +821,7 @@ fn normalize_options<'a>(options: &'a Options, matches: &'a clap::ArgMatches) ->
                 // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
                 // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
                 // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
-                (Some(1), None, options.replace.clone())
+                (Some(1), None, options.replace)
             }
             (Some(_), None, None) | (None, Some(_), None) | (None, None, None) => {
                 (options.max_args, options.max_lines, None)
@@ -846,7 +846,7 @@ fn normalize_options<'a>(options: &'a Options, matches: &'a clap::ArgMatches) ->
                 } else if args_index > lines_index && args_index > replace_index {
                     (options.max_args, None, None)
                 } else {
-                    (Some(1), None, options.replace.clone())
+                    (Some(1), None, options.replace)
                 }
             }
         };
@@ -871,11 +871,11 @@ fn normalize_options<'a>(options: &'a Options, matches: &'a clap::ArgMatches) ->
     let eof_delimiter = if delimiter.is_some() {
         None
     } else {
-        options.eof_delimiter.clone()
+        options.eof_delimiter
     };
 
     Options {
-        arg_file: options.arg_file.clone(),
+        arg_file: options.arg_file,
         delimiter,
         exit_if_pass_char_limit: options.exit_if_pass_char_limit,
         max_args,
@@ -887,7 +887,6 @@ fn normalize_options<'a>(options: &'a Options, matches: &'a clap::ArgMatches) ->
         verbose: options.verbose,
         eof_delimiter,
     }
-    // (max_args, max_lines, replace, delimiter, eof_delimiter)
 }
 
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
@@ -1090,7 +1089,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }),
     };
 
-    let options = normalize_options(&options, &matches);
+    let options = normalize_options(options, &matches);
 
     let action = match matches.get_many::<OsString>(options::COMMAND) {
         Some(args) if args.len() > 0 => {
