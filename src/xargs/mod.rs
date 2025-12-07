@@ -812,10 +812,7 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
     }
 }
 
-fn normalize_options<'a>(
-    options: &'a Options,
-    matches: &'a clap::ArgMatches,
-) -> (Option<usize>, Option<usize>, &'a Option<String>, Option<u8>) {
+fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     let (max_args, max_lines, replace) =
         match (options.max_args, options.max_lines, &options.replace) {
             // These 3 options are mutually exclusive.
@@ -824,10 +821,10 @@ fn normalize_options<'a>(
                 // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
                 // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
                 // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
-                (Some(1), None, &options.replace)
+                (Some(1), None, options.replace)
             }
             (Some(_), None, None) | (None, Some(_), None) | (None, None, None) => {
-                (options.max_args, options.max_lines, &None)
+                (options.max_args, options.max_lines, None)
             }
             _ => {
                 eprintln!(
@@ -845,11 +842,11 @@ fn normalize_options<'a>(
                     .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
                     .max();
                 if lines_index > args_index && lines_index > replace_index {
-                    (None, options.max_lines, &None)
+                    (None, options.max_lines, None)
                 } else if args_index > lines_index && args_index > replace_index {
-                    (options.max_args, None, &None)
+                    (options.max_args, None, None)
                 } else {
-                    (Some(1), None, &options.replace)
+                    (Some(1), None, options.replace)
                 }
             }
         };
@@ -871,7 +868,25 @@ fn normalize_options<'a>(
         (None, false) => replace.as_ref().map(|_| b'\n'),
     };
 
-    (max_args, max_lines, replace, delimiter)
+    let eof_delimiter = if delimiter.is_some() {
+        None
+    } else {
+        options.eof_delimiter
+    };
+
+    Options {
+        arg_file: options.arg_file,
+        delimiter,
+        exit_if_pass_char_limit: options.exit_if_pass_char_limit,
+        max_args,
+        max_chars: options.max_chars,
+        max_lines,
+        no_run_if_empty: options.no_run_if_empty,
+        null: options.null,
+        replace,
+        verbose: options.verbose,
+        eof_delimiter,
+    }
 }
 
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
@@ -1007,7 +1022,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .value_name("eof-string")
                 .help(
                     "If specified, stop processing the input upon reaching an input \
-                        item that matches eof-string",
+                        item that matches eof-string (ignored if -d or -0 is used)",
                 )
                 .value_parser(clap::value_parser!(String)),
         )
@@ -1074,7 +1089,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }),
     };
 
-    let (max_args, max_lines, replace, delimiter) = normalize_options(&options, &matches);
+    let options = normalize_options(options, &matches);
 
     let action = match matches.get_many::<OsString>(options::COMMAND) {
         Some(args) if args.len() > 0 => {
@@ -1085,10 +1100,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     let env = std::env::vars_os().collect();
 
     let mut limiters = LimiterCollection::new();
-    if let Some(max_args) = max_args {
+    if let Some(max_args) = options.max_args {
         limiters.add(MaxArgsCommandSizeLimiter::new(max_args));
     }
-    if let Some(max_lines) = max_lines {
+    if let Some(max_lines) = options.max_lines {
         limiters.add(MaxLinesCommandSizeLimiter::new(max_lines));
     }
     if let Some(max_chars) = options.max_chars {
@@ -1096,10 +1111,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     }
     limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
 
-    let mut builder_options = CommandBuilderOptions::new(action, env, limiters, replace.clone())
-        .map_err(|_| {
-            "Base command and environment are too large to fit into one command execution"
-        })?;
+    let mut builder_options =
+        CommandBuilderOptions::new(action, env, limiters, options.replace.clone()).map_err(
+            |_| "Base command and environment are too large to fit into one command execution",
+        )?;
 
     builder_options.verbose = options.verbose;
     builder_options.close_stdin = options.arg_file.is_none();
@@ -1110,7 +1125,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         Box::new(io::stdin())
     };
 
-    let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = delimiter {
+    let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
         Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
     } else {
         Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
@@ -1125,8 +1140,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         args,
         &InputProcessOptions::new(
             options.exit_if_pass_char_limit,
-            max_args,
-            max_lines,
+            options.max_args,
+            options.max_lines,
             options.no_run_if_empty,
         ),
     )?;
