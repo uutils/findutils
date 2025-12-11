@@ -53,8 +53,7 @@ pub fn get_file_system_type(path: &Path, cache: &RefCell<Option<Cache>>) -> URes
     let fs_list = uucore::fsext::read_fs_list()?;
     let result = fs_list
         .into_iter()
-        .filter(|fs| fs.dev_id == dev_id)
-        .next_back()
+        .rfind(|fs| fs.dev_id == dev_id)
         .map_or_else(String::new, |fs| fs.fs_type);
 
     // cache the latest query if not a match before
