@@ -51,7 +51,7 @@ jobs:
         run: |
 
       - name: Upload gnu-test-report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: gnu-test-report
           path: |
@@ -59,7 +59,7 @@ jobs:
             findutils.gnu/xargs/testsuite/*.log
             findutils.gnu/tests/**/*.log
       - name: Upload gnu-result
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: gnu-result
           path: gnu-result.json
@@ -144,12 +144,12 @@ jobs:
           cd findutils
           bash util/build-bfs.sh ||:
       - name: Upload bfs-test-report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: bfs-test-report
           path: bfs/tests.log
       - name: Upload bfs-result
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: bfs-result
           path: bfs-result.json
@@ -247,7 +247,7 @@ jobs:
             fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations));
 
       - name: Upload annotations
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: comment
           path: annotations.json
