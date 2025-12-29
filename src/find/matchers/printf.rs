@@ -12,7 +12,7 @@ use std::{borrow::Cow, io::Write};
 
 use chrono::{format::StrftimeItems, DateTime, Local};
 
-use super::{FileType, Matcher, MatcherIO, WalkEntry, WalkError};
+use super::{FileType, Follow, Matcher, MatcherIO, WalkEntry};
 
 #[cfg(unix)]
 use std::os::unix::prelude::MetadataExt;
@@ -359,18 +359,6 @@ fn get_starting_point(file_info: &WalkEntry) -> &Path {
         .unwrap()
 }
 
-fn format_non_link_file_type(file_type: FileType) -> char {
-    match file_type {
-        FileType::Regular => 'f',
-        FileType::Directory => 'd',
-        FileType::BlockDevice => 'b',
-        FileType::CharDevice => 'c',
-        FileType::Fifo => 'p',
-        FileType::Socket => 's',
-        _ => 'U',
-    }
-}
-
 fn format_directive<'entry>(
     file_info: &'entry WalkEntry,
     directive: &FormatDirective,
@@ -524,7 +512,7 @@ fn format_directive<'entry>(
         FormatDirective::StartingPoint => get_starting_point(file_info).to_string_lossy(),
 
         FormatDirective::SymlinkTarget => {
-            if file_info.path_is_symlink() {
+            if file_info.file_type().is_symlink() {
                 fs::read_link(file_info.path())?
                     .to_string_lossy()
                     .into_owned()
@@ -534,22 +522,43 @@ fn format_directive<'entry>(
             }
         }
 
-        FormatDirective::Type { follow_links } => if file_info.path_is_symlink() {
-            if *follow_links {
-                match file_info.path().metadata().map_err(WalkError::from) {
-                    Ok(meta) => format_non_link_file_type(meta.file_type().into()),
-                    Err(e) if e.is_not_found() => 'N',
-                    Err(e) if e.is_loop() => 'L',
-                    Err(_) => '?',
-                }
+        FormatDirective::Type { follow_links } => {
+            let follow = if *follow_links {
+                Follow::Force
+            } else if file_info.follow() {
+                Follow::Always
             } else {
-                'l'
-            }
-        } else {
-            format_non_link_file_type(file_info.file_type())
+                Follow::Never
+            };
+            let meta = follow.metadata(file_info);
+            let ftype = meta
+                .as_ref()
+                .map(|m| m.file_type().into())
+                .unwrap_or(FileType::Unknown);
+
+            let ret = match ftype {
+                FileType::Regular => "f",
+                FileType::Directory => "d",
+                FileType::BlockDevice => "b",
+                FileType::CharDevice => "c",
+                FileType::Fifo => "p",
+                FileType::Socket => "s",
+                FileType::Symlink => "l",
+                FileType::Unknown if *follow_links => {
+                    match meta {
+                        Err(e) if e.is_not_found() => "N",
+                        Err(e) if e.is_loop() => "L",
+                        Err(_) => {
+                            // TODO: matcher_io.set_exit_code(1);
+                            "?"
+                        }
+                        _ => "U",
+                    }
+                }
+                FileType::Unknown => "U",
+            };
+            ret.into()
         }
-        .to_string()
-        .into(),
 
         #[cfg(not(unix))]
         FormatDirective::User { .. } => "0".into(),
