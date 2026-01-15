@@ -11,7 +11,7 @@ authors = ["uutils developers"]
 
 [dependencies]
 argmax = "0.4.0"
-chrono = "0.4.42"
+chrono = "0.4.43"
 clap = "4.5"
 faccess = "0.2.4"
 nix = { version = "0.30", features = ["fs", "user"] }
