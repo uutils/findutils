@@ -6,6 +6,7 @@ jobs:
   gnu-tests:
     permissions:
       actions: read
+      contents: write # Publish binaries instead of discarding
 
     name: Run GNU findutils tests
     runs-on: ubuntu-latest
@@ -45,7 +46,20 @@ jobs:
         shell: bash
         run: |
           cd findutils
-          bash util/build-gnu.sh ||:
+          bash util/build-gnu.sh
+          install --strip -Dm755 target/release/{find,xargs} -t findutils-x86_64-unknown-linux-gnu
+          ZSTD_CLEVEL=19 tar --zstd -caf ../findutils-x86_64-unknown-linux-gnu.tar.zst findutils-x86_64-unknown-linux-gnu
+      - name: Publish latest commit
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest-commit
+          draft: false
+          prerelease: true
+          files: |
+            findutils-x86_64-unknown-linux-gnu.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract testing info
         shell: bash
         run: |
