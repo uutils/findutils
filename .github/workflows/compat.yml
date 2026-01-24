@@ -29,11 +29,6 @@ jobs:
           git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
           git submodule update --init --recursive --depth 1
         working-directory: findutils.gnu
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
       - name: Install dependencies
         shell: bash
         run: |
@@ -45,6 +40,7 @@ jobs:
         shell: bash
         run: |
           cd findutils
+          export CARGO_INCREMENTAL=0
           bash util/build-gnu.sh ||:
       - name: Extract testing info
         shell: bash
@@ -126,11 +122,6 @@ jobs:
           repository: tavianator/bfs
           path: bfs
           ref: "4.0"
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
       - name: Install dependencies
         shell: bash
         run: |
@@ -142,6 +133,7 @@ jobs:
         shell: bash
         run: |
           cd findutils
+          export CARGO_INCREMENTAL=0
           bash util/build-bfs.sh ||:
       - name: Upload bfs-test-report
         uses: actions/upload-artifact@v6
