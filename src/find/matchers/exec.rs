@@ -53,8 +53,7 @@ impl SingleExecMatcher {
 
 impl Matcher for SingleExecMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        let mut command;
-        if &self.executable == "{}" {
+        let mut command = if &self.executable == "{}" {
             command = Command::new(file_info.path());
         } else {
             command = Command::new(&self.executable);
