@@ -54,10 +54,10 @@ impl SingleExecMatcher {
 impl Matcher for SingleExecMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         let mut command = if &self.executable == "{}" {
-            command = Command::new(file_info.path());
+            Command::new(file_info.path())
         } else {
-            command = Command::new(&self.executable);
-        }
+            Command::new(&self.executable)
+        };
         let path_to_file = if self.exec_in_parent_dir {
             if let Some(f) = file_info.path().file_name() {
                 Path::new(".").join(f)
