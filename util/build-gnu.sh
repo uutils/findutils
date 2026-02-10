@@ -9,9 +9,10 @@ if test ! -d ../findutils.gnu; then
 fi
 
 # build the rust implementation
-cargo build --release
-cp target/release/find ../findutils.gnu/find.rust
-cp target/release/xargs ../findutils.gnu/xargs.rust
+: ${PROFILE:=release}
+cargo build --profile="${PROFILE}"
+cp target/"${PROFILE}"/find ../findutils.gnu/find.rust
+cp target/"${PROFILE}"/xargs ../findutils.gnu/xargs.rust
 
 # Clone and build upstream repo
 cd ../findutils.gnu
