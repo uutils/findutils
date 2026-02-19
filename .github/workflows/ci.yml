@@ -9,13 +9,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
+    env:
+      CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
 
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v2
@@ -36,13 +33,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
+    env:
+      CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
 
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v2
@@ -62,13 +56,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
-
-      - run: rustup component add rustfmt
       - name: cargo fmt
         run: |
           cargo fmt --all -- --check
@@ -76,14 +63,10 @@ jobs:
   clippy:
     name: cargo clippy -- -D warnings
     runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
-      - run: rustup component add clippy
       - name: cargo clippy
         run: |
           cargo clippy --all-targets -- -D warnings
@@ -95,19 +78,14 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-        toolchain:
-          - nightly
         cargo_flags:
           - "--all-features"
+    env:
+      RUSTC_BOOTSTRAP: 1
+      CARGO_INCREMENTAL: 1
     steps:
       - name: Checkout source code
         uses: actions/checkout@v6
-
-      - name: Install `rust` toolchain
-        run: |
-          rustup toolchain install nightly --no-self-update -c rustfmt --profile minimal
-          rustup default nightly
-
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate code coverage
