@@ -11,12 +11,6 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
-
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v2
         if: matrix.os == 'windows-latest'
@@ -27,6 +21,8 @@ jobs:
         if: matrix.os == 'windows-latest'
 
       - name: Check
+        env:
+          CARGO_INCREMENTAL: 0
         run: |
           cargo check --all --all-features
 
@@ -38,12 +34,6 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
-
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v2
         if: matrix.os == 'windows-latest'
@@ -54,6 +44,8 @@ jobs:
         if: matrix.os == 'windows-latest'
 
       - name: Test
+        env:
+          CARGO_INCREMENTAL: 0
         run: |
           cargo test
 
@@ -62,14 +54,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
-
       - run: rustup component add rustfmt
       - name: cargo fmt
+        env:
+          CARGO_INCREMENTAL: 0
         run: |
           cargo fmt --all -- --check
 
@@ -78,13 +66,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Install `rust` toolchain
-        run: |
-          ## Install `rust` toolchain
-          rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-          rustup default stable
       - run: rustup component add clippy
       - name: cargo clippy
+        env:
+          CARGO_INCREMENTAL: 0
         run: |
           cargo clippy --all-targets -- -D warnings
 
@@ -102,16 +87,14 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v6
-
-      - name: Install `rust` toolchain
-        run: |
-          rustup toolchain install nightly --no-self-update -c rustfmt --profile minimal
-          rustup default nightly
-
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate code coverage
-        run: cargo llvm-cov --all-features --lcov --branch --output-path lcov.info
+        env:
+          CARGO_INCREMENTAL: 0
+          RUSTC_BOOTSTRAP: 1
+        run: |
+          cargo llvm-cov --all-features --lcov --branch --output-path lcov.info
 
       - name: Upload coverage as artifact
         uses: actions/upload-artifact@v6
