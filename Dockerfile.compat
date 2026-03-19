@@ -1,0 +1,36 @@
+FROM ubuntu:24.04
+
+RUN apt-get update \
+    && sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git curl wget ca-certificates build-essential jq \
+        autoconf automake autopoint texinfo dejagnu libcap2-bin \
+    && apt-get build-dep -y findutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Clone and pre-build GNU findutils (matches CI ref)
+RUN git clone https://github.com/gnu-mirror-unofficial/findutils.git /findutils.gnu \
+    && cd /findutils.gnu \
+    && git checkout 5768a03ddfb5e18b1682e339d6cdd24ff721c510 \
+    && git submodule sync --recursive \
+    && git config submodule.gnulib.url https://github.com/coreutils/gnulib.git \
+    && git submodule update --init --recursive --depth 1 \
+    && ./bootstrap \
+    && ./configure --quiet \
+    && make -j "$(nproc)"
+
+# Clone and pre-build BFS test utilities (matches CI ref)
+RUN git clone --branch 4.0 https://github.com/tavianator/bfs.git /bfs \
+    && cd /bfs \
+    && ./configure NOLIBS=y \
+    && make -j "$(nproc)" bin/tests/mksock bin/tests/xtouch
+
+# Build Rust artifacts to /target so we don't clobber the host's target/
+ENV CARGO_TARGET_DIR=/target
+
+WORKDIR /findutils
