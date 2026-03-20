@@ -2,6 +2,9 @@ on: [push, pull_request]
 
 name: Basic CI
 
+env:
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   check:
     name: cargo check
@@ -21,8 +24,6 @@ jobs:
         if: matrix.os == 'windows-latest'
 
       - name: Check
-        env:
-          CARGO_INCREMENTAL: 0
         run: |
           cargo check --all --all-features
 
@@ -44,8 +45,6 @@ jobs:
         if: matrix.os == 'windows-latest'
 
       - name: Test
-        env:
-          CARGO_INCREMENTAL: 0
         run: |
           cargo test
 
@@ -54,10 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: rustup component add rustfmt
       - name: cargo fmt
-        env:
-          CARGO_INCREMENTAL: 0
         run: |
           cargo fmt --all -- --check
 
@@ -66,11 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: rustup component add clippy
-      - name: cargo clippy
-        env:
-          CARGO_INCREMENTAL: 0
-        run: |
+      - run: |
           cargo clippy --all-targets -- -D warnings
 
   grcov:
@@ -80,8 +72,6 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-        toolchain:
-          - nightly
         cargo_flags:
           - "--all-features"
     steps:
@@ -91,7 +81,6 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate code coverage
         env:
-          CARGO_INCREMENTAL: 0
           RUSTC_BOOTSTRAP: 1
         run: |
           cargo llvm-cov --all-features --lcov --branch --output-path lcov.info
