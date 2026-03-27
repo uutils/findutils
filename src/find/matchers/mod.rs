@@ -65,7 +65,7 @@ use ls::Ls;
 use std::{
     error::Error,
     fs::{File, Metadata},
-    io::Read,
+    io::{stderr, Read, Write},
     path::Path,
     str::FromStr,
     time::SystemTime,
@@ -1002,7 +1002,7 @@ fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
         .collect();
     // empty starting point checker
     if string_segments.iter().any(|s| s.is_empty()) {
-        eprintln!("find: invalid zero-length file name");
+        let _ = writeln!(stderr(), "find: invalid zero-length file name");
         // remove the empty ones so as to avoid file not found error
         string_segments.retain(|s| !s.is_empty());
     }
