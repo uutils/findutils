@@ -8,7 +8,10 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::path::Path;
 use std::time::SystemTime;
-use std::{borrow::Cow, io::Write};
+use std::{
+    borrow::Cow,
+    io::{stderr, Write},
+};
 
 use chrono::{format::StrftimeItems, DateTime, Local};
 
@@ -608,7 +611,8 @@ impl Printf {
                         }
                     }
                     Err(e) => {
-                        eprintln!(
+                        let _ = writeln!(
+                            stderr(),
                             "Error processing '{}': {}",
                             file_info.path().to_string_lossy(),
                             e
