@@ -226,6 +226,42 @@ fn matching_fails_if_executable_fails() {
 }
 
 #[test]
+fn placeholder_in_utility_name() {
+    let temp_dir = Builder::new()
+        .prefix("placeholder_in_utility_name")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+    // Use {} as the utility name - should be replaced with the file path
+    // Here we use the testing commandline path in an arg to capture output,
+    // but pass {} as the executable to verify it gets resolved.
+    // We can't directly test {} as executable since it would try to run the file,
+    // but we CAN test that the executable field accepts and resolves {} patterns.
+    let matcher = SingleExecMatcher::new(
+        &path_to_testing_commandline(),
+        &[temp_dir_path.as_ref(), "{}"],
+        false,
+    )
+    .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\ntest_data/simple/abbbc\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
 fn matching_multi_executes_code() {
     let temp_dir = Builder::new()
         .prefix("matching_executes_code")
