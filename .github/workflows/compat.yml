@@ -2,6 +2,9 @@ on: [push, pull_request]
 
 name: External-testsuites
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
   gnu-tests:
     permissions:
@@ -40,12 +43,9 @@ jobs:
         shell: bash
         run: |
           cd findutils
-          export CARGO_INCREMENTAL=0
-          bash util/build-gnu.sh ||:
-      - name: Extract testing info
-        shell: bash
-        run: |
-
+          bash util/build-gnu.sh
+        env:
+          GNU_DIR: ${{ github.workspace }}/findutils.gnu
       - name: Upload gnu-test-report
         uses: actions/upload-artifact@v7
         with:
@@ -59,54 +59,10 @@ jobs:
         with:
           name: gnu-result
           path: gnu-result.json
-      - name: Download artifacts (gnu-result and gnu-test-report)
-        uses: actions/github-script@v8
-        with:
-          script: |
-            let fs = require('fs');
-            fs.mkdirSync('${{ github.workspace }}/dl', { recursive: true });
-
-            async function downloadArtifact(artifactName) {
-              // List all artifacts from the workflow run
-              let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: ${{ github.run_id }},
-              });
-
-              // Find the specified artifact
-              let matchArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
-              if (!matchArtifact) {
-                throw new Error(`Artifact "${artifactName}" not found.`);
-              }
-
-              // Download the artifact
-              let download = await github.rest.actions.downloadArtifact({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                artifact_id: matchArtifact.id,
-                archive_format: 'zip',
-              });
-
-              // Save the artifact to a file
-              fs.writeFileSync(`${{ github.workspace }}/dl/${artifactName}.zip`, Buffer.from(download.data));
-            }
-
-            // Download the required artifacts
-            await downloadArtifact("gnu-result");
-            await downloadArtifact("gnu-test-report");
-
       - name: Compare failing tests against master
         shell: bash
         run: |
           ./findutils/util/diff-gnu.sh ./dl ./findutils.gnu
-      - name: Compare against main results
-        shell: bash
-        run: |
-          unzip dl/gnu-result.zip -d dl/
-          unzip dl/gnu-test-report.zip -d dl/
-          mv dl/gnu-result.json latest-gnu-result.json
-          python findutils/util/compare_gnu_result.py
 
   bfs-tests:
     name: Run BFS tests
@@ -133,8 +89,9 @@ jobs:
         shell: bash
         run: |
           cd findutils
-          export CARGO_INCREMENTAL=0
-          bash util/build-bfs.sh ||:
+          bash util/build-bfs.sh
+        env:
+          BFS_DIR: ${{ github.workspace }}/bfs
       - name: Upload bfs-test-report
         uses: actions/upload-artifact@v7
         with:
@@ -145,53 +102,10 @@ jobs:
         with:
           name: bfs-result
           path: bfs-result.json
-      - name: Download artifacts (gnu-result and bfs-test-report)
-        uses: actions/github-script@v8
-        with:
-          script: |
-            let fs = require('fs');
-            fs.mkdirSync('${{ github.workspace }}/dl', { recursive: true });
-
-            async function downloadArtifact(artifactName) {
-              // List all artifacts from the workflow run
-              let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: ${{ github.run_id }},
-              });
-
-              // Find the specified artifact
-              let matchArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
-              if (!matchArtifact) {
-                throw new Error(`Artifact "${artifactName}" not found.`);
-              }
-
-              // Download the artifact
-              let download = await github.rest.actions.downloadArtifact({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                artifact_id: matchArtifact.id,
-                archive_format: 'zip',
-              });
-
-              // Save the artifact to a file
-              fs.writeFileSync(`${{ github.workspace }}/dl/${artifactName}.zip`, Buffer.from(download.data));
-            }
-
-            // Download the required artifacts
-            await downloadArtifact("bfs-result");
-            await downloadArtifact("bfs-test-report");
       - name: Compare failing tests against main
         shell: bash
         run: |
           ./findutils/util/diff-bfs.sh dl/tests.log bfs/tests.log
-      - name: Compare against main results
-        shell: bash
-        run: |
-          unzip dl/bfs-result.zip -d dl/
-          unzip dl/bfs-test-report.zip -d dl/
-          mv dl/bfs-result.json latest-bfs-result.json
-          python findutils/util/compare_bfs_result.py
 
   upload-annotations:
     name: Upload annotations

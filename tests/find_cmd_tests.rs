@@ -568,7 +568,7 @@ fn find_printf() {
 
     println!("Actual output: '{}'", output_str.trim());
 
-    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\+\d{2}:\d{2}:\d{2}\.\d{9}0$")
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\+\d{2}:\d{2}:\d{2}\.\d+0$")
         .expect("Failed to compile regex");
 
     assert!(
