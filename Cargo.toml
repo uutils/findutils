@@ -21,13 +21,11 @@ uucore = { version = "0.7.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
 
 [dev-dependencies]
-assert_cmd = "2"
+ctor = "0.6"
 filetime = "0.2"
 nix = { version = "0.31", features = ["fs"] }
-predicates = "3"
-pretty_assertions = "1.4.1"
-serial_test = "3.4"
 tempfile = "3"
+uutests = "0.7.0"
 
 [[bin]]
 name = "find"
