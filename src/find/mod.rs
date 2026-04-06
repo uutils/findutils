@@ -313,44 +313,91 @@ fn print_help() {
 
 If no path is supplied then the current working directory is used by default.
 
-Early alpha implementation. Currently the only expressions supported are
- -print
- -print0
- -printf
- -name case-sensitive_filename_pattern
- -lname case-sensitive_filename_pattern
- -iname case-insensitive_filename_pattern
- -ilname case-insensitive_filename_pattern
- -regextype type
- -files0-from
- -regex pattern
- -iregex pattern
- -type type_char
-    currently type_char can only be f (for file) or d (for directory)
- -size [+-]N[bcwkMG]
- -delete
- -prune
- -not
- -a
- -o[r]
- ,
- ()
- -true
- -false
- -maxdepth N
- -mindepth N
- -d[epth]
- -xdev
- -ctime [+-]N
- -atime [+-]N
- -mtime [+-]N
- -perm [-/]{{octal|u=rwx,go=w}}
- -newer path_to_file
- -exec[dir] executable [args] [{{}}] [more args] ;
- -ok[dir] executable [args] [{{}}] [more args] ;
- -sorted
-    a non-standard extension that sorts directory contents by name before
-    processing them. Less efficient, but allows for deterministic output.
+Options (before paths):
+ -P                       Never follow symbolic links (default)
+ -L                       Follow symbolic links
+ -H                       Follow symbolic links on the command line only
+ -Olevel                  Optimization level (0-3, currently ignored)
+
+Operators:
+ ( EXPR )                 Force precedence
+ ! EXPR / -not EXPR       Negate expression
+ EXPR -a / -and EXPR      Logical AND (default)
+ EXPR -o / -or EXPR       Logical OR
+ EXPR , EXPR              List (both evaluated, result of last used)
+
+Positional options:
+ -daystart                Measure times from start of today
+ -follow                  Dereference symbolic links
+ -maxdepth N              Descend at most N levels
+ -mindepth N              Do not apply tests at levels less than N
+ -d / -depth              Process directory contents before directory itself
+ -mount / -xdev           Do not descend into other file systems
+ -noleaf                  Do not optimize by assuming 2+ hard links
+ -sorted                  Sort directory contents by name (non-standard)
+ -regextype type          Set regex syntax (default: emacs)
+ -files0-from file        Read starting points from file, NUL-separated
+
+Tests:
+ -name pattern            Base name matches shell pattern
+ -iname pattern           Like -name but case-insensitive
+ -path pattern            Full path matches shell pattern
+ -ipath pattern           Like -path but case-insensitive
+ -wholename pattern       Same as -path
+ -iwholename pattern      Same as -ipath
+ -lname pattern           Symlink target matches pattern
+ -ilname pattern          Like -lname but case-insensitive
+ -regex pattern           Full path matches regular expression
+ -iregex pattern          Like -regex but case-insensitive
+ -type [bcdflps]          File is of given type
+ -xtype [bcdflps]         Like -type but check symlink target
+ -fstype type             File is on filesystem of given type
+ -size [+-]N[bcwkMG]      File uses N units of space
+ -empty                   File is empty (regular file or directory)
+ -newer file              Modified more recently than file
+ -anewer file             Accessed more recently than file was modified
+ -cnewer file             Status changed more recently than file was modified
+ -newerXY ref             File's X time is newer than ref's Y time (X,Y: aBcmt)
+ -ctime [+-]N             Status changed N*24 hours ago
+ -atime [+-]N             Accessed N*24 hours ago
+ -mtime [+-]N             Modified N*24 hours ago
+ -cmin [+-]N              Status changed N minutes ago
+ -amin [+-]N              Accessed N minutes ago
+ -mmin [+-]N              Modified N minutes ago
+ -perm [-/]mode           Permission bits match mode
+ -samefile file           Same inode as file
+ -readable                Readable by current user
+ -writable                Writable by current user
+ -executable              Executable by current user
+ -user name/uid           Owned by user
+ -nouser                  No user corresponds to file's UID
+ -uid [+-]N               Numeric user ID matches
+ -group name/gid          Owned by group
+ -nogroup                 No group corresponds to file's GID
+ -gid [+-]N               Numeric group ID matches
+ -inum [+-]N              Inode number matches (Unix only)
+ -links [+-]N             Hard link count matches (Unix only)
+ -true                    Always true
+ -false                   Always false
+
+Actions:
+ -print                   Print path followed by newline (default)
+ -print0                  Print path followed by NUL
+ -printf format           Print formatted string
+ -fprint file             Like -print but write to file
+ -fprint0 file            Like -print0 but write to file
+ -fprintf file format     Like -printf but write to file
+ -ls                      List in ls -dils format
+ -fls file                Like -ls but write to file
+ -exec command ;          Execute command for each file
+ -exec command {{}} +       Execute command with multiple files
+ -execdir command ;       Like -exec but in file's directory
+ -execdir command {{}} +    Like -exec {{}} + but in file's directory
+ -ok command ;            Like -exec but prompt user first
+ -okdir command ;         Like -execdir but prompt user first
+ -delete                  Delete files (implies -depth)
+ -prune                   Do not descend into directory
+ -quit                    Exit immediately
 "
     );
 }
