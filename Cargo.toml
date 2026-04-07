@@ -25,7 +25,7 @@ ctor = "0.8"
 filetime = "0.2"
 nix = { version = "0.31", features = ["fs"] }
 tempfile = "3"
-uutests = "0.7.0"
+uutests = "0.8.0"
 
 [[bin]]
 name = "find"
