@@ -349,7 +349,7 @@ dependencies = [
  "onig",
  "regex",
  "tempfile",
- "uucore 0.7.0",
+ "uucore",
  "uutests",
  "walkdir",
 ]
@@ -1102,36 +1102,14 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uucore"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8038531f506a34ab4612b93f97d5f40759768cd34a83fd2af041b84fcbde474"
-dependencies = [
- "bstr",
- "clap",
- "dunce",
- "fluent",
- "fluent-bundle",
- "fluent-syntax",
- "libc",
- "nix 0.30.1",
- "os_display",
- "rustc-hash",
- "thiserror",
- "unic-langid",
- "uucore_procs 0.7.0",
- "wild",
- "winapi-util",
- "windows-sys 0.61.0",
-]
-
-[[package]]
-name = "uucore"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07d779636d827cde4100f0e65ff3fd23b0b1f1195055475c6e6813d425f30c8e"
 dependencies = [
+ "bstr",
  "clap",
  "dns-lookup",
+ "dunce",
  "fluent",
  "fluent-bundle",
  "fluent-syntax",
@@ -1144,18 +1122,10 @@ dependencies = [
  "thiserror",
  "time",
  "unic-langid",
- "uucore_procs 0.8.0",
+ "uucore_procs",
  "wild",
-]
-
-[[package]]
-name = "uucore_procs"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f63e2d5083ff0983193a33e2d57fd271c7e3e3e7df8e46e8f471865647b2cbc"
-dependencies = [
- "proc-macro2",
- "quote",
+ "winapi-util",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -1182,7 +1152,7 @@ dependencies = [
  "regex",
  "rlimit",
  "tempfile",
- "uucore 0.8.0",
+ "uucore",
  "xattr",
 ]
 
