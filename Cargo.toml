@@ -38,6 +38,10 @@ path = "src/xargs/main.rs"
 [[bin]]
 name = "testing-commandline"
 path = "src/testing/commandline/main.rs"
+required-features = ["testing_commandline"]
+
+[features]
+testing_commandline = []
 
 [profile.release]
 lto = "thin"

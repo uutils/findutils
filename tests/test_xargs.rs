@@ -9,6 +9,7 @@
 // testing-commandline binary is guaranteed to be built first.
 use uutests::util::TestScenario;
 
+#[cfg(feature = "testing_commandline")]
 use common::test_helpers::path_to_testing_commandline;
 
 mod common;
@@ -185,6 +186,7 @@ fn xargs_exit_on_large() {
         .no_stdout();
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn xargs_exec() {
     let result = ucmd()
@@ -205,6 +207,7 @@ fn xargs_exec() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn xargs_exec_stdin_open() {
     let temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -228,6 +231,7 @@ fn xargs_exec_stdin_open() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn xargs_exec_failure() {
     let result = ucmd()
@@ -249,6 +253,7 @@ fn xargs_exec_failure() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn xargs_exec_urgent_failure() {
     let result = ucmd()
@@ -272,6 +277,7 @@ fn xargs_exec_urgent_failure() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 #[cfg(unix)]
 fn xargs_exec_with_signal() {
@@ -305,6 +311,7 @@ fn xargs_exec_not_found() {
         .no_stdout();
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn xargs_exec_verbose() {
     ucmd()
@@ -325,6 +332,7 @@ fn xargs_exec_verbose() {
         );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn xargs_unterminated_quote() {
     ucmd()
@@ -341,6 +349,7 @@ fn xargs_unterminated_quote() {
         .no_stdout();
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn xargs_zero_lines() {
     ucmd()
