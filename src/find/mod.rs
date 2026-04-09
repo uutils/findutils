@@ -9,7 +9,7 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{stderr, stdout, Write};
+use std::io::{self, stderr, stdout, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -229,11 +229,11 @@ fn process_dir(
 fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
     if paths_and_matcher.config.help_requested {
-        print_help();
+        print_help(deps)?;
         return Ok(0);
     }
     if paths_and_matcher.config.version_requested {
-        print_version();
+        print_version(deps)?;
         return Ok(0);
     }
 
@@ -258,8 +258,9 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
     Ok(ret)
 }
 
-fn print_help() {
-    println!(
+fn print_help(deps: &dyn Dependencies) -> Result<(), io::Error> {
+    writeln!(
+        &mut deps.get_output().borrow_mut(),
         r"Usage: find [path...] [expression]
 
 If no path is supplied then the current working directory is used by default.
@@ -302,11 +303,17 @@ Early alpha implementation. Currently the only expressions supported are
     a non-standard extension that sorts directory contents by name before
     processing them. Less efficient, but allows for deterministic output.
 "
-    );
+    )?;
+    Ok(())
 }
 
-fn print_version() {
-    println!("find (Rust) {}", env!("CARGO_PKG_VERSION"));
+fn print_version(deps: &dyn Dependencies) -> Result<(), io::Error> {
+    writeln!(
+        &mut deps.get_output().borrow_mut(),
+        "find (Rust) {}",
+        env!("CARGO_PKG_VERSION")
+    )?;
+    Ok(())
 }
 
 /// Does all the work for find.
@@ -1533,5 +1540,47 @@ mod tests {
         let rc = find_main(&["find", "./test_data/simple/subdir", "-ls"], &deps);
 
         assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn help_and_version_write_error_return_nonzero() {
+        use std::cell::RefCell;
+        use std::io::{ErrorKind, Write};
+        use std::time::SystemTime;
+
+        struct BrokenWriter;
+        impl Write for BrokenWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(ErrorKind::Other))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::Error::from(ErrorKind::Other))
+            }
+        }
+
+        struct BrokenDeps {
+            output: RefCell<BrokenWriter>,
+            now: SystemTime,
+        }
+        impl BrokenDeps {
+            fn new() -> Self {
+                Self {
+                    output: RefCell::new(BrokenWriter),
+                    now: SystemTime::now(),
+                }
+            }
+        }
+
+        impl super::Dependencies for BrokenDeps {
+            fn get_output(&self) -> &RefCell<dyn Write> {
+                &self.output
+            }
+            fn now(&self) -> SystemTime {
+                self.now
+            }
+        }
+
+        assert_eq!(find_main(&["find", "--help"], &BrokenDeps::new()), 1);
+        assert_eq!(find_main(&["find", "--version"], &BrokenDeps::new()), 1);
     }
 }
