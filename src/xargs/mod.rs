@@ -10,7 +10,7 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::Display,
     fs,
-    io::{self, BufRead, BufReader, Read},
+    io::{self, stderr, BufRead, BufReader, Read, Write},
     process::{Command, Stdio},
 };
 
@@ -439,7 +439,7 @@ impl CommandBuilder<'_> {
         }
 
         if self.options.verbose {
-            eprintln!("{command:?}");
+            let _ = writeln!(stderr(), "{command:?}");
         }
 
         match &self.options.action {
@@ -827,7 +827,7 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
                 (options.max_args, options.max_lines, None)
             }
             _ => {
-                eprintln!(
+                let _ = writeln!(stderr(),
                 "WARNING: -L, -n and -I/-i are mutually exclusive, but more than one were given; \
                 only the last option will be used"
             );
@@ -1154,7 +1154,7 @@ pub fn xargs_main(args: &[&str]) -> i32 {
         Ok(CommandResult::Success) => 0,
         Ok(CommandResult::Failure) => 123,
         Err(e) => {
-            eprintln!("Error: {e}");
+            let _ = writeln!(stderr(), "Error: {e}");
             if let XargsError::CommandExecution(cx) = e {
                 match cx {
                     CommandExecutionError::UrgentlyFailed => 124,
