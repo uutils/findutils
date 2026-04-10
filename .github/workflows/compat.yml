@@ -60,7 +60,7 @@ jobs:
           name: gnu-result
           path: gnu-result.json
       - name: Download artifacts (gnu-result and gnu-test-report)
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             let fs = require('fs');
@@ -146,7 +146,7 @@ jobs:
           name: bfs-result
           path: bfs-result.json
       - name: Download artifacts (gnu-result and bfs-test-report)
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             let fs = require('fs');
@@ -201,7 +201,7 @@ jobs:
 
     steps:
       - name: List Annotations
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
 
         with:
           script: |
