@@ -22,6 +22,7 @@ pub struct SingleExecMatcher {
     executable: String,
     args: Vec<Arg>,
     exec_in_parent_dir: bool,
+    interactive: bool,
 }
 
 impl SingleExecMatcher {
@@ -29,6 +30,23 @@ impl SingleExecMatcher {
         executable: &str,
         args: &[&str],
         exec_in_parent_dir: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::new_impl(executable, args, exec_in_parent_dir, false)
+    }
+
+    pub fn new_interactive(
+        executable: &str,
+        args: &[&str],
+        exec_in_parent_dir: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::new_impl(executable, args, exec_in_parent_dir, true)
+    }
+
+    fn new_impl(
+        executable: &str,
+        args: &[&str],
+        exec_in_parent_dir: bool,
+        interactive: bool,
     ) -> Result<Self, Box<dyn Error>> {
         let transformed_args = args
             .iter()
@@ -47,13 +65,13 @@ impl SingleExecMatcher {
             executable: executable.to_string(),
             args: transformed_args,
             exec_in_parent_dir,
+            interactive,
         })
     }
 }
 
 impl Matcher for SingleExecMatcher {
-    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        let mut command = Command::new(&self.executable);
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let path_to_file = if self.exec_in_parent_dir {
             if let Some(f) = file_info.path().file_name() {
                 Path::new(".").join(f)
@@ -64,6 +82,28 @@ impl Matcher for SingleExecMatcher {
             file_info.path().to_path_buf()
         };
 
+        if self.interactive {
+            let rendered_args: Vec<String> = self
+                .args
+                .iter()
+                .map(|arg| match arg {
+                    Arg::LiteralArg(a) => a.to_string_lossy().into_owned(),
+                    Arg::FileArg(parts) => parts
+                        .join(path_to_file.as_os_str())
+                        .to_string_lossy()
+                        .into_owned(),
+                })
+                .collect();
+            let mut prompt_parts = vec![self.executable.clone()];
+            prompt_parts.extend(rendered_args);
+            let prompt = format!("< {} >? ", prompt_parts.join(" "));
+
+            if !matcher_io.confirm(&prompt) {
+                return false;
+            }
+        }
+
+        let mut command = Command::new(&self.executable);
         for arg in &self.args {
             match *arg {
                 Arg::LiteralArg(ref a) => command.arg(a.as_os_str()),
