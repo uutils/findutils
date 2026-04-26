@@ -9,7 +9,7 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{stderr, stdout, Write};
+use std::io::{stderr, stdout, BufRead, BufReader, IsTerminal, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -57,20 +57,44 @@ impl Default for Config {
 pub trait Dependencies {
     fn get_output(&self) -> &RefCell<dyn Write>;
     fn now(&self) -> SystemTime;
+    /// Write `prompt` to stderr and return whether the user's response is
+    /// affirmative (starts with 'y' or 'Y').
+    ///
+    /// POSIX specifies that -ok writes a prompt to stderr but leaves the input
+    /// source implementation-defined.  GNU find reads from /dev/tty so that
+    /// the answer comes from the real terminal even when stdin is redirected;
+    /// BSD find reads from stdin unconditionally.
+    fn confirm(&self, prompt: &str) -> bool;
 }
 
 /// Struct that holds the dependencies we use when run as the real executable.
 pub struct StandardDependencies {
     output: Rc<RefCell<dyn Write>>,
     now: SystemTime,
+    /// Open handle to /dev/tty for reading -ok responses, or None when stdin
+    /// is not a terminal (pipe/file) or we are on Windows.  Opened once at
+    /// construction so we don't re-open it for every matched file.
+    tty: Option<RefCell<BufReader<std::fs::File>>>,
 }
 
 impl StandardDependencies {
     #[must_use]
     pub fn new() -> Self {
+        #[cfg(unix)]
+        let tty = if std::io::stdin().is_terminal() {
+            std::fs::File::open("/dev/tty")
+                .ok()
+                .map(|f| RefCell::new(BufReader::new(f)))
+        } else {
+            None
+        };
+        #[cfg(not(unix))]
+        let tty = None;
+
         Self {
             output: Rc::new(RefCell::new(stdout())),
             now: SystemTime::now(),
+            tty,
         }
     }
 }
@@ -88,6 +112,31 @@ impl Dependencies for StandardDependencies {
 
     fn now(&self) -> SystemTime {
         self.now
+    }
+
+    fn confirm(&self, prompt: &str) -> bool {
+        // POSIX requires the prompt on stderr.
+        eprint!("{}", prompt);
+        let _ = stderr().flush();
+
+        // self.tty is Some when stdin was a terminal at startup: read from the
+        // controlling terminal so responses come from the keyboard even when
+        // stdin is occupied (e.g. `find -files0-from - -ok rm {} \;`).
+        // Otherwise fall back to stdin — BSD find's behaviour, and what we
+        // want when stdin is a pipe supplying scripted responses.
+        // EOF and errors both yield None/Err, which unwrap_or_default turns
+        // into an empty string — treated as "declined", matching GNU find.
+        let response = if let Some(tty) = &self.tty {
+            // Deref through RefMut to get &mut BufReader so lines() can take
+            // it by value without moving out of the RefCell.
+            (&mut *tty.borrow_mut()).lines().next()
+        } else {
+            std::io::stdin().lock().lines().next()
+        }
+        .and_then(Result::ok)
+        .unwrap_or_default();
+
+        response.trim_start().starts_with(['y', 'Y'])
     }
 }
 
@@ -298,6 +347,7 @@ Early alpha implementation. Currently the only expressions supported are
  -perm [-/]{{octal|u=rwx,go=w}}
  -newer path_to_file
  -exec[dir] executable [args] [{{}}] [more args] ;
+ -ok[dir] executable [args] [{{}}] [more args] ;
  -sorted
     a non-standard extension that sorts directory contents by name before
     processing them. Less efficient, but allows for deterministic output.
@@ -360,6 +410,8 @@ mod tests {
     pub struct FakeDependencies {
         pub output: RefCell<Cursor<Vec<u8>>>,
         now: SystemTime,
+        /// Preset responses for confirm(), consumed front-to-back.
+        confirm_responses: RefCell<std::collections::VecDeque<bool>>,
     }
 
     impl<'a> FakeDependencies {
@@ -367,6 +419,7 @@ mod tests {
             Self {
                 output: RefCell::new(Cursor::new(Vec::<u8>::new())),
                 now: SystemTime::now(),
+                confirm_responses: RefCell::new(std::collections::VecDeque::new()),
             }
         }
 
@@ -385,6 +438,11 @@ mod tests {
             cursor.read_to_string(&mut contents).unwrap();
             contents
         }
+
+        /// Queue a response to be returned by the next call to confirm().
+        pub fn push_confirm_response(&self, response: bool) {
+            self.confirm_responses.borrow_mut().push_back(response);
+        }
     }
 
     impl Dependencies for FakeDependencies {
@@ -394,6 +452,15 @@ mod tests {
 
         fn now(&self) -> SystemTime {
             self.now
+        }
+
+        fn confirm(&self, _prompt: &str) -> bool {
+            // Return the next preset response; default to false (decline) so
+            // that a test that forgets to queue a response fails safely.
+            self.confirm_responses
+                .borrow_mut()
+                .pop_front()
+                .unwrap_or(false)
         }
     }
 
