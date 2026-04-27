@@ -12,9 +12,15 @@ use std::{
     fs,
     io::{self, BufRead, BufReader, Read},
     process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
+static ACTIVE_PROCS: AtomicU64 = AtomicU64::new(0);
+
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
+use rayon::iter::{
+    FromParallelIterator, IntoParallelIterator, ParallelBridge as _, ParallelIterator as _,
+};
 
 mod options {
     pub const COMMAND: &str = "COMMAND";
@@ -79,14 +85,14 @@ trait CommandSizeLimiter {
         arg: Argument,
         cursor: LimiterCursor<'_>,
     ) -> Result<Argument, ExhaustedCommandSpace>;
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter>;
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync>;
 }
 
 /// A pointer to the next limiter. A limiter should *always* call the cursor's
 /// `try_next` *before* updating its own state, to ensure that all other limiters
 /// are okay with the argument first.
 struct LimiterCursor<'collection> {
-    limiters: &'collection mut [Box<dyn CommandSizeLimiter>],
+    limiters: &'collection mut [Box<dyn CommandSizeLimiter + Send + Sync>],
 }
 
 impl LimiterCursor<'_> {
@@ -106,7 +112,7 @@ impl LimiterCursor<'_> {
 }
 
 struct LimiterCollection {
-    limiters: Vec<Box<dyn CommandSizeLimiter>>,
+    limiters: Vec<Box<dyn CommandSizeLimiter + Send + Sync>>,
 }
 
 impl LimiterCollection {
@@ -114,7 +120,7 @@ impl LimiterCollection {
         Self { limiters: vec![] }
     }
 
-    fn add(&mut self, limiter: impl CommandSizeLimiter + 'static) {
+    fn add(&mut self, limiter: impl CommandSizeLimiter + Send + Sync + 'static) {
         self.limiters.push(Box::new(limiter));
     }
 
@@ -208,7 +214,7 @@ impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
         }
     }
 
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
         Box::new(self.clone())
     }
 }
@@ -248,7 +254,7 @@ impl CommandSizeLimiter for MaxArgsCommandSizeLimiter {
         }
     }
 
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
         Box::new(self.clone())
     }
 }
@@ -292,21 +298,44 @@ impl CommandSizeLimiter for MaxLinesCommandSizeLimiter {
         }
     }
 
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
         Box::new(self.clone())
     }
 }
 
+#[derive(Default)]
 enum CommandResult {
+    #[default]
     Success,
     Failure,
 }
 
-impl CommandResult {
-    fn combine(&mut self, other: Self) {
-        if matches!(*self, Self::Success) {
-            *self = other;
-        }
+impl FromIterator<Self> for CommandResult {
+    fn from_iter<I: IntoIterator<Item = Self>>(iter: I) -> Self {
+        iter.into_iter()
+            .fold(None, |acc, item| {
+                acc.or_else(|| (!matches!(item, Self::Success)).then_some(item))
+            })
+            .unwrap_or_default()
+    }
+}
+
+impl FromParallelIterator<Self> for CommandResult {
+    fn from_par_iter<I>(par_iter: I) -> Self
+    where
+        I: IntoParallelIterator<Item = Self>,
+    {
+        par_iter
+            .into_par_iter()
+            .fold(
+                || None,
+                |acc, item| acc.or_else(|| (!matches!(item, Self::Success)).then_some(item)),
+            )
+            .collect_vec_list()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect()
     }
 }
 
@@ -486,6 +515,20 @@ impl CommandBuilder<'_> {
             }
         }
     }
+
+    fn execute_parallel(self, capacity: u64) -> Result<CommandResult, CommandExecutionError> {
+        loop {
+            let current = ACTIVE_PROCS.fetch_add(1, Ordering::SeqCst);
+            if current < capacity {
+                break;
+            }
+            ACTIVE_PROCS.fetch_sub(1, Ordering::SeqCst);
+            std::hint::spin_loop();
+        }
+        let result = self.execute();
+        ACTIVE_PROCS.fetch_sub(1, Ordering::SeqCst);
+        result
+    }
 }
 
 trait ArgumentReader {
@@ -642,13 +685,13 @@ where
 }
 
 struct EofArgumentReader {
-    reader: Box<dyn ArgumentReader>,
+    reader: Box<dyn ArgumentReader + Send>,
     eof_delimiter: OsString,
     eof_found: bool,
 }
 
 impl EofArgumentReader {
-    fn new(reader: Box<dyn ArgumentReader>, eof_delimiter: &String) -> Self {
+    fn new(reader: Box<dyn ArgumentReader + Send>, eof_delimiter: &String) -> Self {
         Self {
             reader,
             eof_delimiter: eof_delimiter.into(),
@@ -724,6 +767,7 @@ struct InputProcessOptions {
     max_args: Option<usize>,
     max_lines: Option<usize>,
     no_run_if_empty: bool,
+    max_procs: std::num::NonZero<u64>,
 }
 
 impl InputProcessOptions {
@@ -732,51 +776,119 @@ impl InputProcessOptions {
         max_args: Option<usize>,
         max_lines: Option<usize>,
         no_run_if_empty: bool,
+        max_procs: std::num::NonZero<u64>,
     ) -> Self {
         Self {
             exit_if_pass_char_limit,
             max_args,
             max_lines,
             no_run_if_empty,
+            max_procs,
+        }
+    }
+}
+
+struct CommandBatchIter<'a> {
+    builder_options: &'a CommandBuilderOptions,
+    args: Box<dyn ArgumentReader + Send>,
+    options: &'a InputProcessOptions,
+    current_builder: CommandBuilder<'a>,
+    have_pending_command: bool,
+    done: bool,
+}
+
+impl<'a> CommandBatchIter<'a> {
+    fn new(
+        builder_options: &'a CommandBuilderOptions,
+        args: Box<dyn ArgumentReader + Send>,
+        options: &'a InputProcessOptions,
+    ) -> Self {
+        Self {
+            current_builder: CommandBuilder::new(builder_options),
+            builder_options,
+            args,
+            options,
+            have_pending_command: false,
+            done: false,
+        }
+    }
+}
+
+impl<'a> Iterator for CommandBatchIter<'a> {
+    type Item = Result<CommandBuilder<'a>, XargsError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+        loop {
+            match self.args.next() {
+                Err(e) => {
+                    self.done = true;
+                    return Some(Err(XargsError::from(e)));
+                }
+                Ok(None) => {
+                    self.done = true;
+                    if !self.options.no_run_if_empty || self.have_pending_command {
+                        return Some(Ok(std::mem::replace(
+                            &mut self.current_builder,
+                            CommandBuilder::new(self.builder_options),
+                        )));
+                    }
+                    return None;
+                }
+                Ok(Some(arg)) => match self.current_builder.add_arg(arg) {
+                    Ok(()) => {
+                        self.have_pending_command = true;
+                    }
+                    Err(ExhaustedCommandSpace { arg, out_of_chars }) => {
+                        if out_of_chars
+                            && self.options.exit_if_pass_char_limit
+                            && (self.options.max_args.is_some() || self.options.max_lines.is_some())
+                        {
+                            self.done = true;
+                            return Some(Err(XargsError::ArgumentTooLarge));
+                        }
+                        let old = std::mem::replace(
+                            &mut self.current_builder,
+                            CommandBuilder::new(self.builder_options),
+                        );
+                        let batch = self.have_pending_command.then_some(old);
+                        if let Err(ExhaustedCommandSpace { .. }) = self.current_builder.add_arg(arg)
+                        {
+                            self.done = true;
+                            return Some(Err(XargsError::ArgumentTooLarge));
+                        }
+                        self.have_pending_command = true;
+                        if let Some(ready) = batch {
+                            return Some(Ok(ready));
+                        }
+                    }
+                },
+            }
         }
     }
 }
 
 fn process_input(
     builder_options: &CommandBuilderOptions,
-    mut args: Box<dyn ArgumentReader>,
+    args: Box<dyn ArgumentReader + Send>,
     options: &InputProcessOptions,
 ) -> Result<CommandResult, XargsError> {
-    let mut current_builder = CommandBuilder::new(builder_options);
-    let mut have_pending_command = false;
-    let mut result = CommandResult::Success;
+    let batches = CommandBatchIter::new(builder_options, args, options);
 
-    while let Some(arg) = args.next()? {
-        if let Err(ExhaustedCommandSpace { arg, out_of_chars }) = current_builder.add_arg(arg) {
-            if out_of_chars
-                && options.exit_if_pass_char_limit
-                && (options.max_args.is_some() || options.max_lines.is_some())
-            {
-                return Err(XargsError::ArgumentTooLarge);
-            }
-            if have_pending_command {
-                result.combine(current_builder.execute()?);
-            }
+    let capacity = options.max_procs.get();
 
-            current_builder = CommandBuilder::new(builder_options);
-            if let Err(ExhaustedCommandSpace { .. }) = current_builder.add_arg(arg) {
-                return Err(XargsError::ArgumentTooLarge);
-            }
-        }
-
-        have_pending_command = true;
+    if capacity == 1 {
+        batches
+            .map(|batch| batch?.execute().map_err(XargsError::from))
+            .collect()
+    } else {
+        batches
+            .par_bridge()
+            .map(|batch| batch?.execute_parallel(capacity).map_err(XargsError::from))
+            .collect()
     }
-
-    if !options.no_run_if_empty || have_pending_command {
-        result.combine(current_builder.execute()?);
-    }
-
-    Ok(result)
 }
 
 fn parse_delimiter(s: &str) -> Result<u8, String> {
@@ -958,7 +1070,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_PROCS)
                 .short('P')
                 .long(options::MAX_PROCS)
-                .help("Run up to this many commands in parallel [NOT IMPLEMENTED]")
+                .help("Run up to this many commands in parallel")
                 .value_parser(clap::value_parser!(usize)),
         )
         .arg(
@@ -1119,13 +1231,13 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     builder_options.verbose = options.verbose;
     builder_options.close_stdin = options.arg_file.is_none();
 
-    let args_file: Box<dyn Read> = if let Some(path) = &options.arg_file {
+    let args_file: Box<dyn Read + Send> = if let Some(path) = &options.arg_file {
         Box::new(fs::File::open(path).map_err(|e| format!("Failed to open {path}: {e}"))?)
     } else {
         Box::new(io::stdin())
     };
 
-    let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
+    let mut args: Box<dyn ArgumentReader + Send> = if let Some(delimiter) = options.delimiter {
         Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
     } else {
         Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
@@ -1135,6 +1247,14 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         args = Box::new(EofArgumentReader::new(args, &eof_delimiter));
     }
 
+    let max_procs =
+        matches
+            .get_one::<usize>(options::MAX_PROCS)
+            .map_or(std::num::NonZero::<u64>::MIN, |&n| {
+                std::num::NonZero::new(n.try_into().expect("max-procs value exceeds u64 range"))
+                    .expect("max-procs must be non-zero")
+            });
+
     let result = process_input(
         &builder_options,
         args,
@@ -1143,6 +1263,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             options.max_args,
             options.max_lines,
             options.no_run_if_empty,
+            max_procs,
         ),
     )?;
     Ok(result)
@@ -1210,7 +1331,7 @@ mod tests {
             })
         }
 
-        fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+        fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
             Box::new(self.clone())
         }
     }
@@ -1275,7 +1396,8 @@ mod tests {
 
     #[test]
     fn test_chars_limiter_asks_cursor() {
-        let mut rejects: [Box<dyn CommandSizeLimiter>; 1] = [Box::new(AlwaysRejectLimiter)];
+        let mut rejects: [Box<dyn CommandSizeLimiter + Send + Sync>; 1] =
+            [Box::new(AlwaysRejectLimiter)];
         let reject_cursor = LimiterCursor {
             limiters: &mut rejects,
         };
@@ -1312,7 +1434,8 @@ mod tests {
 
     #[test]
     fn test_args_limiter_asks_cursor() {
-        let mut rejects: [Box<dyn CommandSizeLimiter>; 1] = [Box::new(AlwaysRejectLimiter)];
+        let mut rejects: [Box<dyn CommandSizeLimiter + Send + Sync>; 1] =
+            [Box::new(AlwaysRejectLimiter)];
         let reject_cursor = LimiterCursor {
             limiters: &mut rejects,
         };
@@ -1358,7 +1481,8 @@ mod tests {
 
     #[test]
     fn test_lines_limiter_asks_cursor() {
-        let mut rejects: [Box<dyn CommandSizeLimiter>; 1] = [Box::new(AlwaysRejectLimiter)];
+        let mut rejects: [Box<dyn CommandSizeLimiter + Send + Sync>; 1] =
+            [Box::new(AlwaysRejectLimiter)];
         let reject_cursor = LimiterCursor {
             limiters: &mut rejects,
         };
