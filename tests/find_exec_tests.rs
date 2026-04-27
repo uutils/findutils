@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+#![cfg(feature = "testing_commandline")]
 /// ! This file contains what would be normally be unit tests for `find::find_main`
 /// ! related to -exec[dir] and ok[dir] clauses.
 /// ! But as the tests require running an external executable, they need to be run
