@@ -1006,6 +1006,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::REPLACE_I)
                 .short('I')
                 .num_args(1)
+                .allow_hyphen_values(true)
                 .value_name("R")
                 .help(
                     "Replace R in initial arguments with names read from standard input; \
@@ -1019,6 +1020,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::EOF)
                 .short('E')
                 .num_args(1)
+                .allow_hyphen_values(true)
                 .value_name("eof-string")
                 .help(
                     "If specified, stop processing the input upon reaching an input \
@@ -1031,6 +1033,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('e')
                 .long(options::EOF)
                 .num_args(0..=1)
+                .allow_hyphen_values(true)
                 .value_name("eof-string")
                 .help("Alias for -E")
                 .overrides_with(options::EOF)
