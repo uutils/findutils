@@ -417,6 +417,12 @@ fn xargs_replace() {
         .succeeds()
         .stdout_contains("{} bar foo");
 
+    ucmd()
+        .args(&["-I", "-_", "echo", "-_ bar"])
+        .pipe_in("foo")
+        .succeeds()
+        .stdout_contains("foo bar");
+
     // Expected to fail
     ucmd()
         .args(&["-I", "echo", "_ _ bar"])
@@ -485,6 +491,12 @@ fn xargs_eof() {
             .succeeds()
             .stdout_only("ab\n");
     }
+
+    ucmd()
+        .args(&["-E", "-end"])
+        .pipe_in("ab -end ef")
+        .succeeds()
+        .stdout_only("ab\n");
 }
 
 #[test]
