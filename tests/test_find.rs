@@ -1001,3 +1001,153 @@ fn find_slashes() {
         .succeeds()
         .no_stderr();
 }
+
+// -ok / -okdir integration tests
+//
+// These tests use pipe_in() to supply the user's response.  Because pipe_in()
+// makes stdin a pipe, std::io::stdin().is_terminal() returns false inside the
+// find subprocess, so StandardDependencies::confirm reads from stdin directly
+// instead of opening /dev/tty.  No special environment variable is needed.
+
+#[test]
+fn find_ok_yes_runs_command() {
+    // When the user answers "y", -ok should run the command and print output.
+    ucmd()
+        .args(&[
+            "test_data/simple",
+            "-maxdepth",
+            "1",
+            "-name",
+            "abbbc",
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        // Pipe the affirmative response for the single file found.
+        .pipe_in("y\n")
+        .succeeds()
+        .stderr_contains("< echo") // prompt appeared
+        .stdout_contains("abbbc"); // echo ran
+}
+
+#[test]
+fn find_ok_no_skips_command() {
+    // When the user answers "n", -ok should not run the command.
+    // The expression is false so no output is produced, but find exits 0.
+    ucmd()
+        .args(&[
+            "test_data/simple",
+            "-maxdepth",
+            "1",
+            "-name",
+            "abbbc",
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        .pipe_in("n\n")
+        .succeeds()
+        .stderr_contains("< echo") // prompt still appeared
+        .no_stdout(); // but echo was not run
+}
+
+#[test]
+fn find_ok_prompt_format() {
+    // The prompt should follow GNU find's "< executable args... >? " format.
+    ucmd()
+        .args(&[
+            "test_data/simple",
+            "-maxdepth",
+            "1",
+            "-name",
+            "abbbc",
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        .pipe_in("n\n")
+        .succeeds()
+        .stderr_contains(format!(
+            "< echo {} >? ",
+            Path::new("test_data/simple")
+                .join("abbbc")
+                .to_string_lossy()
+        ));
+}
+
+#[test]
+fn find_ok_empty_response_declines() {
+    // An empty line (just Enter) should be treated as decline.
+    ucmd()
+        .args(&[
+            "test_data/simple",
+            "-maxdepth",
+            "1",
+            "-name",
+            "abbbc",
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        .pipe_in("\n")
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn find_ok_accepts_y_variants() {
+    // "Y", "yes", and " y" (leading whitespace) should all be accepted.
+    for response in &["Y\n", "yes\n", " y\n"] {
+        ucmd()
+            .args(&[
+                "test_data/simple",
+                "-maxdepth",
+                "1",
+                "-name",
+                "abbbc",
+                "-ok",
+                "echo",
+                "{}",
+                ";",
+            ])
+            .pipe_in(*response)
+            .succeeds()
+            .stdout_contains("abbbc");
+    }
+}
+
+#[test]
+fn find_okdir_yes_runs_command() {
+    // -okdir should run the command in the file's parent directory.
+    ucmd()
+        .args(&[
+            "test_data/simple",
+            "-maxdepth",
+            "1",
+            "-name",
+            "abbbc",
+            "-okdir",
+            "echo",
+            "{}",
+            ";",
+        ])
+        .pipe_in("y\n")
+        .succeeds()
+        .stderr_contains("< echo")
+        .stdout_contains(fix_up_slashes("./abbbc"));
+}
+
+#[test]
+fn find_ok_missing_semicolon() {
+    // -ok without a closing ';' should be an error (just like -exec).
+    ucmd()
+        .args(&["test_data/simple", "-ok", "echo", "{}"])
+        .pipe_in("")
+        .fails()
+        .stderr_contains("missing argument to -ok")
+        .no_stdout();
+}
