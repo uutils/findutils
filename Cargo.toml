@@ -21,7 +21,7 @@ uucore = { version = "0.8.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
 
 [dev-dependencies]
-ctor = "0.12"
+ctor = "1.0"
 filetime = "0.2"
 nix = { version = "0.31", features = ["fs"] }
 tempfile = "3"
