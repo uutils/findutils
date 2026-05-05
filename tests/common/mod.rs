@@ -12,7 +12,7 @@ pub mod test_helpers;
 // Set UUTESTS_BINARY_PATH before any tests run. The value is only used by
 // TestScenario::new() to satisfy its internal setup; tests that need a
 // specific binary pass it explicitly via TestScenario::cmd(BINARY_PATH).
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
     std::env::set_var("UUTESTS_BINARY_PATH", env!("CARGO_BIN_EXE_find"));
 }
