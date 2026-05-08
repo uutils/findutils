@@ -231,10 +231,6 @@ you contribute must at least compile without warnings for all platforms in the
 CI. However, you can use `#[cfg(...)]` attributes to create platform dependent
 features.
 
-**Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
-VirtualBox and Parallels) for development:
-<https://developer.microsoft.com/windows/downloads/virtual-machines/>
-
 ## Licensing
 
 uutils is distributed under the terms of the MIT License; see the `LICENSE` file
