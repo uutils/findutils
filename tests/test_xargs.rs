@@ -26,6 +26,24 @@ fn xargs_basics() {
 }
 
 #[test]
+fn xargs_parallel_one() {
+    ucmd()
+        .args(&["-P1"])
+        .pipe_in("abc\ndef g\\hi  'i  j \"k'")
+        .succeeds()
+        .stdout_only("abc def ghi i  j \"k\n");
+}
+
+#[test]
+fn xargs_parallel_many() {
+    ucmd()
+        .args(&["-P3"])
+        .pipe_in("abc\ndef g\\hi  'i  j \"k'")
+        .succeeds()
+        .stdout_only("abc def ghi i  j \"k\n");
+}
+
+#[test]
 fn xargs_null() {
     ucmd()
         .args(&["-0n1"])
@@ -294,6 +312,15 @@ fn xargs_exec_with_signal() {
         result.stdout_str(),
         "args=\n--no_print_cwd\n--exit_with_signal\na\n"
     );
+}
+
+#[test]
+fn xargs_exec_negative_parallel() {
+    ucmd()
+        .args(&["-P=-1"])
+        .fails_with_code(1)
+        .stderr_contains("Error:")
+        .no_stdout();
 }
 
 #[test]

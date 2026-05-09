@@ -11,6 +11,7 @@ authors = ["uutils developers"]
 
 [dependencies]
 argmax = "0.4.0"
+rayon = "1"
 chrono = "0.4.44"
 clap = "4.6"
 faccess = "0.2.4"
