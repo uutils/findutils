@@ -33,6 +33,7 @@ mod options {
     pub const NULL: &str = "null";
     pub const REPLACE: &str = "replace";
     pub const REPLACE_I: &str = "replace-I";
+    pub const SHOW_LIMITS: &str = "show-limits";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -46,6 +47,7 @@ struct Options {
     no_run_if_empty: bool,
     null: bool,
     replace: Option<String>,
+    show_limits: bool,
     verbose: bool,
     eof_delimiter: Option<String>,
 }
@@ -175,18 +177,74 @@ impl MaxCharsCommandSizeLimiter {
 
     #[cfg(unix)]
     fn new_system(env: &HashMap<OsString, OsString>) -> Self {
-        // POSIX requires that we leave 2048 bytes of space so that the child processes
-        // can have room to set their own environment variables.
-        const ARG_HEADROOM: usize = 2048;
-        let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) } as usize;
-
-        let env_size: usize = env
-            .iter()
-            .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
-            .sum();
-
-        Self::new(arg_max - ARG_HEADROOM - env_size)
+        Self::new(system_command_size_limit(env))
     }
+}
+
+const POSIX_MIN_ARG_MAX: usize = 4096;
+
+#[cfg(unix)]
+const ARG_HEADROOM: usize = 2048;
+
+#[cfg(unix)]
+fn system_arg_max() -> usize {
+    let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) };
+    if arg_max > 0 {
+        arg_max as usize
+    } else {
+        POSIX_MIN_ARG_MAX
+    }
+}
+
+#[cfg(windows)]
+fn system_arg_max() -> usize {
+    // Taken from the CreateProcess docs.
+    32767
+}
+
+fn environment_size(env: &HashMap<OsString, OsString>) -> usize {
+    env.iter()
+        .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
+        .sum()
+}
+
+#[cfg(unix)]
+fn system_command_size_limit(env: &HashMap<OsString, OsString>) -> usize {
+    // POSIX requires that we leave 2048 bytes of space so that the child
+    // processes can have room to set their own environment variables.
+    system_arg_max()
+        .saturating_sub(ARG_HEADROOM)
+        .saturating_sub(environment_size(env))
+}
+
+#[cfg(windows)]
+fn system_command_size_limit(_env: &HashMap<OsString, OsString>) -> usize {
+    system_arg_max()
+}
+
+fn show_limits(env: &HashMap<OsString, OsString>, max_chars: Option<usize>) {
+    // Match the GNU xargs diagnostics that downstream scripts parse:
+    // https://git.savannah.gnu.org/cgit/findutils.git/tree/xargs/xargs.c?h=v4.10.0#n795
+    let system_limit = system_command_size_limit(env);
+    let buffer_size = max_chars.unwrap_or(system_limit).min(system_limit);
+
+    eprintln!(
+        "Your environment variables take up {} bytes",
+        environment_size(env)
+    );
+    eprintln!(
+        "POSIX upper limit on argument length (this system): {}",
+        system_arg_max()
+    );
+    eprintln!(
+        "POSIX smallest allowable upper limit on argument length (all systems): {POSIX_MIN_ARG_MAX}"
+    );
+    eprintln!("Maximum length of command we could actually use: {system_limit}");
+    eprintln!("Size of command buffer we are actually using: {buffer_size}");
+    eprintln!(
+        "Maximum parallelism (--max-procs must be no greater): {}",
+        i32::MAX
+    );
 }
 
 impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
@@ -884,6 +942,7 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
         no_run_if_empty: options.no_run_if_empty,
         null: options.null,
         replace,
+        show_limits: options.show_limits,
         verbose: options.verbose,
         eof_delimiter,
     }
@@ -986,6 +1045,12 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .value_parser(validate_positive_usize),
         )
         .arg(
+            Arg::new(options::SHOW_LIMITS)
+                .long(options::SHOW_LIMITS)
+                .help("Display the command-line length limits and exit")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::VERBOSE)
                 .short('t')
                 .long(options::VERBOSE)
@@ -1082,6 +1147,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                         .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
                 })
             }),
+        show_limits: matches.get_flag(options::SHOW_LIMITS),
         verbose: matches.get_flag(options::VERBOSE),
         eof_delimiter: [options::EOF_E, options::EOF].iter().find_map(|&option| {
             matches.contains_id(option).then(|| {
@@ -1101,6 +1167,11 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         _ => ExecAction::Echo,
     };
     let env = std::env::vars_os().collect();
+
+    if options.show_limits {
+        show_limits(&env, options.max_chars);
+        return Ok(CommandResult::Success);
+    }
 
     let mut limiters = LimiterCollection::new();
     if let Some(max_args) = options.max_args {
