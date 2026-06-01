@@ -56,7 +56,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -67,7 +67,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -284,7 +284,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -334,7 +334,7 @@ dependencies = [
  "onig",
  "regex",
  "tempfile",
- "uucore 0.8.0",
+ "uucore",
  "uutests",
  "walkdir",
 ]
@@ -516,7 +516,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -830,7 +830,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -922,7 +922,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -952,7 +952,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -962,7 +962,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1082,37 +1082,14 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uucore"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07d779636d827cde4100f0e65ff3fd23b0b1f1195055475c6e6813d425f30c8e"
-dependencies = [
- "bstr",
- "clap",
- "dunce",
- "fluent",
- "fluent-bundle",
- "fluent-syntax",
- "libc",
- "nix 0.31.3",
- "os_display",
- "rustc-hash",
- "rustix",
- "thiserror",
- "unic-langid",
- "uucore_procs 0.8.0",
- "wild",
- "winapi-util",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "uucore"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "069b34217c27f611e1589f540f58118dbf226a9e407d38ab472052ff075a1dc2"
 dependencies = [
+ "bstr",
  "clap",
  "dns-lookup",
+ "dunce",
  "fluent",
  "fluent-syntax",
  "jiff",
@@ -1124,18 +1101,10 @@ dependencies = [
  "thiserror",
  "time",
  "unic-langid",
- "uucore_procs 0.9.0",
+ "uucore_procs",
  "wild",
-]
-
-[[package]]
-name = "uucore_procs"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da865e8a648b260dbd89fca76d0801995877ab27a4e259b6dec30ba9743b86ab"
-dependencies = [
- "proc-macro2",
- "quote",
+ "winapi-util",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1162,7 +1131,7 @@ dependencies = [
  "regex",
  "rlimit",
  "tempfile",
- "uucore 0.9.0",
+ "uucore",
  "xattr",
 ]
 
@@ -1304,7 +1273,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
