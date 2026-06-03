@@ -8,20 +8,26 @@
 /// ! But as the tests require running an external executable, they need to be run
 /// ! as integration tests so we can ensure that our testing-commandline binary
 /// ! has been built.
-use std::env;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
+#[cfg(feature = "testing_commandline")]
+use std::{env, fs::File, io::Read};
+
+#[cfg(feature = "testing_commandline")]
 use tempfile::Builder;
 
-use common::test_helpers::{
-    fix_up_slashes, get_dir_entry_for, path_to_testing_commandline, FakeDependencies,
-};
-use findutils::find::matchers::exec::{MultiExecMatcher, SingleExecMatcher};
-use findutils::find::matchers::{Matcher, MatcherIO};
+#[cfg(feature = "testing_commandline")]
+use common::test_helpers::{fix_up_slashes, path_to_testing_commandline};
+use common::test_helpers::{get_dir_entry_for, FakeDependencies};
+use findutils::find::matchers::exec::MultiExecMatcher;
+#[cfg(feature = "testing_commandline")]
+use findutils::find::matchers::exec::SingleExecMatcher;
+use findutils::find::matchers::Matcher;
+#[cfg(feature = "testing_commandline")]
+use findutils::find::matchers::MatcherIO;
 
 mod common;
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn matching_executes_code() {
     let temp_dir = Builder::new()
@@ -53,6 +59,7 @@ fn matching_executes_code() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn matching_executes_code_in_files_directory() {
     let temp_dir = Builder::new()
@@ -84,6 +91,7 @@ fn matching_executes_code_in_files_directory() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn matching_embedded_filename() {
     let temp_dir = Builder::new()
@@ -115,6 +123,7 @@ fn matching_embedded_filename() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 /// Running "find . -execdir whatever \;" failed with a No such file or directory error.
 /// It's now fixed, and this is a regression test to check that it stays fixed.
@@ -148,6 +157,7 @@ fn execdir_in_current_directory() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 /// Regression test for "find / -execdir whatever \;"
 fn execdir_in_root_directory() {
@@ -187,6 +197,7 @@ fn execdir_in_root_directory() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn matching_fails_if_executable_fails() {
     let temp_dir = Builder::new()
@@ -225,6 +236,7 @@ fn matching_fails_if_executable_fails() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn matching_multi_executes_code() {
     let temp_dir = Builder::new()
@@ -258,6 +270,7 @@ fn matching_multi_executes_code() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn execdir_multi_in_current_directory() {
     let temp_dir = Builder::new()
@@ -292,6 +305,7 @@ fn execdir_multi_in_current_directory() {
     );
 }
 
+#[cfg(feature = "testing_commandline")]
 #[test]
 fn multi_set_exit_code_if_executable_fails() {
     let temp_dir = Builder::new()

@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::cell::RefCell;
+#[cfg(feature = "testing_commandline")]
 use std::env;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
@@ -52,6 +53,7 @@ impl Dependencies for FakeDependencies {
     }
 }
 
+#[cfg(feature = "testing_commandline")]
 pub fn path_to_testing_commandline() -> String {
     let mut path_to_use = env::current_exe()
         // this will be something along the lines of /my/homedir/findutils/target/debug/deps/findutils-5532804878869ef1

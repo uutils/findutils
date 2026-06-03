@@ -46,7 +46,7 @@ jobs:
 
       - name: Test
         run: |
-          cargo test
+          cargo test --features testing_commandline
 
   fmt:
     name: cargo fmt --all -- --check
