@@ -62,6 +62,8 @@ mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
     use crate::find::tests::FakeDependencies;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn empty_files() {
@@ -95,5 +97,74 @@ mod tests {
 
         let file_info = get_dir_entry_for(&temp_dir_path, subdir_name);
         assert!(!matcher.matches(&file_info, &mut deps.new_matcher_io()));
+    }
+
+    #[test]
+    fn empty_file_vs_empty_directory() {
+        let empty_file_info = get_dir_entry_for("test_data/simple", "abbbc");
+
+        let temp_dir = Builder::new()
+            .prefix("empty_file_vs_empty_directory")
+            .tempdir()
+            .unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let subdir_name = "empty_subdir";
+        std::fs::create_dir(temp_dir.path().join(subdir_name)).unwrap();
+
+        let matcher = EmptyMatcher::new();
+        let deps = FakeDependencies::new();
+
+        // Both an empty file and an empty directory should match.
+        assert!(
+            matcher.matches(&empty_file_info, &mut deps.new_matcher_io()),
+            "empty file should match"
+        );
+        let empty_dir_info = get_dir_entry_for(&temp_dir_path, subdir_name);
+        assert!(
+            matcher.matches(&empty_dir_info, &mut deps.new_matcher_io()),
+            "empty directory should match"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn non_readable_directory() {
+        let temp_dir = Builder::new()
+            .prefix("non_readable_directory")
+            .tempdir()
+            .unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let subdir_name = "unreadable";
+        std::fs::create_dir(temp_dir.path().join(subdir_name)).unwrap();
+
+        let mut perms = std::fs::metadata(temp_dir.path().join(subdir_name))
+            .unwrap()
+            .permissions();
+        perms.set_mode(0o000);
+        std::fs::set_permissions(temp_dir.path().join(subdir_name), perms).unwrap();
+
+        // If we can still read the directory, we're likely running as root.
+        if std::fs::read_dir(temp_dir.path().join(subdir_name)).is_ok() {
+            // Restore permissions before skipping.
+            let mut perms = std::fs::metadata(temp_dir.path().join(subdir_name))
+                .unwrap()
+                .permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(temp_dir.path().join(subdir_name), perms).unwrap();
+            return;
+        }
+
+        let matcher = EmptyMatcher::new();
+        let deps = FakeDependencies::new();
+
+        let file_info = get_dir_entry_for(&temp_dir_path, subdir_name);
+        assert!(!matcher.matches(&file_info, &mut deps.new_matcher_io()));
+
+        // Restore permissions so tempdir can be cleaned up.
+        let mut perms = std::fs::metadata(temp_dir.path().join(subdir_name))
+            .unwrap()
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(temp_dir.path().join(subdir_name), perms).unwrap();
     }
 }
