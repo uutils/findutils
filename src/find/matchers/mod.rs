@@ -187,6 +187,14 @@ impl MatcherIO<'_> {
     pub fn now(&self) -> SystemTime {
         self.deps.now()
     }
+
+    /// Prompt the user and return whether they confirmed.  Delegates to
+    /// `Dependencies::confirm` so that matchers stay testable without a real
+    /// terminal — unit tests inject preset responses via `FakeDependencies`.
+    #[must_use]
+    pub fn confirm(&self, prompt: &str) -> bool {
+        self.deps.confirm(prompt)
+    }
 }
 
 /// A basic interface that can be used to determine whether a directory entry
@@ -667,6 +675,31 @@ fn build_matcher_tree(
                     }
                     _ => unreachable!("Encountered unexpected value {}", args[arg_index]),
                 }
+            }
+            "-ok" | "-okdir" => {
+                // -ok is like -exec ... ; but prompts before each invocation.
+                // Only ';' is accepted: POSIX does not define -ok ... + and
+                // GNU find rejects it (batch mode makes no sense with prompts).
+                let mut arg_index = i + 1;
+                while arg_index < args.len() && args[arg_index] != ";" {
+                    arg_index += 1;
+                }
+                if arg_index < i + 2 || arg_index == args.len() {
+                    // Need at least the executable and the terminating ';'.
+                    return Err(From::from(format!("missing argument to {}", args[i])));
+                }
+                let expression = args[i];
+                let executable = args[i + 1];
+                let exec_args = &args[i + 2..arg_index];
+                i = arg_index;
+                Some(
+                    SingleExecMatcher::new_interactive(
+                        executable,
+                        exec_args,
+                        expression == "-okdir",
+                    )?
+                    .into_box(),
+                )
             }
             #[cfg(unix)]
             "-inum" => {
@@ -1618,6 +1651,67 @@ mod tests {
         let mut config = Config::default();
         build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+", ";"], &mut config)
             .expect("only {} + should be considered a multi-exec");
+    }
+
+    #[test]
+    fn build_top_level_ok_not_enough_args() {
+        // -ok follows the same validation rules as -exec for missing arguments.
+        let mut config = Config::default();
+        if let Err(e) = build_top_level_matcher(&["-ok"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing -ok with no executable or semicolon should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-ok", ";"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing -ok with no executable should fail");
+        }
+
+        if let Err(e) = build_top_level_matcher(&["-ok", "foo"], &mut config) {
+            assert!(e.to_string().contains("missing argument"));
+        } else {
+            panic!("parsing -ok without terminating ';' should fail");
+        }
+    }
+
+    #[test]
+    fn build_top_level_ok_missing_semicolon() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["-ok", "echo", "{}"], &mut config)
+            .err()
+            .expect("parsing -ok without ';' should fail");
+    }
+
+    #[test]
+    fn build_top_level_ok_parses_correctly() {
+        let mut config = Config::default();
+        build_top_level_matcher(&["-ok", "echo", "{}", ";"], &mut config)
+            .expect("-ok with executable, {} and ';' should succeed");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn build_top_level_ok_matches_with_confirmation() {
+        // When the user confirms, -ok should match (run the command and return
+        // its exit status).  When the user declines, -ok is false and the
+        // command is not run.
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+        let mut config = Config::default();
+
+        // Confirmed: -ok behaves like -exec (prints nothing; has_side_effects
+        // suppresses the default print, same as -exec).
+        let matcher = build_top_level_matcher(&["-ok", "true", ";"], &mut config).unwrap();
+        let deps = FakeDependencies::new();
+        deps.push_confirm_response(true);
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+
+        // Declined: -ok is false, so the default print fires.
+        let matcher = build_top_level_matcher(&["-ok", "true", ";"], &mut config).unwrap();
+        let deps = FakeDependencies::new();
+        deps.push_confirm_response(false);
+        assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
 
     #[test]

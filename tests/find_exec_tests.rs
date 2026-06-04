@@ -18,6 +18,84 @@ use common::test_helpers::{fix_up_slashes, path_to_testing_commandline, FakeDepe
 use findutils::find::find_main;
 
 mod common;
+
+#[test]
+fn find_ok_confirmed() {
+    let temp_dir = Builder::new()
+        .prefix("find_ok_confirmed")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let deps = FakeDependencies::new();
+    deps.push_confirm_response(true);
+
+    let rc = find_main(
+        &[
+            "find",
+            &fix_up_slashes("./test_data/simple"),
+            "-maxdepth",
+            "1",
+            "-name",
+            "abbbc",
+            "-ok",
+            &path_to_testing_commandline(),
+            temp_dir_path.as_ref(),
+            "abc",
+            "{}",
+            "xyz",
+            ";",
+        ],
+        &deps,
+    );
+
+    assert_eq!(rc, 0);
+    assert_eq!(deps.get_output_as_string(), "");
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\nabc\n./test_data/simple/abbbc\nxyz\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
+fn find_ok_declined() {
+    let temp_dir = Builder::new().prefix("find_ok_declined").tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let deps = FakeDependencies::new();
+    deps.push_confirm_response(false);
+
+    let rc = find_main(
+        &[
+            "find",
+            &fix_up_slashes("./test_data/simple"),
+            "-maxdepth",
+            "1",
+            "-name",
+            "abbbc",
+            "-ok",
+            &path_to_testing_commandline(),
+            temp_dir_path.as_ref(),
+            "abc",
+            "{}",
+            "xyz",
+            ";",
+        ],
+        &deps,
+    );
+
+    assert_eq!(rc, 0);
+    // -ok is false when declined, so no default print either.
+    assert_eq!(deps.get_output_as_string(), "");
+    // Command did not run.
+    assert!(!temp_dir.path().join("1.txt").exists());
+}
 #[test]
 fn find_exec() {
     let temp_dir = tempfile::Builder::new()

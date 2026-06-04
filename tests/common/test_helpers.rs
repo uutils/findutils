@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::env;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
@@ -19,6 +20,8 @@ use findutils::find::Dependencies;
 pub struct FakeDependencies {
     pub output: RefCell<Cursor<Vec<u8>>>,
     now: SystemTime,
+    /// Preset responses for confirm(), consumed front-to-back.
+    confirm_responses: RefCell<VecDeque<bool>>,
 }
 
 impl FakeDependencies {
@@ -26,6 +29,7 @@ impl FakeDependencies {
         Self {
             output: RefCell::new(Cursor::new(Vec::<u8>::new())),
             now: SystemTime::now(),
+            confirm_responses: RefCell::new(VecDeque::new()),
         }
     }
 
@@ -40,6 +44,11 @@ impl FakeDependencies {
         cursor.read_to_string(&mut contents).unwrap();
         contents
     }
+
+    /// Queue a response to be returned by the next call to confirm().
+    pub fn push_confirm_response(&self, response: bool) {
+        self.confirm_responses.borrow_mut().push_back(response);
+    }
 }
 
 impl Dependencies for FakeDependencies {
@@ -49,6 +58,15 @@ impl Dependencies for FakeDependencies {
 
     fn now(&self) -> SystemTime {
         self.now
+    }
+
+    fn confirm(&self, _prompt: &str) -> bool {
+        // Return the next preset response; default to false (decline) so
+        // that a test that forgets to queue a response fails safely.
+        self.confirm_responses
+            .borrow_mut()
+            .pop_front()
+            .unwrap_or(false)
     }
 }
 
