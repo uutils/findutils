@@ -986,6 +986,21 @@ fn find_fprintf() {
 }
 
 #[test]
+fn find_fprintf_missing_arguments() {
+    // Regression test: `-fprintf` with no file/format argument must report a
+    // missing-argument error instead of panicking (see issue #696).
+    ucmd()
+        .args(&["-fprintf"])
+        .fails()
+        .stderr_contains("missing argument to -fprintf");
+
+    ucmd()
+        .args(&["-fprintf", "/tmp/find_fprintf_out"])
+        .fails()
+        .stderr_contains("missing argument to -fprintf");
+}
+
+#[test]
 fn find_ls() {
     ucmd()
         .args(&["./test_data/simple/subdir", "-ls"])
