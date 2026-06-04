@@ -1086,7 +1086,7 @@ fn find_ok_prompt_format() {
         .pipe_in("n\n")
         .succeeds()
         .stderr_contains(format!(
-            "< echo {} >? ",
+            "< echo ... {} > ? ",
             Path::new("test_data/simple")
                 .join("abbbc")
                 .to_string_lossy()
