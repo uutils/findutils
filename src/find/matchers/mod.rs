@@ -477,7 +477,7 @@ fn build_matcher_tree(
                 Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
             }
             "-fprintf" => {
-                if i >= args.len() - 2 {
+                if i + 2 >= args.len() {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
 
