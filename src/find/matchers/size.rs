@@ -170,4 +170,78 @@ mod tests {
             "512-byte file should match size of 1 block"
         );
     }
+
+    #[test]
+    fn size_matcher_zero_byte_file() {
+        let file_info = get_dir_entry_for("./test_data/simple", "abbbc");
+        let deps = FakeDependencies::new();
+
+        let equal_to_0 = SizeMatcher::new(ComparableValue::EqualTo(0), "c").unwrap();
+        assert!(
+            equal_to_0.matches(&file_info, &mut deps.new_matcher_io()),
+            "zero-byte file should match size of 0 bytes"
+        );
+
+        let more_than_0 = SizeMatcher::new(ComparableValue::MoreThan(0), "c").unwrap();
+        assert!(
+            !more_than_0.matches(&file_info, &mut deps.new_matcher_io()),
+            "zero-byte file should not match size of >0 bytes"
+        );
+
+        let less_than_1 = SizeMatcher::new(ComparableValue::LessThan(1), "c").unwrap();
+        assert!(
+            less_than_1.matches(&file_info, &mut deps.new_matcher_io()),
+            "zero-byte file should match size of <1 byte"
+        );
+    }
+
+    #[test]
+    fn size_matcher_boundary_values() {
+        let file_info = get_dir_entry_for("./test_data/size", "512bytes");
+        let deps = FakeDependencies::new();
+
+        // bytes (c): 512 bytes = 512
+        let eq_512_c = SizeMatcher::new(ComparableValue::EqualTo(512), "c").unwrap();
+        assert!(eq_512_c.matches(&file_info, &mut deps.new_matcher_io()));
+        let gt_511_c = SizeMatcher::new(ComparableValue::MoreThan(511), "c").unwrap();
+        assert!(gt_511_c.matches(&file_info, &mut deps.new_matcher_io()));
+        let lt_513_c = SizeMatcher::new(ComparableValue::LessThan(513), "c").unwrap();
+        assert!(lt_513_c.matches(&file_info, &mut deps.new_matcher_io()));
+
+        // words (w): 512 bytes = 256 two-byte words
+        let eq_256_w = SizeMatcher::new(ComparableValue::EqualTo(256), "w").unwrap();
+        assert!(eq_256_w.matches(&file_info, &mut deps.new_matcher_io()));
+        let gt_255_w = SizeMatcher::new(ComparableValue::MoreThan(255), "w").unwrap();
+        assert!(gt_255_w.matches(&file_info, &mut deps.new_matcher_io()));
+
+        // blocks (b): 512 bytes = 1 block
+        let eq_1_b = SizeMatcher::new(ComparableValue::EqualTo(1), "b").unwrap();
+        assert!(eq_1_b.matches(&file_info, &mut deps.new_matcher_io()));
+        let gt_1_b = SizeMatcher::new(ComparableValue::MoreThan(1), "b").unwrap();
+        assert!(!gt_1_b.matches(&file_info, &mut deps.new_matcher_io()));
+        let lt_1_b = SizeMatcher::new(ComparableValue::LessThan(1), "b").unwrap();
+        assert!(!lt_1_b.matches(&file_info, &mut deps.new_matcher_io()));
+        let gt_0_b = SizeMatcher::new(ComparableValue::MoreThan(0), "b").unwrap();
+        assert!(gt_0_b.matches(&file_info, &mut deps.new_matcher_io()));
+
+        // kibibytes (k): 512 bytes = 1k (rounded up)
+        let eq_1_k = SizeMatcher::new(ComparableValue::EqualTo(1), "k").unwrap();
+        assert!(eq_1_k.matches(&file_info, &mut deps.new_matcher_io()));
+        let gt_1_k = SizeMatcher::new(ComparableValue::MoreThan(1), "k").unwrap();
+        assert!(!gt_1_k.matches(&file_info, &mut deps.new_matcher_io()));
+        let lt_2_k = SizeMatcher::new(ComparableValue::LessThan(2), "k").unwrap();
+        assert!(lt_2_k.matches(&file_info, &mut deps.new_matcher_io()));
+
+        // mebibytes (M): 512 bytes = 1M (rounded up)
+        let eq_1_m = SizeMatcher::new(ComparableValue::EqualTo(1), "M").unwrap();
+        assert!(eq_1_m.matches(&file_info, &mut deps.new_matcher_io()));
+        let gt_1_m = SizeMatcher::new(ComparableValue::MoreThan(1), "M").unwrap();
+        assert!(!gt_1_m.matches(&file_info, &mut deps.new_matcher_io()));
+
+        // gibibytes (G): 512 bytes = 1G (rounded up)
+        let eq_1_g = SizeMatcher::new(ComparableValue::EqualTo(1), "G").unwrap();
+        assert!(eq_1_g.matches(&file_info, &mut deps.new_matcher_io()));
+        let gt_1_g = SizeMatcher::new(ComparableValue::MoreThan(1), "G").unwrap();
+        assert!(!gt_1_g.matches(&file_info, &mut deps.new_matcher_io()));
+    }
 }

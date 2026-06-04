@@ -11,6 +11,8 @@ check out these documents:
 - Our community's [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 - [DEVELOPMENT.md](./DEVELOPMENT.md) for setting up your development
   environment.
+- Our [Review Guidelines](https://uutils.github.io/reviews/) for what we expect
+  from a pull request and how reviews are done.
 
 Now follows a very important warning:
 
@@ -230,10 +232,6 @@ We take pride in supporting many operating systems and architectures. Any code
 you contribute must at least compile without warnings for all platforms in the
 CI. However, you can use `#[cfg(...)]` attributes to create platform dependent
 features.
-
-**Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
-VirtualBox and Parallels) for development:
-<https://developer.microsoft.com/windows/downloads/virtual-machines/>
 
 ## Licensing
 

@@ -15,3 +15,5 @@ repos:
         pass_filenames: false
         types: [file, rust]
         language: system
+ci:
+  skip: [rust-linting, rust-clippy]

@@ -21,10 +21,13 @@ mod options {
 
     pub const ARG_FILE: &str = "arg-file";
     pub const DELIMITER: &str = "delimiter";
+    pub const EOF: &str = "eof";
+    pub const EOF_E: &str = "eof-E";
     pub const EXIT: &str = "exit";
     pub const MAX_ARGS: &str = "max-args";
     pub const MAX_CHARS: &str = "max-chars";
     pub const MAX_LINES: &str = "max-lines";
+    pub const MAX_LINES_L: &str = "max-lines-l";
     pub const MAX_PROCS: &str = "max-procs";
     pub const NO_RUN_IF_EMPTY: &str = "no-run-if-empty";
     pub const NULL: &str = "null";
@@ -44,6 +47,7 @@ struct Options {
     null: bool,
     replace: Option<String>,
     verbose: bool,
+    eof_delimiter: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -637,6 +641,39 @@ where
     }
 }
 
+struct EofArgumentReader {
+    reader: Box<dyn ArgumentReader>,
+    eof_delimiter: OsString,
+    eof_found: bool,
+}
+
+impl EofArgumentReader {
+    fn new(reader: Box<dyn ArgumentReader>, eof_delimiter: &String) -> Self {
+        Self {
+            reader,
+            eof_delimiter: eof_delimiter.into(),
+            eof_found: false,
+        }
+    }
+}
+
+impl ArgumentReader for EofArgumentReader {
+    fn next(&mut self) -> io::Result<Option<Argument>> {
+        Ok(if self.eof_found {
+            None
+        } else {
+            self.reader.next()?.and_then(|arg| {
+                if arg.arg == self.eof_delimiter {
+                    self.eof_found = true;
+                    None
+                } else {
+                    Some(arg)
+                }
+            })
+        })
+    }
+}
+
 #[derive(Debug)]
 enum XargsError {
     ArgumentTooLarge,
@@ -775,10 +812,7 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
     }
 }
 
-fn normalize_options<'a>(
-    options: &'a Options,
-    matches: &'a clap::ArgMatches,
-) -> (Option<usize>, Option<usize>, &'a Option<String>, Option<u8>) {
+fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     let (max_args, max_lines, replace) =
         match (options.max_args, options.max_lines, &options.replace) {
             // These 3 options are mutually exclusive.
@@ -787,10 +821,10 @@ fn normalize_options<'a>(
                 // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
                 // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
                 // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
-                (Some(1), None, &options.replace)
+                (Some(1), None, options.replace)
             }
             (Some(_), None, None) | (None, Some(_), None) | (None, None, None) => {
-                (options.max_args, options.max_lines, &None)
+                (options.max_args, options.max_lines, None)
             }
             _ => {
                 eprintln!(
@@ -808,11 +842,11 @@ fn normalize_options<'a>(
                     .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
                     .max();
                 if lines_index > args_index && lines_index > replace_index {
-                    (None, options.max_lines, &None)
+                    (None, options.max_lines, None)
                 } else if args_index > lines_index && args_index > replace_index {
-                    (options.max_args, None, &None)
+                    (options.max_args, None, None)
                 } else {
-                    (Some(1), None, &options.replace)
+                    (Some(1), None, options.replace)
                 }
             }
         };
@@ -834,7 +868,25 @@ fn normalize_options<'a>(
         (None, false) => replace.as_ref().map(|_| b'\n'),
     };
 
-    (max_args, max_lines, replace, delimiter)
+    let eof_delimiter = if delimiter.is_some() {
+        None
+    } else {
+        options.eof_delimiter
+    };
+
+    Options {
+        arg_file: options.arg_file,
+        delimiter,
+        exit_if_pass_char_limit: options.exit_if_pass_char_limit,
+        max_args,
+        max_chars: options.max_chars,
+        max_lines,
+        no_run_if_empty: options.no_run_if_empty,
+        null: options.null,
+        replace,
+        verbose: options.verbose,
+        eof_delimiter,
+    }
 }
 
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
@@ -892,6 +944,17 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .value_parser(validate_positive_usize),
         )
         .arg(
+            Arg::new(options::MAX_LINES_L)
+                .short('l')
+                .num_args(0..=1)
+                .help(
+                    "Equivalent to -L, but with a default value of 1 if max-lines \
+                    is unspecified",
+                )
+                .value_name("max-lines")
+                .value_parser(validate_positive_usize),
+        )
+        .arg(
             Arg::new(options::MAX_PROCS)
                 .short('P')
                 .long(options::MAX_PROCS)
@@ -943,6 +1006,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::REPLACE_I)
                 .short('I')
                 .num_args(1)
+                .allow_hyphen_values(true)
                 .value_name("R")
                 .help(
                     "Replace R in initial arguments with names read from standard input; \
@@ -950,6 +1014,29 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                     (mutually exclusive with -L and -n)",
                 )
                 .overrides_with(options::REPLACE)
+                .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+            Arg::new(options::EOF)
+                .short('E')
+                .num_args(1)
+                .allow_hyphen_values(true)
+                .value_name("eof-string")
+                .help(
+                    "If specified, stop processing the input upon reaching an input \
+                        item that matches eof-string (ignored if -d or -0 is used)",
+                )
+                .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+            Arg::new(options::EOF_E)
+                .short('e')
+                .long(options::EOF)
+                .num_args(0..=1)
+                .allow_hyphen_values(true)
+                .value_name("eof-string")
+                .help("Alias for -E")
+                .overrides_with(options::EOF)
                 .value_parser(clap::value_parser!(String)),
         )
         .try_get_matches_from(args);
@@ -975,7 +1062,15 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         exit_if_pass_char_limit: matches.get_flag(options::EXIT),
         max_args: matches.get_one::<usize>(options::MAX_ARGS).copied(),
         max_chars: matches.get_one::<usize>(options::MAX_CHARS).copied(),
-        max_lines: matches.get_one::<usize>(options::MAX_LINES).copied(),
+        max_lines: [options::MAX_LINES, options::MAX_LINES_L]
+            .iter()
+            .find_map(|&option| {
+                matches.contains_id(option).then(|| {
+                    matches
+                        .get_one::<usize>(option)
+                        .map_or_else(|| 1, std::borrow::ToOwned::to_owned)
+                })
+            }),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
         replace: [options::REPLACE_I, options::REPLACE]
@@ -988,9 +1083,16 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 })
             }),
         verbose: matches.get_flag(options::VERBOSE),
+        eof_delimiter: [options::EOF_E, options::EOF].iter().find_map(|&option| {
+            matches.contains_id(option).then(|| {
+                matches
+                    .get_one::<String>(option)
+                    .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
+            })
+        }),
     };
 
-    let (max_args, max_lines, replace, delimiter) = normalize_options(&options, &matches);
+    let options = normalize_options(options, &matches);
 
     let action = match matches.get_many::<OsString>(options::COMMAND) {
         Some(args) if args.len() > 0 => {
@@ -1001,10 +1103,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     let env = std::env::vars_os().collect();
 
     let mut limiters = LimiterCollection::new();
-    if let Some(max_args) = max_args {
+    if let Some(max_args) = options.max_args {
         limiters.add(MaxArgsCommandSizeLimiter::new(max_args));
     }
-    if let Some(max_lines) = max_lines {
+    if let Some(max_lines) = options.max_lines {
         limiters.add(MaxLinesCommandSizeLimiter::new(max_lines));
     }
     if let Some(max_chars) = options.max_chars {
@@ -1012,10 +1114,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     }
     limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
 
-    let mut builder_options = CommandBuilderOptions::new(action, env, limiters, replace.clone())
-        .map_err(|_| {
-            "Base command and environment are too large to fit into one command execution"
-        })?;
+    let mut builder_options =
+        CommandBuilderOptions::new(action, env, limiters, options.replace.clone()).map_err(
+            |_| "Base command and environment are too large to fit into one command execution",
+        )?;
 
     builder_options.verbose = options.verbose;
     builder_options.close_stdin = options.arg_file.is_none();
@@ -1026,19 +1128,23 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         Box::new(io::stdin())
     };
 
-    let args: Box<dyn ArgumentReader> = if let Some(delimiter) = delimiter {
+    let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
         Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
     } else {
         Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
     };
+
+    if let Some(eof_delimiter) = options.eof_delimiter {
+        args = Box::new(EofArgumentReader::new(args, &eof_delimiter));
+    }
 
     let result = process_input(
         &builder_options,
         args,
         &InputProcessOptions::new(
             options.exit_if_pass_char_limit,
-            max_args,
-            max_lines,
+            options.max_args,
+            options.max_lines,
             options.no_run_if_empty,
         ),
     )?;
@@ -1291,6 +1397,47 @@ mod tests {
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("ab \""));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("xy' z"));
         assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_eof_argument_reader() {
+        let filter = String::from("def");
+
+        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
+            b"abc def ghi",
+        )]));
+        let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(wrapper.next().unwrap(), None);
+        assert_eq!(wrapper.next().unwrap(), None);
+
+        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
+            b"abc define undef undefined ghi",
+        )]));
+        let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("define"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("undef"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("undefined"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
+        assert_eq!(wrapper.next().unwrap(), None);
+
+        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
+            Chunk::Data(b"abc "),
+            Chunk::Error(io::ErrorKind::Interrupted),
+            Chunk::Data(b"deF "),
+            Chunk::Error(io::ErrorKind::BrokenPipe),
+            Chunk::Data(b"ghi "),
+            Chunk::Data(b"def "),
+            Chunk::Error(io::ErrorKind::BrokenPipe),
+        ]));
+        let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
+        assert!(wrapper.next().err().unwrap().kind() == io::ErrorKind::BrokenPipe);
+        assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
+        assert_eq!(wrapper.next().unwrap(), None);
+        assert_eq!(wrapper.next().unwrap(), None);
     }
 
     #[test]

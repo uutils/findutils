@@ -30,8 +30,9 @@ impl fmt::Display for ParseRegexTypeError {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum RegexType {
+    #[default]
     Emacs,
     Grep,
     PosixBasic,
@@ -71,12 +72,6 @@ impl FromStr for RegexType {
             "ed" | "sed" => Ok(Self::PosixBasic),
             _ => Err(ParseRegexTypeError(s.to_owned())),
         }
-    }
-}
-
-impl Default for RegexType {
-    fn default() -> Self {
-        Self::Emacs
     }
 }
 

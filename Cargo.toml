@@ -10,27 +10,25 @@ description = "Rust implementation of GNU findutils"
 authors = ["uutils developers"]
 
 [dependencies]
-chrono = "0.4.41"
-clap = "4.5"
+argmax = "0.4.0"
+chrono = "0.4.44"
+clap = "4.6"
 faccess = "0.2.4"
+nix = { version = "0.31", features = ["fs", "user"] }
+onig = { version = "6.5", default-features = false }
+regex = "1.12"
+uucore = { version = "0.9.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
-regex = "1.11"
-onig = { version = "6.4", default-features = false }
-uucore = { version = "0.0.30", features = ["entries", "fs", "fsext", "mode"] }
-nix = { version = "0.30", features = ["fs", "user"] }
-argmax = "0.3.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 xattr = "1.5.0"
 
 [dev-dependencies]
-assert_cmd = "2"
+ctor = "1.0"
 filetime = "0.2"
-nix = { version = "0.30", features = ["fs"] }
-predicates = "3"
-serial_test = "3.2"
+nix = { version = "0.31", features = ["fs"] }
 tempfile = "3"
-pretty_assertions = "1.4.1"
+uutests = "0.9.0"
 
 [[bin]]
 name = "find"
@@ -44,11 +42,13 @@ path = "src/xargs/main.rs"
 name = "testing-commandline"
 path = "src/testing/commandline/main.rs"
 
-# The profile that 'cargo dist' will build with
-[profile.dist]
-inherits = "release"
+[profile.release]
 lto = "thin"
+codegen-units = 1
 
+[profile.release-fast]
+inherits = "release"
+panic = "abort"
 
 [lints.clippy]
 multiple_crate_versions = "allow"
