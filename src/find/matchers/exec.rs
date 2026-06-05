@@ -83,20 +83,16 @@ impl Matcher for SingleExecMatcher {
         };
 
         if self.interactive {
-            let rendered_args: Vec<String> = self
-                .args
-                .iter()
-                .map(|arg| match arg {
-                    Arg::LiteralArg(a) => a.to_string_lossy().into_owned(),
-                    Arg::FileArg(parts) => parts
-                        .join(path_to_file.as_os_str())
-                        .to_string_lossy()
-                        .into_owned(),
-                })
-                .collect();
-            let mut prompt_parts = vec![self.executable.clone()];
-            prompt_parts.extend(rendered_args);
-            let prompt = format!("< {} >? ", prompt_parts.join(" "));
+            // GNU find prints a fixed, abbreviated prompt of the form
+            // "< executable ... pathname > ? ".  It does not render the
+            // substituted argument list, and always shows the full path of
+            // the entry being processed (even for -okdir, whose command runs
+            // with the "./basename" form).
+            let prompt = format!(
+                "< {} ... {} > ? ",
+                self.executable,
+                file_info.path().to_string_lossy()
+            );
 
             if !matcher_io.confirm(&prompt) {
                 return false;
