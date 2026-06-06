@@ -20,6 +20,14 @@ regex = "1.12"
 uucore = { version = "0.8.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
 
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+]
+
 [dev-dependencies]
 ctor = "0.9"
 filetime = "0.2"

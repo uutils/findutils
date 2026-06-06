@@ -84,29 +84,138 @@ fn format_permissions(mode: uucore::libc::mode_t) -> String {
 
 #[cfg(windows)]
 fn format_permissions(file_attributes: u32) -> String {
-    let mut attributes = Vec::new();
-
     // https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
-    if file_attributes & 0x0001 != 0 {
-        attributes.push("read-only");
-    }
-    if file_attributes & 0x0002 != 0 {
-        attributes.push("hidden");
-    }
-    if file_attributes & 0x0004 != 0 {
-        attributes.push("system");
-    }
-    if file_attributes & 0x0020 != 0 {
-        attributes.push("archive");
-    }
-    if file_attributes & 0x0040 != 0 {
-        attributes.push("compressed");
-    }
-    if file_attributes & 0x0080 != 0 {
-        attributes.push("offline");
+    const FILE_ATTRIBUTE_READONLY: u32 = 0x0001;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0010;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+
+    let file_type = if file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        "l"
+    } else if file_attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
+        "d"
+    } else {
+        "-"
+    };
+
+    let write = if file_attributes & FILE_ATTRIBUTE_READONLY != 0 {
+        "-"
+    } else {
+        "w"
+    };
+
+    format!("{file_type}r{write}xr-xr-x")
+}
+
+#[cfg(windows)]
+fn lookup_owner_group(path: &std::path::Path) -> Option<(String, String)> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null_mut;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
+    use windows_sys::Win32::Security::{
+        GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+    };
+
+    fn account_name_from_sid(sid: PSID) -> Option<String> {
+        use std::ptr::{null, null_mut};
+        use windows_sys::Win32::Security::LookupAccountSidW;
+
+        fn wide_to_string(buf: &[u16], len: u32) -> String {
+            let len = (len as usize).min(buf.len());
+            let mut slice = &buf[..len];
+            if slice.last() == Some(&0) {
+                slice = &slice[..slice.len() - 1];
+            }
+            String::from_utf16_lossy(slice)
+        }
+
+        if sid.is_null() {
+            return None;
+        }
+
+        let mut name_len = 0;
+        let mut domain_len = 0;
+        let mut sid_name_use = 0;
+
+        unsafe {
+            LookupAccountSidW(
+                null(),
+                sid,
+                null_mut(),
+                &mut name_len,
+                null_mut(),
+                &mut domain_len,
+                &mut sid_name_use,
+            );
+        }
+
+        if name_len == 0 {
+            return None;
+        }
+
+        let mut name = vec![0; name_len as usize];
+        let mut domain = vec![0; domain_len as usize];
+        let ok = unsafe {
+            LookupAccountSidW(
+                null(),
+                sid,
+                name.as_mut_ptr(),
+                &mut name_len,
+                if domain.is_empty() {
+                    null_mut()
+                } else {
+                    domain.as_mut_ptr()
+                },
+                &mut domain_len,
+                &mut sid_name_use,
+            )
+        };
+
+        if ok == 0 {
+            return None;
+        }
+
+        let name = wide_to_string(&name, name_len);
+        let domain = wide_to_string(&domain, domain_len);
+        if domain.is_empty() {
+            Some(name)
+        } else {
+            Some(format!("{domain}\\{name}"))
+        }
     }
 
-    attributes.join(", ")
+    let mut wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut owner_sid: PSID = null_mut();
+    let mut group_sid: PSID = null_mut();
+    let mut security_descriptor: PSECURITY_DESCRIPTOR = null_mut();
+
+    let status = unsafe {
+        GetNamedSecurityInfoW(
+            wide_path.as_mut_ptr(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION,
+            &mut owner_sid,
+            &mut group_sid,
+            null_mut(),
+            null_mut(),
+            &mut security_descriptor,
+        )
+    };
+
+    if status != 0 {
+        return None;
+    }
+
+    let owner = account_name_from_sid(owner_sid).unwrap_or_else(|| "0".to_string());
+    let group = account_name_from_sid(group_sid).unwrap_or_else(|| "0".to_string());
+
+    unsafe {
+        if !security_descriptor.is_null() {
+            LocalFree(security_descriptor);
+        }
+    }
+
+    Some((owner, group))
 }
 
 pub struct Ls {
@@ -225,8 +334,8 @@ impl Ls {
         };
         let permission = { format_permissions(metadata.file_attributes()) };
         let hard_links = 0;
-        let user = 0;
-        let group = 0;
+        let (user, group) = lookup_owner_group(file_info.path())
+            .unwrap_or_else(|| ("0".to_string(), "0".to_string()));
         let size = metadata.file_size();
         let last_modified = {
             let system_time = metadata.modified().unwrap();
@@ -303,5 +412,23 @@ mod tests {
         let mode: uucore::libc::mode_t = 0o100777;
         let expected = "-rwxrwxrwx";
         assert_eq!(format_permissions(mode), expected);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_format_permissions() {
+        use super::format_permissions;
+
+        const FILE_ATTRIBUTE_READONLY: u32 = 0x0001;
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0010;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+
+        assert_eq!(format_permissions(0), "-rwxr-xr-x");
+        assert_eq!(format_permissions(FILE_ATTRIBUTE_READONLY), "-r-xr-xr-x");
+        assert_eq!(format_permissions(FILE_ATTRIBUTE_DIRECTORY), "drwxr-xr-x");
+        assert_eq!(
+            format_permissions(FILE_ATTRIBUTE_REPARSE_POINT),
+            "lrwxr-xr-x"
+        );
     }
 }
