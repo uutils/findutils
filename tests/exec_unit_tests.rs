@@ -233,20 +233,30 @@ fn placeholder_in_utility_name() {
         .unwrap();
     let temp_dir_path = temp_dir.path().to_string_lossy();
 
-    let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-    // Use {} as the utility name - should be replaced with the file path
-    // Here we use the testing commandline path in an arg to capture output,
-    // but pass {} as the executable to verify it gets resolved.
-    // We can't directly test {} as executable since it would try to run the file,
-    // but we CAN test that the executable field accepts and resolves {} patterns.
-    let matcher = SingleExecMatcher::new(
-        &path_to_testing_commandline(),
-        &[temp_dir_path.as_ref(), "{}"],
-        false,
-    )
-    .expect("Failed to create matcher");
+    // To exercise `{}` in the utility-name position we make the matched entry
+    // *be* the testing-commandline binary, then pass `{}` as the executable.
+    // The placeholder must be replaced with the entry's path and executed --
+    // this is exactly the behavior that regressed in #614, where the literal
+    // string "{}" was handed to Command::new and the command failed to run.
+    let testing_commandline = path_to_testing_commandline();
+    let binary_path = Path::new(&testing_commandline);
+    let root = binary_path
+        .parent()
+        .expect("testing-commandline has no parent directory")
+        .to_string_lossy();
+    let binary_name = binary_path
+        .file_name()
+        .expect("testing-commandline has no file name")
+        .to_string_lossy();
+    let entry = get_dir_entry_for(&root, &binary_name);
+
+    let matcher = SingleExecMatcher::new("{}", &[temp_dir_path.as_ref(), "executed"], false)
+        .expect("Failed to create matcher");
     let deps = FakeDependencies::new();
-    assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+    assert!(
+        matcher.matches(&entry, &mut deps.new_matcher_io()),
+        "matcher should resolve {{}} to the binary path and run it"
+    );
 
     let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
     let mut s = String::new();
@@ -255,7 +265,7 @@ fn placeholder_in_utility_name() {
     assert_eq!(
         s,
         fix_up_slashes(&format!(
-            "cwd={}\nargs=\ntest_data/simple/abbbc\n",
+            "cwd={}\nargs=\nexecuted\n",
             env::current_dir().unwrap().to_string_lossy()
         ))
     );
