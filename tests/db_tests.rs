@@ -165,6 +165,17 @@ fn test_locate_invalid_flag() {
         .failure();
 }
 
+// an un-compilable regex should be reported as an error rather than silently matching nothing
+#[test]
+#[cfg(not(windows))]
+fn test_locate_invalid_regex() {
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["[", "--regex", DB_FLAG])
+        .assert()
+        .failure();
+}
+
 #[test]
 #[cfg(not(windows))]
 fn test_updatedb() {
@@ -183,4 +194,20 @@ fn test_updatedb_invalid_flag() {
         .args(["--unknown"])
         .assert()
         .failure();
+}
+
+// empty prunefs/prunepaths must not produce an invalid find expression (e.g. an empty `( )` group)
+#[test]
+#[cfg(not(windows))]
+fn test_updatedb_empty_prune() {
+    Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .args([
+            "--localpaths=./test_data",
+            "--output=/dev/null",
+            "--prunefs=",
+            "--prunepaths=",
+        ])
+        .assert()
+        .success();
 }

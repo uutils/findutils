@@ -14,7 +14,6 @@ use std::{
 };
 
 use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
-use itertools::Itertools;
 use uucore::error::UResult;
 
 use crate::find::{find_main, Dependencies};
@@ -261,37 +260,56 @@ fn do_updatedb(args: &[&str]) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
     let config = Config::from(matches);
 
-    let mut find_args = vec!["find"];
-    find_args.extend(config.local_paths.iter().filter_map(|p| p.to_str()));
-    find_args.extend(config.net_paths.iter().map(|s| s.as_str()));
-    find_args.extend(config.find_options.split_whitespace());
-    // offload most of the logic to find
-    let excludes = format!(
-        "( {} {} ) -prune {} {} {}",
-        if config.prune_fs.is_empty() {
-            ""
-        } else {
-            "-fstype"
-        },
-        config.prune_fs.iter().join(" -or -fstype "),
-        if config.prune_paths.is_empty() {
-            ""
-        } else {
-            "-or -regex"
-        },
+    // offload most of the logic to find. Build the argument list as discrete tokens rather than
+    // a single string so that paths and options aren't re-split on whitespace and so that an empty
+    // `prunefs`/`prunepaths` can't produce an invalid expression (e.g. an empty `( )` group).
+    let mut tokens: Vec<String> = Vec::new();
+    tokens.extend(
         config
-            .prune_paths
+            .local_paths
             .iter()
             .filter_map(|p| p.to_str())
-            .join(" -prune -or -regex "),
-        if config.prune_paths.is_empty() {
-            ""
-        } else {
-            "-prune"
-        },
+            .map(String::from),
     );
-    find_args.extend(excludes.split_whitespace());
-    find_args.extend(["-or", "-print0", "-sorted"]);
+    tokens.extend(config.net_paths.iter().cloned());
+    // FINDOPTIONS is a single string of options, split on whitespace as GNU updatedb does
+    tokens.extend(config.find_options.split_whitespace().map(String::from));
+
+    // Each clause prunes a subtree (by filesystem type or by path); the final clause prints the
+    // entry. Clauses are OR-ed together so a path that matches no prune clause gets printed.
+    let mut clauses: Vec<Vec<String>> = Vec::new();
+    if !config.prune_fs.is_empty() {
+        let mut clause = vec![String::from("(")];
+        for (i, fs) in config.prune_fs.iter().enumerate() {
+            if i > 0 {
+                clause.push(String::from("-or"));
+            }
+            clause.push(String::from("-fstype"));
+            clause.push(fs.clone());
+        }
+        clause.push(String::from(")"));
+        clause.push(String::from("-prune"));
+        clauses.push(clause);
+    }
+    for path in config.prune_paths.iter().filter_map(|p| p.to_str()) {
+        clauses.push(vec![
+            String::from("-regex"),
+            path.to_string(),
+            String::from("-prune"),
+        ]);
+    }
+    clauses.push(vec![String::from("-print0")]);
+
+    for (i, clause) in clauses.into_iter().enumerate() {
+        if i > 0 {
+            tokens.push(String::from("-or"));
+        }
+        tokens.extend(clause);
+    }
+    tokens.push(String::from("-sorted"));
+
+    let mut find_args = vec!["find"];
+    find_args.extend(tokens.iter().map(String::as_str));
 
     let output = Rc::new(RefCell::new(Vec::new()));
     let deps = CapturedDependencies::new(output.clone());

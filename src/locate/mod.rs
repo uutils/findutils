@@ -61,6 +61,8 @@ pub enum Error {
     InvalidDbType,
     #[error("locate database {0} is corrupt or invalid")]
     InvalidDb(String),
+    #[error("invalid regular expression: {0}")]
+    InvalidRegex(String),
     #[error("{0}")]
     IoErr(#[from] io::Error),
     #[error("{0}")]
@@ -171,7 +173,7 @@ pub struct ParsedInfo {
     config: Config,
 }
 
-fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Option<Regex> {
+fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Result<Regex, onig::Error> {
     let syntax = match ty {
         RegexType::Emacs => Syntax::emacs(),
         RegexType::Grep => Syntax::grep(),
@@ -188,11 +190,12 @@ fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Option<Regex> {
         },
         syntax,
     )
-    .ok()
 }
 
-impl From<ArgMatches> for ParsedInfo {
-    fn from(value: ArgMatches) -> Self {
+impl TryFrom<ArgMatches> for ParsedInfo {
+    type Error = Error;
+
+    fn try_from(value: ArgMatches) -> Result<Self, Self::Error> {
         let config = Config {
             all: value.get_flag("all"),
             basename: value.get_flag("basename"),
@@ -249,16 +252,17 @@ impl From<ArgMatches> for ParsedInfo {
                 .and_then(|s| RegexType::from_str(s.as_str()).ok())
                 .unwrap_or(RegexType::Emacs)
         }) {
-            Patterns::Regex(
-                patterns
-                    .into_iter()
-                    .filter_map(|s| make_regex(ty, &config, &s))
-                    .collect(),
-            )
+            let mut compiled = Vec::with_capacity(patterns.len());
+            for pattern in patterns {
+                let regex = make_regex(ty, &config, &pattern)
+                    .map_err(|e| Error::InvalidRegex(format!("{pattern}: {e}")))?;
+                compiled.push(regex);
+            }
+            Patterns::Regex(compiled)
         } else {
             Patterns::String(patterns)
         };
-        Self { patterns, config }
+        Ok(Self { patterns, config })
     }
 }
 
@@ -495,6 +499,19 @@ impl DbReader {
     }
 }
 
+/// Whether `path` currently exists on disk.
+///
+/// With `follow_symlinks` (the `-L`/`--follow` default) a symlink is resolved, so a broken
+/// symlink counts as non-existent. Without it (`-P`/`--nofollow`) the link itself is checked,
+/// so a broken symlink counts as existing.
+fn path_exists(path: &Path, follow_symlinks: bool) -> bool {
+    if follow_symlinks {
+        fs::metadata(path).is_ok()
+    } else {
+        fs::symlink_metadata(path).is_ok()
+    }
+}
+
 fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     let buf = Path::new(OsStr::from_bytes(entry.to_bytes()));
     let name = if config.basename {
@@ -539,18 +556,11 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
         }
     };
 
+    // existence is always checked against the full path, even in `--basename` mode
     let existence_matches = match config.existing {
         ExistenceMode::Any => true,
-        ExistenceMode::Present => {
-            PathBuf::from(entry.to_string()).exists()
-                || config.follow_symlinks
-                    && fs::symlink_metadata(PathBuf::from(entry.to_string())).is_ok()
-        }
-        ExistenceMode::NotPresent => {
-            !PathBuf::from(entry.to_string()).exists()
-                || config.follow_symlinks
-                    && fs::symlink_metadata(PathBuf::from(entry.to_string())).is_err()
-        }
+        ExistenceMode::Present => path_exists(buf, config.follow_symlinks),
+        ExistenceMode::NotPresent => !path_exists(buf, config.follow_symlinks),
     };
 
     patterns_match && existence_matches
@@ -571,7 +581,7 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
             }
         }
         Ok(matches) => {
-            let ParsedInfo { patterns, config } = ParsedInfo::from(matches);
+            let ParsedInfo { patterns, config } = ParsedInfo::try_from(matches)?;
             let mut stats = Statistics::new();
 
             // iterate over each given database
@@ -663,5 +673,41 @@ pub fn locate_main(args: &[&str]) -> i32 {
             }
             e.code()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::symlink;
+
+    use super::path_exists;
+
+    #[test]
+    fn path_exists_regular_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file");
+        std::fs::write(&file, b"").unwrap();
+        // a real file exists regardless of whether symlinks are followed
+        assert!(path_exists(&file, true));
+        assert!(path_exists(&file, false));
+    }
+
+    #[test]
+    fn path_exists_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing");
+        assert!(!path_exists(&missing, true));
+        assert!(!path_exists(&missing, false));
+    }
+
+    #[test]
+    fn path_exists_broken_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join("dangling");
+        symlink(dir.path().join("nonexistent-target"), &link).unwrap();
+        // following the link resolves to the missing target -> non-existent
+        assert!(!path_exists(&link, true));
+        // not following the link checks the link itself, which exists
+        assert!(path_exists(&link, false));
     }
 }
