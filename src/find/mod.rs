@@ -9,7 +9,7 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{self, BufRead, BufReader, IsTerminal, Write, stderr, stdout};
+use std::io::{self, stderr, stdout, BufRead, BufReader, IsTerminal, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -393,8 +393,8 @@ mod tests {
     #[cfg(windows)]
     use std::os::windows::fs::symlink_file;
 
-    use crate::find::matchers::MatcherIO;
     use crate::find::matchers::time::ChangeTime;
+    use crate::find::matchers::MatcherIO;
 
     use super::*;
 
@@ -1112,10 +1112,9 @@ mod tests {
                 let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
                 assert_eq!(rc, 0);
-                assert!(
-                    deps.get_output_as_string()
-                        .contains("./test_data/simple/subdir")
-                );
+                assert!(deps
+                    .get_output_as_string()
+                    .contains("./test_data/simple/subdir"));
                 assert!(deps.get_output_as_string().contains("ABBBC"));
             }
         }
