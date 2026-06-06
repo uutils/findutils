@@ -5,10 +5,9 @@
 use std::{
     borrow::Cow,
     env,
-    ffi::{CStr, CString, OsStr},
+    ffi::{CStr, CString},
     fs::{self, File},
     io::{self, stderr, BufRead, BufReader, Read, Write},
-    os::unix::{ffi::OsStrExt, fs::MetadataExt},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -128,7 +127,7 @@ impl Statistics {
                 let time: DateTime<Local> = time.into();
                 println!("Database was last modified at {}", time);
             }
-            println!("Locate database size: {} bytes", metadata.size());
+            println!("Locate database size: {} bytes", metadata.len());
         }
         println!("Matching Filenames: {}", self.matches);
         println!(
@@ -499,6 +498,22 @@ impl DbReader {
     }
 }
 
+/// Decode a raw database entry into a path.
+///
+/// On Unix a path is an arbitrary byte string, so the bytes are used verbatim. On other
+/// platforms paths aren't raw bytes; the database stores UTF-8 text (find emits paths via
+/// `Path::to_string_lossy`), so it is decoded lossily back into a path.
+#[cfg(unix)]
+fn bytes_to_path(bytes: &[u8]) -> PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    PathBuf::from(std::ffi::OsStr::from_bytes(bytes))
+}
+
+#[cfg(not(unix))]
+fn bytes_to_path(bytes: &[u8]) -> PathBuf {
+    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
+}
+
 /// Whether `path` currently exists on disk.
 ///
 /// With `follow_symlinks` (the `-L`/`--follow` default) a symlink is resolved, so a broken
@@ -513,7 +528,7 @@ fn path_exists(path: &Path, follow_symlinks: bool) -> bool {
 }
 
 fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
-    let buf = Path::new(OsStr::from_bytes(entry.to_bytes()));
+    let buf = bytes_to_path(entry.to_bytes());
     let name = if config.basename {
         let Some(path) = buf.file_name() else {
             return false;
@@ -537,9 +552,17 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     };
     let entry = name.to_string_lossy();
 
+    // glob metacharacters in a stored path aren't handled yet, so such entries are skipped. On
+    // Windows `\` is the path separator (present in every path), so it must not count here.
+    #[cfg(windows)]
+    const GLOB_METACHARS: &str = "*?[]";
+    #[cfg(not(windows))]
+    const GLOB_METACHARS: &str = r"*?[]\";
+
+    let has_metachars = entry.chars().any(|c| GLOB_METACHARS.contains(c));
     let patterns_match = match config.all {
         false => {
-            if entry.chars().any(|c| r"*?[]\".contains(c)) {
+            if has_metachars {
                 // TODO: parse metacharacters
                 false
             } else {
@@ -547,7 +570,7 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
             }
         }
         true => {
-            if entry.chars().any(|c| r"*?[]\".contains(c)) {
+            if has_metachars {
                 // TODO: parse metacharacters
                 false
             } else {
@@ -559,8 +582,8 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     // existence is always checked against the full path, even in `--basename` mode
     let existence_matches = match config.existing {
         ExistenceMode::Any => true,
-        ExistenceMode::Present => path_exists(buf, config.follow_symlinks),
-        ExistenceMode::NotPresent => !path_exists(buf, config.follow_symlinks),
+        ExistenceMode::Present => path_exists(&buf, config.follow_symlinks),
+        ExistenceMode::NotPresent => !path_exists(&buf, config.follow_symlinks),
     };
 
     patterns_match && existence_matches
@@ -678,9 +701,21 @@ pub fn locate_main(args: &[&str]) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::symlink;
+    use std::io;
+    use std::path::Path;
 
     use super::path_exists;
+
+    /// Create a symlink at `link` pointing at `target`, cross-platform.
+    #[cfg(unix)]
+    fn make_symlink(target: &Path, link: &Path) -> io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+
+    #[cfg(windows)]
+    fn make_symlink(target: &Path, link: &Path) -> io::Result<()> {
+        std::os::windows::fs::symlink_file(target, link)
+    }
 
     #[test]
     fn path_exists_regular_file() {
@@ -704,7 +739,11 @@ mod tests {
     fn path_exists_broken_symlink() {
         let dir = tempfile::tempdir().unwrap();
         let link = dir.path().join("dangling");
-        symlink(dir.path().join("nonexistent-target"), &link).unwrap();
+        // creating a symlink on Windows requires privileges that CI may lack; skip the
+        // check gracefully when it isn't available rather than failing the test
+        if make_symlink(&dir.path().join("nonexistent-target"), &link).is_err() {
+            return;
+        }
         // following the link resolves to the missing target -> non-existent
         assert!(!path_exists(&link, true));
         // not following the link checks the link itself, which exists
