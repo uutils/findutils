@@ -18,8 +18,17 @@ enum Arg {
     LiteralArg(OsString),
 }
 
+fn parse_arg(s: &str) -> Arg {
+    let parts = s.split("{}").collect::<Vec<_>>();
+    if parts.len() == 1 {
+        Arg::LiteralArg(OsString::from(s))
+    } else {
+        Arg::FileArg(parts.iter().map(OsString::from).collect())
+    }
+}
+
 pub struct SingleExecMatcher {
-    executable: String,
+    executable: Arg,
     args: Vec<Arg>,
     exec_in_parent_dir: bool,
     interactive: bool,
@@ -48,21 +57,10 @@ impl SingleExecMatcher {
         exec_in_parent_dir: bool,
         interactive: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        let transformed_args = args
-            .iter()
-            .map(|&a| {
-                let parts = a.split("{}").collect::<Vec<_>>();
-                if parts.len() == 1 {
-                    // No {} present
-                    Arg::LiteralArg(OsString::from(a))
-                } else {
-                    Arg::FileArg(parts.iter().map(OsString::from).collect())
-                }
-            })
-            .collect();
+        let transformed_args = args.iter().map(|&a| parse_arg(a)).collect();
 
         Ok(Self {
-            executable: executable.to_string(),
+            executable: parse_arg(executable),
             args: transformed_args,
             exec_in_parent_dir,
             interactive,
@@ -82,6 +80,11 @@ impl Matcher for SingleExecMatcher {
             file_info.path().to_path_buf()
         };
 
+        let resolved_executable = match self.executable {
+            Arg::LiteralArg(ref a) => a.clone(),
+            Arg::FileArg(ref parts) => parts.join(path_to_file.as_os_str()),
+        };
+
         if self.interactive {
             // GNU find prints a fixed, abbreviated prompt of the form
             // "< executable ... pathname > ? ".  It does not render the
@@ -90,7 +93,7 @@ impl Matcher for SingleExecMatcher {
             // with the "./basename" form).
             let prompt = format!(
                 "< {} ... {} > ? ",
-                self.executable,
+                resolved_executable.to_string_lossy(),
                 file_info.path().to_string_lossy()
             );
 
@@ -99,7 +102,8 @@ impl Matcher for SingleExecMatcher {
             }
         }
 
-        let mut command = Command::new(&self.executable);
+        let mut command = Command::new(&resolved_executable);
+
         for arg in &self.args {
             match *arg {
                 Arg::LiteralArg(ref a) => command.arg(a.as_os_str()),
@@ -123,7 +127,13 @@ impl Matcher for SingleExecMatcher {
         match command.status() {
             Ok(status) => status.success(),
             Err(e) => {
-                writeln!(&mut stderr(), "Failed to run {}: {}", self.executable, e).unwrap();
+                writeln!(
+                    &mut stderr(),
+                    "Failed to run {}: {}",
+                    resolved_executable.to_string_lossy(),
+                    e
+                )
+                .unwrap();
                 false
             }
         }
