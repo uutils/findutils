@@ -932,8 +932,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('x')
                 .long(options::EXIT)
                 .help(
-                    "Exit if the number of arguments allowed by -L or -n do not \
-                    fit into the number of allowed characters",
+                    "Terminate if a constructed command line would exceed the size \
+                    limit (see -s) rather than reducing the argument count",
                 )
                 .action(ArgAction::SetTrue),
         )
@@ -1003,7 +1003,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::VERBOSE)
                 .short('t')
                 .long(options::VERBOSE)
-                .help("Be verbose")
+                .help("Print each command to stderr before executing it")
                 .action(ArgAction::SetTrue),
         )
         .arg(
