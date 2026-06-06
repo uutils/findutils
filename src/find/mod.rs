@@ -1606,48 +1606,4 @@ mod tests {
 
         assert_eq!(rc, 0);
     }
-    #[test]
-    fn version_write_error_is_handled() {
-        use std::cell::RefCell;
-
-        struct BrokenWriter;
-        impl std::io::Write for BrokenWriter {
-            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-                Err(std::io::Error::from_raw_os_error(28))
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Err(std::io::Error::from_raw_os_error(28))
-            }
-        }
-
-        struct BrokenDependencies {
-            output: RefCell<BrokenWriter>,
-        }
-
-        impl BrokenDependencies {
-            fn new() -> Self {
-                Self {
-                    output: RefCell::new(BrokenWriter),
-                }
-            }
-        }
-
-        impl Dependencies for BrokenDependencies {
-            fn get_output(&self) -> &RefCell<dyn Write> {
-                &self.output
-            }
-
-            fn now(&self) -> SystemTime {
-                SystemTime::now()
-            }
-
-            fn confirm(&self, _prompt: &str) -> bool {
-                false
-            }
-        }
-
-        let deps = BrokenDependencies::new();
-        let rc = find_main(&["find", "--version"], &deps);
-        assert_eq!(rc, 1);
-    }
 }

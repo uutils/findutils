@@ -10,6 +10,7 @@ use std::fs::{self, File};
 use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::time;
 use tempfile::Builder;
 use uutests::util::TestScenario;
 
@@ -1165,4 +1166,49 @@ fn find_ok_missing_semicolon() {
         .fails()
         .stderr_contains("missing argument to -ok")
         .no_stdout();
+}
+
+#[test]
+fn version_write_error_is_handled() {
+    use std::cell::RefCell;
+
+    struct BrokenWriter;
+    impl std::io::Write for BrokenWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from_raw_os_error(28))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from_raw_os_error(28))
+        }
+    }
+
+    struct BrokenDependencies {
+        output: RefCell<BrokenWriter>,
+    }
+
+    impl BrokenDependencies {
+        fn new() -> Self {
+            Self {
+                output: RefCell::new(BrokenWriter),
+            }
+        }
+    }
+
+    impl findutils::find::Dependencies for BrokenDependencies {
+        fn get_output(&self) -> &RefCell<dyn Write> {
+            &self.output
+        }
+
+        fn now(&self) -> time::SystemTime {
+            time::SystemTime::now()
+        }
+
+        fn confirm(&self, _prompt: &str) -> bool {
+            false
+        }
+    }
+
+    let deps = BrokenDependencies::new();
+    let rc = findutils::find::find_main(&["find", "--version"], &deps);
+    assert_eq!(rc, 1);
 }
