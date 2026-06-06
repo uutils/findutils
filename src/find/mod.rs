@@ -9,7 +9,7 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{stderr, stdout, BufRead, BufReader, IsTerminal, Write};
+use std::io::{self, BufRead, BufReader, IsTerminal, Write, stderr, stdout};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -278,11 +278,11 @@ fn process_dir(
 fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
     if paths_and_matcher.config.help_requested {
-        print_help();
+        print_help(deps)?;
         return Ok(0);
     }
     if paths_and_matcher.config.version_requested {
-        print_version();
+        print_version(deps)?;
         return Ok(0);
     }
 
@@ -307,8 +307,9 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
     Ok(ret)
 }
 
-fn print_help() {
-    println!(
+fn print_help(deps: &dyn Dependencies) -> Result<(), io::Error> {
+    writeln!(
+        &mut deps.get_output().borrow_mut(),
         r"Usage: find [path...] [expression]
 
 If no path is supplied then the current working directory is used by default.
@@ -352,11 +353,15 @@ Early alpha implementation. Currently the only expressions supported are
     a non-standard extension that sorts directory contents by name before
     processing them. Less efficient, but allows for deterministic output.
 "
-    );
+    )
 }
 
-fn print_version() {
-    println!("find (Rust) {}", env!("CARGO_PKG_VERSION"));
+fn print_version(deps: &dyn Dependencies) -> Result<(), io::Error> {
+    writeln!(
+        &mut deps.get_output().borrow_mut(),
+        "find (Rust) {}",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 /// Does all the work for find.
@@ -388,8 +393,8 @@ mod tests {
     #[cfg(windows)]
     use std::os::windows::fs::symlink_file;
 
-    use crate::find::matchers::time::ChangeTime;
     use crate::find::matchers::MatcherIO;
+    use crate::find::matchers::time::ChangeTime;
 
     use super::*;
 
@@ -1107,9 +1112,10 @@ mod tests {
                 let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
                 assert_eq!(rc, 0);
-                assert!(deps
-                    .get_output_as_string()
-                    .contains("./test_data/simple/subdir"));
+                assert!(
+                    deps.get_output_as_string()
+                        .contains("./test_data/simple/subdir")
+                );
                 assert!(deps.get_output_as_string().contains("ABBBC"));
             }
         }
@@ -1600,5 +1606,49 @@ mod tests {
         let rc = find_main(&["find", "./test_data/simple/subdir", "-ls"], &deps);
 
         assert_eq!(rc, 0);
+    }
+    #[test]
+    fn version_write_error_is_handled() {
+        use std::cell::RefCell;
+
+        struct BrokenWriter;
+        impl std::io::Write for BrokenWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from_raw_os_error(28))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::Error::from_raw_os_error(28))
+            }
+        }
+
+        struct BrokenDependencies {
+            output: RefCell<BrokenWriter>,
+        }
+
+        impl BrokenDependencies {
+            fn new() -> Self {
+                Self {
+                    output: RefCell::new(BrokenWriter),
+                }
+            }
+        }
+
+        impl Dependencies for BrokenDependencies {
+            fn get_output(&self) -> &RefCell<dyn Write> {
+                &self.output
+            }
+
+            fn now(&self) -> SystemTime {
+                SystemTime::now()
+            }
+
+            fn confirm(&self, _prompt: &str) -> bool {
+                false
+            }
+        }
+
+        let deps = BrokenDependencies::new();
+        let rc = find_main(&["find", "--version"], &deps);
+        assert_eq!(rc, 1);
     }
 }
