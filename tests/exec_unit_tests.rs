@@ -226,6 +226,52 @@ fn matching_fails_if_executable_fails() {
 }
 
 #[test]
+fn placeholder_in_utility_name() {
+    let temp_dir = Builder::new()
+        .prefix("placeholder_in_utility_name")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+
+    // To exercise `{}` in the utility-name position we make the matched entry
+    // *be* the testing-commandline binary, then pass `{}` as the executable.
+    // The placeholder must be replaced with the entry's path and executed --
+    // this is exactly the behavior that regressed in #614, where the literal
+    // string "{}" was handed to Command::new and the command failed to run.
+    let testing_commandline = path_to_testing_commandline();
+    let binary_path = Path::new(&testing_commandline);
+    let root = binary_path
+        .parent()
+        .expect("testing-commandline has no parent directory")
+        .to_string_lossy();
+    let binary_name = binary_path
+        .file_name()
+        .expect("testing-commandline has no file name")
+        .to_string_lossy();
+    let entry = get_dir_entry_for(&root, &binary_name);
+
+    let matcher = SingleExecMatcher::new("{}", &[temp_dir_path.as_ref(), "executed"], false)
+        .expect("Failed to create matcher");
+    let deps = FakeDependencies::new();
+    assert!(
+        matcher.matches(&entry, &mut deps.new_matcher_io()),
+        "matcher should resolve {{}} to the binary path and run it"
+    );
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\nexecuted\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+}
+
+#[test]
 fn matching_multi_executes_code() {
     let temp_dir = Builder::new()
         .prefix("matching_executes_code")

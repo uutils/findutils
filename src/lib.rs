@@ -5,4 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 pub mod find;
+#[cfg(unix)]
+pub mod locate;
+pub mod updatedb;
 pub mod xargs;
