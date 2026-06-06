@@ -4,25 +4,17 @@
 
 mod common;
 
-use std::{fs::File, io, process::Command};
+use std::process::Command;
 
 use assert_cmd::{assert::OutputAssertExt, cargo::CommandCargoExt};
-use rstest::{fixture, rstest};
-
-#[fixture]
-fn add_special_files() -> io::Result<()> {
-    File::create("test_data/db/abc def")?;
-    File::create("test_data/db/abc\ndef")?;
-    File::create("test_data/db/✨sparkles✨")?;
-    Ok(())
-}
+use rstest::rstest;
 
 #[cfg(not(windows))]
-const DB_FLAG: &str = "--database=test_data_db";
+const DB_FLAG: &str = "--database=test_data/db/test_data_db";
 #[cfg(not(windows))]
-const INVALID_DB_FLAG: &str = "--database=invalid_db";
+const INVALID_DB_FLAG: &str = "--database=test_data/db/invalid_db";
 #[cfg(not(windows))]
-const OLD_DB_FLAG: &str = "--database=old_db";
+const OLD_DB_FLAG: &str = "--database=test_data/db/old_db";
 
 #[test]
 #[cfg(not(windows))]
@@ -84,16 +76,14 @@ fn test_locate_non_existing() {
         .failure();
 }
 
-#[rstest]
+#[test]
 #[cfg(not(windows))]
-fn test_locate_statistics(add_special_files: io::Result<()>) {
-    if add_special_files.is_ok() {
-        Command::cargo_bin("locate")
-            .expect("couldn't find locate binary")
-            .args(["", "--statistics", DB_FLAG])
-            .assert()
-            .success();
-    }
+fn test_locate_statistics() {
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["", "--statistics", DB_FLAG])
+        .assert()
+        .success();
 }
 
 #[rstest]
@@ -175,9 +165,9 @@ fn test_locate_invalid_flag() {
         .failure();
 }
 
-#[rstest]
+#[test]
 #[cfg(not(windows))]
-fn test_updatedb(_add_special_files: io::Result<()>) {
+fn test_updatedb() {
     Command::cargo_bin("updatedb")
         .expect("couldn't find updatedb binary")
         .args(["--localpaths=./test_data", "--output=/dev/null"])

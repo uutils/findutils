@@ -198,7 +198,10 @@ impl From<ArgMatches> for ParsedInfo {
             basename: value.get_flag("basename"),
             db: value
                 .get_one::<String>("database")
-                .unwrap()
+                .map(String::as_str)
+                // `database` has a default value, so this is only reached if clap
+                // somehow omits it; fall back to an empty (non-openable) path.
+                .unwrap_or_default()
                 .split(':')
                 .map(PathBuf::from)
                 .collect(),
@@ -209,6 +212,7 @@ impl From<ArgMatches> for ParsedInfo {
                 .map(|s| match s.as_str() {
                     "count" => Mode::Count,
                     "statistics" => Mode::Statistics,
+                    // the "mode" group only contains the "count" and "statistics" args
                     _ => unreachable!(),
                 })
                 .unwrap_or_default(),
@@ -219,21 +223,26 @@ impl From<ArgMatches> for ParsedInfo {
                 .map(|s| match s.as_str() {
                     "existing" => ExistenceMode::Present,
                     "non-existing" => ExistenceMode::NotPresent,
+                    // the "exist" group only contains the "existing" and "non-existing" args
                     s => unreachable!("{s}"),
                 })
                 .unwrap_or_default(),
             follow_symlinks: value.get_flag("follow") || !value.get_flag("nofollow"),
             ignore_case: value.get_flag("ignore-case"),
             limit: value.get_one::<usize>("limit").copied(),
-            max_age: *value.get_one::<usize>("max-database-age").unwrap(),
+            // `max-database-age` has a default value of 8
+            max_age: value
+                .get_one::<usize>("max-database-age")
+                .copied()
+                .unwrap_or(8),
             null_bytes: value.get_flag("null"),
             print: value.get_flag("print"),
         };
+        // `patterns` is a required argument, so this is normally non-empty
         let patterns: Vec<String> = value
             .get_many::<String>("patterns")
-            .unwrap()
-            .cloned()
-            .collect();
+            .map(|v| v.cloned().collect())
+            .unwrap_or_default();
         let patterns = if let Some(ty) = value.get_flag("regex").then(|| {
             value
                 .get_one::<String>("regextype")
@@ -493,14 +502,17 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
             return false;
         };
 
-        let c = CString::from_vec_with_nul(
+        let Ok(c) = CString::from_vec_with_nul(
             path.as_encoded_bytes()
                 .iter()
                 .copied()
                 .chain([b'\0'])
                 .collect(),
-        )
-        .unwrap();
+        ) else {
+            // a file name can't contain an interior nul byte, so this only fails on
+            // genuinely malformed input, which we treat as a non-match
+            return false;
+        };
 
         Cow::Owned(c)
     } else {
@@ -645,7 +657,9 @@ pub fn locate_main(args: &[&str]) -> i32 {
         Err(e) => {
             match e {
                 Error::NoMatches => {}
-                _ => writeln!(&mut stderr(), "Error: {e}").unwrap(),
+                _ => {
+                    let _ = writeln!(&mut stderr(), "Error: {e}");
+                }
             }
             e.code()
         }

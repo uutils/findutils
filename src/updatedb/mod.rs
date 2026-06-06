@@ -19,8 +19,8 @@ use uucore::error::UResult;
 
 use crate::find::{find_main, Dependencies};
 
-// local_user and net_user are currently ignored
-#[allow(dead_code)]
+// TODO: the `localuser` and `netuser` arguments are accepted but not yet honored; handling them
+// will likely involve splitting the find logic into two calls.
 pub struct Config {
     find_options: String,
     local_paths: Vec<PathBuf>,
@@ -28,8 +28,6 @@ pub struct Config {
     prune_paths: Vec<PathBuf>,
     prune_fs: Vec<String>,
     output: PathBuf,
-    local_user: Option<String>,
-    net_user: String,
     db_format: DbFormat,
 }
 
@@ -78,12 +76,7 @@ impl From<ArgMatches> for Config {
                 .get_one::<PathBuf>("output")
                 .cloned()
                 // FIXME: the default should be platform-dependent
-                .unwrap_or(PathBuf::from_str("/usr/local/var/locatedb").unwrap()),
-            local_user: value.get_one::<String>("localuser").cloned(),
-            net_user: value
-                .get_one::<String>("netuser")
-                .cloned()
-                .unwrap_or(String::from("daemon")),
+                .unwrap_or_else(|| PathBuf::from("/usr/local/var/locatedb")),
         }
     }
 }
@@ -268,9 +261,6 @@ fn do_updatedb(args: &[&str]) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
     let config = Config::from(matches);
 
-    // TODO: handle localuser and netuser
-    // this will likely involve splitting the find logic into two calls
-
     let mut find_args = vec!["find"];
     find_args.extend(config.local_paths.iter().filter_map(|p| p.to_str()));
     find_args.extend(config.net_paths.iter().map(|s| s.as_str()));
@@ -331,7 +321,7 @@ pub fn updatedb_main(args: &[&str]) -> i32 {
     match do_updatedb(args) {
         Ok(()) => 0,
         Err(e) => {
-            writeln!(&mut stderr(), "Error: {e}").unwrap();
+            let _ = writeln!(&mut stderr(), "Error: {e}");
             1
         }
     }
