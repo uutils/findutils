@@ -40,6 +40,14 @@ harness = false
 name = "xargs_bench"
 harness = false
 
+[[bench]]
+name = "updatedb_bench"
+harness = false
+
+[[bench]]
+name = "locate_bench"
+harness = false
+
 [[bin]]
 name = "find"
 path = "src/find/main.rs"
