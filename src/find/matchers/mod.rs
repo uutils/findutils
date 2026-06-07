@@ -400,7 +400,7 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
 ///
 /// Additionally, there is support for the -anewer and -cnewer short arguments. as follows:
 /// 1. -anewer is equivalent to -neweram
-/// 2. -cnewer is equivalent to - newercm
+/// 2. -cnewer is equivalent to -newercm
 ///
 /// If -newer is used it will be resolved to -newermm.
 fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
