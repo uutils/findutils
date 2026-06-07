@@ -9,15 +9,11 @@ use std::process::Command;
 use assert_cmd::{assert::OutputAssertExt, cargo::CommandCargoExt};
 use rstest::rstest;
 
-#[cfg(not(windows))]
 const DB_FLAG: &str = "--database=test_data/db/test_data_db";
-#[cfg(not(windows))]
 const INVALID_DB_FLAG: &str = "--database=test_data/db/invalid_db";
-#[cfg(not(windows))]
 const OLD_DB_FLAG: &str = "--database=test_data/db/old_db";
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_no_matches() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -27,7 +23,6 @@ fn test_locate_no_matches() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_match() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -37,7 +32,6 @@ fn test_locate_match() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_no_matches_basename() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -47,7 +41,6 @@ fn test_locate_no_matches_basename() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_match_basename() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -57,7 +50,6 @@ fn test_locate_match_basename() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_existing() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -67,7 +59,6 @@ fn test_locate_existing() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_non_existing() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -77,7 +68,6 @@ fn test_locate_non_existing() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_statistics() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -91,7 +81,6 @@ fn test_locate_statistics() {
 #[case("grep")]
 #[case("posix-basic")]
 #[case("posix-extended")]
-#[cfg(not(windows))]
 fn test_locate_regex(#[case] input: &str) {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -106,7 +95,6 @@ fn test_locate_regex(#[case] input: &str) {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_all() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -116,7 +104,6 @@ fn test_locate_all() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_all_regex() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -126,7 +113,6 @@ fn test_locate_all_regex() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_invalid_db() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -136,7 +122,6 @@ fn test_locate_invalid_db() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_outdated_db() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -146,7 +131,6 @@ fn test_locate_outdated_db() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_print_help() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -156,7 +140,6 @@ fn test_locate_print_help() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_locate_invalid_flag() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -167,7 +150,6 @@ fn test_locate_invalid_flag() {
 
 // an un-compilable regex should be reported as an error rather than silently matching nothing
 #[test]
-#[cfg(not(windows))]
 fn test_locate_invalid_regex() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
@@ -177,17 +159,19 @@ fn test_locate_invalid_regex() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_updatedb() {
+    let tmp = tempfile::tempdir().unwrap();
     Command::cargo_bin("updatedb")
         .expect("couldn't find updatedb binary")
-        .args(["--localpaths=./test_data", "--output=/dev/null"])
+        .args([
+            "--localpaths=./test_data".to_string(),
+            format!("--output={}", tmp.path().join("db").display()),
+        ])
         .assert()
         .success();
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_updatedb_invalid_flag() {
     Command::cargo_bin("updatedb")
         .expect("couldn't find updatedb binary")
@@ -198,16 +182,48 @@ fn test_updatedb_invalid_flag() {
 
 // empty prunefs/prunepaths must not produce an invalid find expression (e.g. an empty `( )` group)
 #[test]
-#[cfg(not(windows))]
 fn test_updatedb_empty_prune() {
+    let tmp = tempfile::tempdir().unwrap();
     Command::cargo_bin("updatedb")
         .expect("couldn't find updatedb binary")
         .args([
-            "--localpaths=./test_data",
-            "--output=/dev/null",
-            "--prunefs=",
-            "--prunepaths=",
+            "--localpaths=./test_data".to_string(),
+            format!("--output={}", tmp.path().join("db").display()),
+            "--prunefs=".to_string(),
+            "--prunepaths=".to_string(),
         ])
         .assert()
         .success();
+}
+
+// build a database from a temp tree with updatedb, then query it back with locate. This is the
+// only test that exercises the full pipeline (writer + reader) and is platform-independent.
+#[test]
+fn test_updatedb_locate_roundtrip() {
+    // create the tree under the target dir so the path has no spaces (updatedb splits
+    // --localpaths on whitespace, mirroring GNU's space-separated convention)
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let marker = "locate_roundtrip_marker";
+    std::fs::write(dir.path().join(marker), b"").unwrap();
+    let db = dir.path().join("db");
+
+    Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .args([
+            format!("--localpaths={}", dir.path().display()),
+            format!("--output={}", db.display()),
+        ])
+        .assert()
+        .success();
+
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args([marker.to_string(), format!("--database={}", db.display())])
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains(marker),
+        "locate output did not contain the indexed file: {stdout:?}"
+    );
 }
