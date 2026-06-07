@@ -9,7 +9,7 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{stderr, stdout, BufRead, BufReader, IsTerminal, Write};
+use std::io::{self, stderr, stdout, BufRead, BufReader, IsTerminal, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -278,11 +278,11 @@ fn process_dir(
 fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
     if paths_and_matcher.config.help_requested {
-        print_help();
+        print_help(deps)?;
         return Ok(0);
     }
     if paths_and_matcher.config.version_requested {
-        print_version();
+        print_version(deps)?;
         return Ok(0);
     }
 
@@ -307,8 +307,9 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
     Ok(ret)
 }
 
-fn print_help() {
-    println!(
+fn print_help(deps: &dyn Dependencies) -> Result<(), io::Error> {
+    writeln!(
+        &mut deps.get_output().borrow_mut(),
         r"Usage: find [path...] [expression]
 
 If no path is supplied then the current working directory is used by default.
@@ -399,11 +400,15 @@ Actions:
  -prune                   Do not descend into directory
  -quit                    Exit immediately
 "
-    );
+    )
 }
 
-fn print_version() {
-    println!("find (Rust) {}", env!("CARGO_PKG_VERSION"));
+fn print_version(deps: &dyn Dependencies) -> Result<(), io::Error> {
+    writeln!(
+        &mut deps.get_output().borrow_mut(),
+        "find (Rust) {}",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 /// Does all the work for find.
