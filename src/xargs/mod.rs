@@ -432,7 +432,7 @@ impl CommandBuilder<'_> {
                 .args(&self.extra_args)
                 .env_clear()
                 .envs(&self.options.env);
-        };
+        }
 
         if self.options.close_stdin {
             command.stdin(Stdio::null());
