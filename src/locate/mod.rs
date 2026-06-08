@@ -448,7 +448,7 @@ impl Iterator for DbReader {
                 .take(self.prefix as usize)
                 .collect::<Vec<_>>()
         });
-        if (prefix.as_ref().map(|v| v.len()).unwrap_or(0) as isize) < size {
+        if (prefix.as_ref().map(std::vec::Vec::len).unwrap_or(0) as isize) < size {
             return Some(Err(Error::InvalidDb(
                 self.path.to_string_lossy().to_string(),
             )));
