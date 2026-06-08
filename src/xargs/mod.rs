@@ -534,7 +534,7 @@ where
                 let bytes_read = loop {
                     match self.rd.read(&mut pending[..]) {
                         Ok(bytes_read) => break bytes_read,
-                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                         Err(e) => return Err(e),
                     }
                 };
