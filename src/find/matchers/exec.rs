@@ -40,7 +40,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::new_impl(executable, args, exec_in_parent_dir, false)
+        Ok(Self::new_impl(executable, args, exec_in_parent_dir, false))
     }
 
     pub fn new_interactive(
@@ -48,7 +48,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::new_impl(executable, args, exec_in_parent_dir, true)
+        Ok(Self::new_impl(executable, args, exec_in_parent_dir, true))
     }
 
     fn new_impl(
@@ -56,15 +56,15 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
         interactive: bool,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Self {
         let transformed_args = args.iter().map(|&a| parse_arg(a)).collect();
 
-        Ok(Self {
+        Self {
             executable: parse_arg(executable),
             args: transformed_args,
             exec_in_parent_dir,
             interactive,
-        })
+        }
     }
 }
 
