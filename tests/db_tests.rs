@@ -196,6 +196,32 @@ fn test_updatedb_empty_prune() {
         .success();
 }
 
+// when the output database can't be created, updatedb must report a clear error naming the path
+// and must not leak the raw "(os error N)" suffix
+#[test]
+fn test_updatedb_output_create_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    // a path under a non-existent directory can't be created
+    let bad_output = tmp.path().join("does-not-exist").join("db");
+    let assert = Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .args([
+            "--localpaths=./test_data".to_string(),
+            format!("--output={}", bad_output.display()),
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("cannot create") && stderr.contains(&bad_output.display().to_string()),
+        "stderr did not name the un-creatable output path: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("os error"),
+        "stderr leaked the raw OS error: {stderr:?}"
+    );
+}
+
 // build a database from a temp tree with updatedb, then query it back with locate. This is the
 // only test that exercises the full pipeline (writer + reader) and is platform-independent.
 #[test]

@@ -14,7 +14,7 @@ use std::{
 };
 
 use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
-use uucore::error::UResult;
+use uucore::error::{strip_errno, UResult, USimpleError};
 
 use crate::find::{find_main, Dependencies};
 
@@ -323,22 +323,46 @@ fn do_updatedb(args: &[&str]) -> UResult<()> {
     let deps = CapturedDependencies::new(output.clone());
     find_main(find_args.as_slice(), &deps);
 
-    let mut writer = BufWriter::new(
-        OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(config.output)?,
-    );
+    let output_path = config.output;
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(&output_path)
+        .map_err(|e| {
+            USimpleError::new(
+                1,
+                format!(
+                    "cannot create '{}': {}",
+                    output_path.display(),
+                    strip_errno(&e)
+                ),
+            )
+        })?;
+    let mut writer = BufWriter::new(file);
+
+    // strip the trailing "(os error N)" so write failures read like the create error above
+    let write_err = |e: std::io::Error| {
+        USimpleError::new(
+            1,
+            format!(
+                "error writing '{}': {}",
+                output_path.display(),
+                strip_errno(&e)
+            ),
+        )
+    };
 
     let output = output.borrow();
     let frcoder = Frcoder::new(output.as_slice(), config.db_format);
-    writer.write_all(&frcoder.generate_header())?;
+    writer
+        .write_all(&frcoder.generate_header())
+        .map_err(&write_err)?;
     for v in frcoder {
-        writer.write_all(v.as_slice())?;
+        writer.write_all(v.as_slice()).map_err(&write_err)?;
     }
 
-    writer.flush()?;
+    writer.flush().map_err(&write_err)?;
 
     Ok(())
 }
