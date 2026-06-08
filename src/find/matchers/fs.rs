@@ -42,8 +42,18 @@ pub fn get_file_system_type(path: &Path, cache: &RefCell<Option<Cache>>) -> URes
         Ok(metadata) => metadata,
         Err(err) => Err(err)?,
     };
-    let dev_id = metadata.dev().to_string();
 
+    fs_type_for_dev(metadata.dev().to_string(), cache)
+}
+
+/// Resolve a device id to its filesystem type, consulting (and updating) `cache`.
+///
+/// Callers are expected to obtain `dev_id` from metadata they already hold (e.g. the cached
+/// [`WalkEntry::metadata`]), so that no extra `stat`/`statx` syscall is issued per entry.
+///
+/// This is only supported on Unix.
+#[cfg(unix)]
+pub fn fs_type_for_dev(dev_id: String, cache: &RefCell<Option<Cache>>) -> UResult<String> {
     if let Some(cache) = cache.borrow().as_ref() {
         if cache.dev_id == dev_id {
             return Ok(cache.fs_type.clone());
@@ -94,7 +104,24 @@ impl FileSystemMatcher {
 impl Matcher for FileSystemMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        if let Ok(result) = get_file_system_type(file_info.path(), &self.cache) {
+        use std::os::unix::fs::MetadataExt;
+
+        // Reuse the metadata already cached on the entry (a single shared `statx` per entry)
+        // rather than issuing a fresh `lstat`/`statx` here. With several `-fstype` clauses (as
+        // `updatedb` builds) this turns N stats per file into one.
+        let Ok(metadata) = file_info.metadata() else {
+            writeln!(
+                &mut stderr(),
+                "Error getting filesystem type for {}",
+                file_info.path().to_string_lossy()
+            )
+            .unwrap();
+
+            return false;
+        };
+        let dev_id = metadata.dev().to_string();
+
+        if let Ok(result) = fs_type_for_dev(dev_id, &self.cache) {
             result == self.fs_text
         } else {
             writeln!(
