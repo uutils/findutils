@@ -37,14 +37,14 @@ impl From<ArgMatches> for Config {
                 .get_one::<String>("findoptions")
                 .cloned()
                 .unwrap_or_else(String::new),
-            local_paths: value
-                .get_one::<String>("localpaths")
-                .map(|s| {
+            local_paths: value.get_one::<String>("localpaths").map_or_else(
+                || vec![PathBuf::from("/")],
+                |s| {
                     s.split_whitespace()
                         .filter_map(|s| PathBuf::from_str(s).ok())
                         .collect()
-                })
-                .unwrap_or_else(|| vec![PathBuf::from("/")]),
+                },
+            ),
             net_paths: value
                 .get_one::<String>("netpaths")
                 .map(|s| {
@@ -53,28 +53,28 @@ impl From<ArgMatches> for Config {
                         .collect()
                 })
                 .unwrap_or_default(),
-            prune_paths: value
-                .get_one::<String>("prunepaths")
-                .map(|s| s.split_whitespace().map(PathBuf::from).collect())
-                .unwrap_or_else(|| {
+            prune_paths: value.get_one::<String>("prunepaths").map_or_else(
+                || {
                     ["/tmp", "/usr/tmp", "/var/tmp", "/afs"]
                         .into_iter()
                         .map(PathBuf::from)
                         .collect()
-                }),
-            prune_fs: value
-                .get_one::<String>("prunefs")
-                .map(|s| {
-                    s.split_whitespace()
-                        .map(std::borrow::ToOwned::to_owned)
-                        .collect()
-                })
-                .unwrap_or_else(|| {
+                },
+                |s| s.split_whitespace().map(PathBuf::from).collect(),
+            ),
+            prune_fs: value.get_one::<String>("prunefs").map_or_else(
+                || {
                     ["nfs", "NFS", "proc"]
                         .into_iter()
                         .map(str::to_string)
                         .collect()
-                }),
+                },
+                |s| {
+                    s.split_whitespace()
+                        .map(std::borrow::ToOwned::to_owned)
+                        .collect()
+                },
+            ),
             db_format: value
                 .get_one::<DbFormat>("dbformat")
                 .copied()

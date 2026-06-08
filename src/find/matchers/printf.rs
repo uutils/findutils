@@ -205,7 +205,7 @@ impl FormatStringParser<'_> {
         let start = self.string;
         let mut digits = 0;
 
-        while self.front().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        while self.front().is_ok_and(|c| c.is_ascii_digit()) {
             digits += 1;
             // safe to unwrap: the front() check already succeeded above.
             self.advance_one().unwrap();
