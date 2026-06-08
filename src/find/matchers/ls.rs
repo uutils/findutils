@@ -292,15 +292,15 @@ mod tests {
     fn test_format_permissions() {
         use super::format_permissions;
 
-        let mode: uucore::libc::mode_t = 0o100644;
+        let mode: uucore::libc::mode_t = 0o100_644;
         let expected = "-rw-r--r--";
         assert_eq!(format_permissions(mode), expected);
 
-        let mode: uucore::libc::mode_t = 0o040755;
+        let mode: uucore::libc::mode_t = 0o040_755;
         let expected = "drwxr-xr-x";
         assert_eq!(format_permissions(mode), expected);
 
-        let mode: uucore::libc::mode_t = 0o100777;
+        let mode: uucore::libc::mode_t = 0o100_777;
         let expected = "-rwxrwxrwx";
         assert_eq!(format_permissions(mode), expected);
     }
