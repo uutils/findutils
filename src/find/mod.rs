@@ -237,7 +237,7 @@ fn process_dir(
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
 
-                let new_dir = entry.path().parent().map(|x| x.to_path_buf());
+                let new_dir = entry.path().parent().map(std::path::Path::to_path_buf);
                 if new_dir != current_dir {
                     if let Some(dir) = current_dir.take() {
                         matcher.finished_dir(dir.as_path(), &mut matcher_io);

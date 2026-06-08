@@ -47,7 +47,11 @@ impl From<ArgMatches> for Config {
                 .unwrap_or_else(|| vec![PathBuf::from("/")]),
             net_paths: value
                 .get_one::<String>("netpaths")
-                .map(|s| s.split_whitespace().map(|s| s.to_owned()).collect())
+                .map(|s| {
+                    s.split_whitespace()
+                        .map(std::borrow::ToOwned::to_owned)
+                        .collect()
+                })
                 .unwrap_or_default(),
             prune_paths: value
                 .get_one::<String>("prunepaths")
@@ -60,7 +64,11 @@ impl From<ArgMatches> for Config {
                 }),
             prune_fs: value
                 .get_one::<String>("prunefs")
-                .map(|s| s.split_whitespace().map(|s| s.to_owned()).collect())
+                .map(|s| {
+                    s.split_whitespace()
+                        .map(std::borrow::ToOwned::to_owned)
+                        .collect()
+                })
                 .unwrap_or_else(|| {
                     ["nfs", "NFS", "proc"]
                         .into_iter()
