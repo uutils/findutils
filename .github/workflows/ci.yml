@@ -92,7 +92,7 @@ jobs:
           path: lcov.info
 
       - name: Upload coverage to codecov.io
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: lcov.info
           fail_ci_if_error: true
