@@ -94,18 +94,17 @@ impl FileSystemMatcher {
 impl Matcher for FileSystemMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        match get_file_system_type(file_info.path(), &self.cache) {
-            Ok(result) => result == self.fs_text,
-            Err(_) => {
-                writeln!(
-                    &mut stderr(),
-                    "Error getting filesystem type for {}",
-                    file_info.path().to_string_lossy()
-                )
-                .unwrap();
+        if let Ok(result) = get_file_system_type(file_info.path(), &self.cache) {
+            result == self.fs_text
+        } else {
+            writeln!(
+                &mut stderr(),
+                "Error getting filesystem type for {}",
+                file_info.path().to_string_lossy()
+            )
+            .unwrap();
 
-                false
-            }
+            false
         }
     }
 
