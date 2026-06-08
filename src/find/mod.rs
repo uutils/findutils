@@ -1323,7 +1323,7 @@ mod tests {
         assert_eq!(rc, 1);
 
         // test empty user name
-        ["-user", "-nouser"].iter().for_each(|&arg| {
+        for &arg in &["-user", "-nouser"] {
             let deps = FakeDependencies::new();
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, ""], &deps);
 
@@ -1333,7 +1333,7 @@ mod tests {
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, " "], &deps);
 
             assert_eq!(rc, 1);
-        });
+        }
     }
 
     #[test]
@@ -1411,7 +1411,7 @@ mod tests {
         assert_eq!(rc, 1);
 
         // test empty user name and group name
-        ["-group", "-nogroup"].iter().for_each(|&arg| {
+        for &arg in &["-group", "-nogroup"] {
             let deps = FakeDependencies::new();
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, ""], &deps);
 
@@ -1421,7 +1421,7 @@ mod tests {
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, " "], &deps);
 
             assert_eq!(rc, 1);
-        });
+        }
     }
 
     #[test]

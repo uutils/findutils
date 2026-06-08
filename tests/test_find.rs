@@ -615,18 +615,18 @@ fn find_time() {
         "-ctime",
         "-mtime",
     ];
-    tests.iter().for_each(|flag| {
-        args.iter().for_each(|arg| {
+    for flag in &tests {
+        for arg in &args {
             ucmd()
                 .args(&["./test_data/simple", flag, arg])
                 .succeeds()
                 .no_stderr();
-        });
+        }
 
-        exception_args.iter().for_each(|arg| {
+        for arg in &exception_args {
             ucmd().args(&[".", flag, arg]).fails().no_stdout();
-        });
-    });
+        }
+    }
 }
 
 #[test]
