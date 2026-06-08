@@ -514,16 +514,16 @@ where
     R: Read,
 {
     fn next(&mut self) -> io::Result<Option<Argument>> {
+        enum Escape {
+            Slash,
+            Quote(u8),
+        }
+
         let mut result = vec![];
         let mut terminated_by_newline = false;
 
         let mut pending = vec![];
         std::mem::swap(&mut pending, &mut self.pending);
-
-        enum Escape {
-            Slash,
-            Quote(u8),
-        }
 
         let mut escape: Option<Escape> = None;
         let mut i = 0;
