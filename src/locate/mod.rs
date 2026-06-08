@@ -560,22 +560,19 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     const GLOB_METACHARS: &str = r"*?[]\";
 
     let has_metachars = entry.chars().any(|c| GLOB_METACHARS.contains(c));
-    let patterns_match = match config.all {
-        false => {
-            if has_metachars {
-                // TODO: parse metacharacters
-                false
-            } else {
-                patterns.any_match(entry.as_ref())
-            }
+    let patterns_match = if config.all {
+        if has_metachars {
+            // TODO: parse metacharacters
+            false
+        } else {
+            patterns.all_match(entry.as_ref())
         }
-        true => {
-            if has_metachars {
-                // TODO: parse metacharacters
-                false
-            } else {
-                patterns.all_match(entry.as_ref())
-            }
+    } else {
+        if has_metachars {
+            // TODO: parse metacharacters
+            false
+        } else {
+            patterns.any_match(entry.as_ref())
         }
     };
 
