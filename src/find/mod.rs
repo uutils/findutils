@@ -546,7 +546,7 @@ mod tests {
         //
         let result = super::parse_args(&["-asdadsafsfsadcs"]);
         if let Err(e) = result {
-            assert_eq!(e.to_string(), "Unrecognized flag: '-asdadsafsfsadcs'");
+            assert_eq!(e.to_string(), "unknown predicate '-asdadsafsfsadcs'");
         } else {
             panic!("parse_args should have returned an error");
         }
