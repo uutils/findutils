@@ -9,7 +9,9 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{self, stderr, stdout, BufRead, BufReader, IsTerminal, Write};
+#[cfg(unix)]
+use std::io::IsTerminal;
+use std::io::{self, stderr, stdout, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;

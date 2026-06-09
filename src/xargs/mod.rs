@@ -152,6 +152,12 @@ fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
     s.as_bytes().len() + 1
 }
 
+#[cfg(not(any(unix, windows)))]
+fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
+    // Include +1 for the null terminator.
+    s.as_encoded_bytes().len() + 1
+}
+
 #[derive(Clone)]
 struct MaxCharsCommandSizeLimiter {
     current_size: usize,
@@ -186,6 +192,14 @@ impl MaxCharsCommandSizeLimiter {
             .sum();
 
         Self::new(arg_max - ARG_HEADROOM - env_size)
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
+        // No portable way to query the system limit; fall back to the POSIX
+        // minimum guaranteed value for _POSIX_ARG_MAX.
+        const POSIX_ARG_MAX: usize = 4096;
+        Self::new(POSIX_ARG_MAX)
     }
 }
 
