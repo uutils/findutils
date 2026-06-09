@@ -17,6 +17,7 @@ use super::{FileType, Matcher, MatcherIO, WalkEntry, WalkError};
 #[cfg(unix)]
 use std::os::unix::prelude::MetadataExt;
 
+#[cfg(unix)]
 const STANDARD_BLOCK_SIZE: u64 = 512;
 
 #[derive(Debug, PartialEq, Eq)]

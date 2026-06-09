@@ -91,7 +91,7 @@ impl PermMatcher {
     }
 
     #[cfg(not(unix))]
-    pub fn new(_dummy_pattern: &str) -> Result<PermMatcher, Box<dyn Error>> {
+    pub fn new(_dummy_pattern: &str) -> Result<Self, Box<dyn Error>> {
         Err(From::from(
             "Permission matching is not available on this platform",
         ))
@@ -132,7 +132,7 @@ impl Matcher for PermMatcher {
             "Permission matching not available on this platform!"
         )
         .unwrap();
-        return false;
+        false
     }
 }
 
