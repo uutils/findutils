@@ -83,7 +83,10 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
 
                     if matches!(delim, '.' | '=' | ':') {
                         let rest = chars.as_str();
-                        let end = rest.find([delim, ']'])? + 2;
+                        // Search for the two-byte closer `<delim>]` (e.g. `:]`);
+                        // matching either byte alone let `+ 2` overshoot a char boundary.
+                        let closer = format!("{delim}]");
+                        let end = rest.find(closer.as_str())? + 2;
                         expr.push_str(&rest[..end]);
                         chars = rest[end..].chars();
                     }
@@ -220,6 +223,16 @@ mod tests {
     #[test]
     fn invalid_brackets() {
         assert_glob_regex(r"foo[bar[!baz", r"foo\[bar\[!baz");
+    }
+
+    #[test]
+    fn malformed_posix_class_with_multibyte_char() {
+        for pat in ["[[:]é", "[[:a]é", "[[.]é", "[[:é]", "[[=]😀"] {
+            assert!(
+                glob_to_regex(pat).is_some(),
+                "panicked or rejected: {pat:?}"
+            );
+        }
     }
 
     #[test]
