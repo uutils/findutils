@@ -126,7 +126,6 @@ impl Ls {
         mut out: impl Write,
         print_error_message: bool,
     ) {
-        use nix::unistd::{Gid, Group, Uid, User};
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
         let metadata = file_info.metadata().unwrap();
@@ -150,14 +149,13 @@ impl Ls {
         let permission =
             { format_permissions(metadata.permissions().mode() as uucore::libc::mode_t) };
         let hard_links = metadata.nlink();
-        let user = {
-            let uid = metadata.uid();
-            User::from_uid(Uid::from_raw(uid)).unwrap().unwrap().name
-        };
-        let group = {
-            let gid = metadata.gid();
-            Group::from_gid(Gid::from_raw(gid)).unwrap().unwrap().name
-        };
+        // Fall back to the numeric id when the uid/gid has no passwd/group entry
+        // (unmapped owner) — matching GNU find, which never crashes. uucore::entries
+        // serializes the non-thread-safe getpwuid/getgrgid behind a mutex.
+        let user =
+            uucore::entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string());
+        let group =
+            uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
         let size = metadata.size();
         let last_modified = {
             let system_time = metadata.modified().unwrap();
