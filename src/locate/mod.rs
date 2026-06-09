@@ -490,8 +490,10 @@ impl DbReader {
             return None;
         };
 
-        // drop nul byte when matching
-        match String::from_utf8_lossy(&buf[..buf.len() - 1]).as_ref() {
+        // drop the trailing nul byte when matching. `read_until` may stop at EOF
+        // without one (e.g. a too-short file), so strip it only if present rather
+        // than slicing `buf.len() - 1`, which underflows when `buf` is empty.
+        match String::from_utf8_lossy(buf.strip_suffix(b"\0").unwrap_or(&buf)).as_ref() {
             "LOCATE02" => Some(DbFormat::Locate02),
             _ => None,
         }

@@ -253,3 +253,16 @@ fn test_updatedb_locate_roundtrip() {
         "locate output did not contain the indexed file: {stdout:?}"
     );
 }
+
+#[test]
+fn test_locate_one_byte_db() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("db_1byte");
+    std::fs::write(&db, b"X").unwrap();
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .arg(format!("--database={}", db.display()))
+        .arg("foo")
+        .assert()
+        .code(1);
+}
