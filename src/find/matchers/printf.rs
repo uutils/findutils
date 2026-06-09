@@ -167,16 +167,21 @@ impl FormatStringParser<'_> {
         // Try parsing an octal sequence first.
         let first = self.front()?;
         if first.is_digit(OCTAL_RADIX) {
-            if let Ok(code) = self.peek(OCTAL_LEN).and_then(|octal| {
-                u32::from_str_radix(octal, OCTAL_RADIX).map_err(std::convert::Into::into)
-            }) {
-                // safe to unwrap: .peek() already succeeded above.
-                let octal = self.advance_by(OCTAL_LEN).unwrap();
-                return match char::from_u32(code) {
-                    Some(c) => Ok(FormatComponent::Literal(c.to_string())),
-                    None => Err(format!("Invalid character value: \\{octal}").into()),
-                };
-            }
+            // A GNU octal escape is 1 to 3 octal digits. Consume only the leading
+            // octal digits (which are ASCII), rather than slicing a fixed 3 bytes
+            // that can land inside a following multibyte char.
+            let octal: String = self
+                .string
+                .chars()
+                .take(OCTAL_LEN)
+                .take_while(|c| c.is_digit(OCTAL_RADIX))
+                .collect();
+            let code = u32::from_str_radix(&octal, OCTAL_RADIX)?;
+            self.advance_by(octal.len())?;
+            return match char::from_u32(code) {
+                Some(c) => Ok(FormatComponent::Literal(c.to_string())),
+                None => Err(format!("Invalid character value: \\{octal}").into()),
+            };
         }
 
         self.advance_one()?;
@@ -686,6 +691,31 @@ mod tests {
 
         assert!(FormatString::parse("\\X").is_err());
         assert!(FormatString::parse("\\").is_err());
+    }
+
+    #[test]
+    fn test_parse_octal_escape_before_multibyte_char() {
+        assert_eq!(
+            FormatString::parse("\\0€").unwrap().components,
+            vec![
+                FormatComponent::Literal("\0".to_owned()),
+                FormatComponent::Literal("€".to_owned()),
+            ]
+        );
+        assert_eq!(
+            FormatString::parse("\\1😀").unwrap().components,
+            vec![
+                FormatComponent::Literal("\u{1}".to_owned()),
+                FormatComponent::Literal("😀".to_owned()),
+            ]
+        );
+        assert_eq!(
+            FormatString::parse("\\00é").unwrap().components,
+            vec![
+                FormatComponent::Literal("\0".to_owned()),
+                FormatComponent::Literal("é".to_owned()),
+            ]
+        );
     }
 
     #[test]
