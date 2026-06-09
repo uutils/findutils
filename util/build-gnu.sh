@@ -2,6 +2,9 @@
 
 set -e
 
+# Repository root (where util/ lives), captured before we cd into the GNU tree.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 if test ! -d ../findutils.gnu; then
     echo "Could not find ../findutils.gnu"
     echo "git clone https://git.savannah.gnu.org/git/findutils.git findutils.gnu"
@@ -36,51 +39,18 @@ make check-TESTS $RUN_TEST || :
 make -C find/testsuite check || :
 make -C xargs/testsuite check || :
 
-PASS=0
-SKIP=0
-FAIL=0
-XPASS=0
-ERROR=0
+# Build a per-test JSON summary (name + status for every test) used by
+# compare_test_results.py to detect per-test improvements/regressions.
+RESULT_JSON="${RESULT_JSON:-../findutils-gnu-full-result.json}"
+output="$(python3 "${REPO_DIR}/util/gnu_json_result.py" . "${RESULT_JSON}")"
+echo "${output}"
 
-LOG_FILE=./find/testsuite/find.log
-if test -f "$LOG_FILE"; then
-    ((PASS += $(sed -En 's/# of expected passes\s*//p' "$LOG_FILE"))) || :
-    ((FAIL += $(sed -En 's/# of unexpected failures\s*//p' "$LOG_FILE"))) || :
-fi
-
-LOG_FILE=./xargs/testsuite/xargs.log
-if test -f "$LOG_FILE"; then
-    ((PASS += $(sed -En 's/# of expected passes\s*//p' "$LOG_FILE"))) || :
-    ((FAIL += $(sed -En 's/# of unexpected failures\s*//p' "$LOG_FILE"))) || :
-fi
-
-((TOTAL = PASS + FAIL)) || :
-
-LOG_FILE=./tests/test-suite.log
-if test -f "$LOG_FILE"; then
-    ((TOTAL += $(sed -n "s/.*# TOTAL: \(.*\)/\1/p"  "$LOG_FILE" | tr -d '\r' | head -n1))) || :
-    ((PASS += $(sed -n "s/.*# PASS: \(.*\)/\1/p" "$LOG_FILE" | tr -d '\r' | head -n1))) || :
-    ((SKIP += $(sed -n "s/.*# SKIP: \(.*\)/\1/p" "$LOG_FILE" | tr -d '\r' | head -n1))) || :
-    ((FAIL += $(sed -n "s/.*# FAIL: \(.*\)/\1/p" "$LOG_FILE" | tr -d '\r' | head -n1))) || :
-    ((XPASS += $(sed -n "s/.*# XPASS: \(.*\)/\1/p" "$LOG_FILE" | tr -d '\r' | head -n1))) || :
-    ((ERROR += $(sed -n "s/.*# ERROR: \(.*\)/\1/p" "$LOG_FILE" | tr -d '\r' | head -n1))) || :
-fi
+TOTAL=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['total'])" "${RESULT_JSON}")
+FAIL=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['failed'])" "${RESULT_JSON}")
 
 if ((TOTAL <= 1)); then
     echo "Error in the execution, failing early"
     exit 1
 fi
 
-output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
-echo "${output}"
-if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
-jq -n \
-   --arg date "$(date --rfc-email)" \
-   --arg sha "$GITHUB_SHA" \
-   --arg total "$TOTAL" \
-   --arg pass "$PASS" \
-   --arg skip "$SKIP" \
-   --arg fail "$FAIL" \
-   --arg xpass "$XPASS" \
-   --arg error "$ERROR" \
-   '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > ../gnu-result.json
+if [[ "$FAIL" -gt 0 ]]; then echo "::warning ::${output}"; fi
