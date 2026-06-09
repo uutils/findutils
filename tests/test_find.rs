@@ -1009,6 +1009,37 @@ fn find_ls() {
         .no_stderr();
 }
 
+// Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
+// a file's owning uid/gid had no passwd/group entry; it must fall back to the
+// numeric id like GNU find. Creating such a file needs privilege to chown to an
+// unmapped id, so skip when that isn't available (e.g. non-root CI).
+#[test]
+#[cfg(unix)]
+fn find_ls_unmapped_owner_renders_numeric_id() {
+    use nix::unistd::{chown, Gid, Uid};
+
+    let temp_dir = Builder::new().prefix("find_ls_unmapped").tempdir().unwrap();
+    let file = temp_dir.path().join("orphan");
+    File::create(&file).unwrap();
+
+    // A uid/gid essentially never present in /etc/passwd or /etc/group.
+    let unmapped = 4_000_000_000u32;
+    if chown(
+        &file,
+        Some(Uid::from_raw(unmapped)),
+        Some(Gid::from_raw(unmapped)),
+    )
+    .is_err()
+    {
+        return;
+    }
+
+    ucmd()
+        .args(&[file.to_str().unwrap(), "-ls"])
+        .succeeds()
+        .stdout_contains(unmapped.to_string());
+}
+
 #[test]
 #[cfg(unix)]
 fn find_slashes() {
