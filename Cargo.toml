@@ -22,6 +22,14 @@ walkdir = "2.5"
 itertools = "0.14.0"
 thiserror = "2.0.12"
 
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+]
+
 [dev-dependencies]
 criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
 assert_cmd = "2"
