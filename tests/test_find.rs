@@ -510,6 +510,15 @@ fn find_printf() {
         );
 }
 
+#[test]
+fn find_printf_octal_escape_before_multibyte_char() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\0€\\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("\0€\n");
+}
+
 #[cfg(unix)]
 #[test]
 fn find_perm() {
