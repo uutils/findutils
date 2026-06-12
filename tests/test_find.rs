@@ -519,6 +519,22 @@ fn find_printf_octal_escape_before_multibyte_char() {
         .stdout_only("\0€\n");
 }
 
+#[test]
+fn find_printf_multibyte_char_after_directive() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%€\\n"])
+        .succeeds()
+        .stdout_only("€\n");
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\€\\n"])
+        .fails()
+        .stderr_contains("find: Invalid escape sequence");
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%A€"])
+        .fails()
+        .stderr_contains("find: Invalid time specifier");
+}
+
 #[cfg(unix)]
 #[test]
 fn find_perm() {
