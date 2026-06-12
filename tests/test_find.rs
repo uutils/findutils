@@ -519,6 +519,30 @@ fn find_printf_octal_escape_before_multibyte_char() {
         .stdout_only("\0€\n");
 }
 
+#[test]
+fn find_printf_width_too_large() {
+    ucmd()
+        .args(&[
+            "./test_data/simple",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "%70000s\\n",
+        ])
+        .fails()
+        .stderr_contains("find: Format width too large");
+    ucmd()
+        .args(&[
+            "./test_data/simple",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "%99999999999999999999s\\n",
+        ])
+        .fails()
+        .stderr_contains("find: Invalid format width");
+}
+
 #[cfg(unix)]
 #[test]
 fn find_perm() {
