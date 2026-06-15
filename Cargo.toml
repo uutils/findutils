@@ -79,7 +79,6 @@ panic = "abort"
 # The profile that 'dist' (cargo-dist) builds release artifacts with.
 [profile.dist]
 inherits = "release"
-lto = "thin"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
