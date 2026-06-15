@@ -76,6 +76,11 @@ codegen-units = 1
 inherits = "release"
 panic = "abort"
 
+# The profile that 'dist' (cargo-dist) builds release artifacts with.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
