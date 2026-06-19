@@ -15,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout findutils
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: findutils
       - name: Checkout GNU findutils
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gnu-mirror-unofficial/findutils
           path: findutils.gnu
@@ -127,11 +127,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout findutils
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: findutils
       - name: Checkout BFS
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: tavianator/bfs
           path: bfs
