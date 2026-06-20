@@ -601,13 +601,13 @@ impl Printf {
                 } => match format_directive(file_info, directive) {
                     Ok(content) => {
                         if let Some(width) = width {
+                            // Pad manually rather than relying on the format
+                            // machinery's `{:width$}` support, whose dynamic
+                            // width is capped at `u16::MAX` and panics above it.
+                            let pad = " ".repeat(width.saturating_sub(content.chars().count()));
                             match justify {
-                                Justify::Left => {
-                                    write!(out, "{content:<width$}").unwrap();
-                                }
-                                Justify::Right => {
-                                    write!(out, "{content:>width$}").unwrap();
-                                }
+                                Justify::Left => write!(out, "{content}{pad}").unwrap(),
+                                Justify::Right => write!(out, "{pad}{content}").unwrap(),
                             }
                         } else {
                             write!(out, "{content}").unwrap();
@@ -847,6 +847,20 @@ mod tests {
         let matcher = Printf::new("%f,%7f,%-7f", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!("abbbc,  abbbc,abbbc  ", deps.get_output_as_string());
+    }
+
+    #[test]
+    fn test_printf_large_width_does_not_panic() {
+        let file_info = get_dir_entry_for("test_data/simple", "abbbc");
+        let deps = FakeDependencies::new();
+
+        // Widths above u16::MAX used to panic in the format machinery.
+        let matcher = Printf::new("%100000f", None).unwrap();
+        assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+        let output = deps.get_output_as_string();
+        assert_eq!(output.len(), 100000);
+        assert!(output.ends_with("abbbc"));
+        assert_eq!(output.trim_start(), "abbbc");
     }
 
     #[test]
