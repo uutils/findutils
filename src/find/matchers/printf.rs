@@ -858,7 +858,7 @@ mod tests {
         let matcher = Printf::new("%100000f", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         let output = deps.get_output_as_string();
-        assert_eq!(output.len(), 100000);
+        assert_eq!(output.len(), 100_000);
         assert!(output.ends_with("abbbc"));
         assert_eq!(output.trim_start(), "abbbc");
     }
