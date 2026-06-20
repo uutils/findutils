@@ -24,3 +24,9 @@ allow-dirty = ["ci"]
 x86_64-unknown-linux-gnu = "ubuntu-latest"
 x86_64-unknown-linux-musl = "ubuntu-latest"
 aarch64-unknown-linux-musl = "ubuntu-24.04-arm"
+# Pin to currently-available runners. The cargo-dist 0.28 defaults
+# (macos-13, windows-2019) have been retired by GitHub, so those jobs
+# hang forever "awaiting a runner" and the release never gets its assets.
+x86_64-apple-darwin = "macos-15-intel"
+aarch64-apple-darwin = "macos-14"
+x86_64-pc-windows-msvc = "windows-2022"
