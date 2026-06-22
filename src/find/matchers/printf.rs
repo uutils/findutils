@@ -207,7 +207,7 @@ impl FormatStringParser<'_> {
         }
     }
 
-    fn parse_format_width(&mut self) -> Option<usize> {
+    fn parse_format_width(&mut self) -> Result<Option<usize>, Box<dyn Error>> {
         let start = self.string;
         let mut digits = 0;
 
@@ -218,11 +218,16 @@ impl FormatStringParser<'_> {
         }
 
         if digits > 0 {
-            // safe to unwrap: we already know all the digits are valid due to
-            // the above checks.
-            Some((start[0..digits]).parse().unwrap())
+            let digits = &start[0..digits];
+            let width: usize = digits
+                .parse()
+                .map_err(|_| format!("Invalid format width: {digits}"))?;
+            if width > u16::MAX as usize {
+                return Err(format!("Format width too large: {digits}").into());
+            }
+            Ok(Some(width))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -258,7 +263,7 @@ impl FormatStringParser<'_> {
             self.advance_one().unwrap();
         }
 
-        let width = self.parse_format_width();
+        let width = self.parse_format_width()?;
 
         let first = self.advance_one()?;
         if first == '%' {

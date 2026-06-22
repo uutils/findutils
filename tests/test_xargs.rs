@@ -74,6 +74,15 @@ fn xargs_if_empty() {
 }
 
 #[test]
+fn xargs_replace_empty_input() {
+    ucmd()
+        .args(&["-I", "{}", "echo", "hello", "{}"])
+        .succeeds()
+        .no_output();
+    ucmd().args(&["-i", "echo", "{}"]).succeeds().no_output();
+}
+
+#[test]
 fn xargs_max_args() {
     ucmd()
         .args(&["-n2"])

@@ -1,6 +1,6 @@
 [package]
 name = "findutils"
-version = "0.9.0"
+version = "0.9.1"
 homepage = "https://github.com/uutils/findutils"
 repository = "https://github.com/uutils/findutils"
 edition = "2021"
@@ -19,7 +19,7 @@ onig = { version = "6.5", default-features = false }
 regex = "1.12"
 uucore = { version = "0.9.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
-itertools = "0.14.0"
+itertools = "0.15.0"
 thiserror = "2.0.12"
 
 [dev-dependencies]
@@ -75,6 +75,10 @@ codegen-units = 1
 [profile.release-fast]
 inherits = "release"
 panic = "abort"
+
+# The profile that 'dist' (cargo-dist) builds release artifacts with.
+[profile.dist]
+inherits = "release"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

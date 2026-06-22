@@ -1159,7 +1159,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             options.exit_if_pass_char_limit,
             options.max_args,
             options.max_lines,
-            options.no_run_if_empty,
+            options.no_run_if_empty || options.replace.is_some(),
         ),
     )?;
     Ok(result)
