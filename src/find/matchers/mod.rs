@@ -975,7 +975,7 @@ fn build_matcher_tree(
                             )
                         }
                     }
-                    None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
+                    None => return Err(From::from(format!("unknown predicate '{}'", args[i]))),
                 }
             }
         };
