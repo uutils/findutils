@@ -149,7 +149,7 @@ impl FormatStringParser<'_> {
 
     fn advance_one(&mut self) -> Result<char, Box<dyn Error>> {
         let c = self.front()?;
-        self.string = &self.string[1..];
+        self.string = &self.string[c.len_utf8()..];
         Ok(c)
     }
 
@@ -722,6 +722,16 @@ mod tests {
                 FormatComponent::Literal("é".to_owned()),
             ]
         );
+    }
+
+    #[test]
+    fn test_parse_multibyte_char_after_directive() {
+        assert_eq!(
+            FormatString::parse("%€").unwrap().components,
+            vec![FormatComponent::Literal("€".to_owned())]
+        );
+        assert!(FormatString::parse("\\€").is_err());
+        assert!(FormatString::parse("%A€").is_err());
     }
 
     #[test]
