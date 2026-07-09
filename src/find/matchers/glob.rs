@@ -125,18 +125,15 @@ fn glob_to_regex(pattern: &str) -> Option<String> {
             '?' => regex.push('.'),
             '*' => regex.push_str(".*"),
             '\\' => {
-                if let Some(ch) = chars.next() {
-                    regex_push_literal(&mut regex, ch);
-                } else {
-                    // https://pubs.opengroup.org/onlinepubs/9699919799/functions/fnmatch.html
-                    //
-                    //     If pattern ends with an unescaped <backslash>, fnmatch() shall return a
-                    //     non-zero value (indicating either no match or an error).
-                    //
-                    // Most implementations return FNM_NOMATCH in this case, so create a pattern that
-                    // never matches.
-                    return None;
-                }
+                // https://pubs.opengroup.org/onlinepubs/9699919799/functions/fnmatch.html
+                //
+                //     If pattern ends with an unescaped <backslash>, fnmatch() shall return a
+                //     non-zero value (indicating either no match or an error).
+                //
+                // Most implementations return FNM_NOMATCH in this case, so create a pattern that
+                // never matches.
+                let ch = chars.next()?;
+                regex_push_literal(&mut regex, ch);
             }
             '[' => {
                 if let Some((expr, rest)) = extract_bracket_expr(chars.as_str()) {
