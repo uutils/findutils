@@ -227,7 +227,7 @@ impl Matcher for MultiExecMatcher {
                 writeln!(
                     &mut stderr(),
                     "Cannot fit a single argument {}: {}",
-                    &path_to_file.to_string_lossy(),
+                    path_to_file.to_string_lossy(),
                     e
                 )
                 .unwrap();
