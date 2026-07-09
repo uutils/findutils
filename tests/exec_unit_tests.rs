@@ -357,7 +357,7 @@ fn multi_set_exit_code_if_executable_fails() {
     assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     let mut matcher_io = deps.new_matcher_io();
     matcher.finished_dir(Path::new("test_data/simple"), &mut matcher_io);
-    assert!(matcher_io.exit_code() == 1);
+    assert_eq!(matcher_io.exit_code(), 1);
 
     let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
     let mut s = String::new();
@@ -380,7 +380,7 @@ fn multi_set_exit_code_if_command_fails() {
     assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     let mut matcher_io = deps.new_matcher_io();
     matcher.finished_dir(Path::new("test_data/simple"), &mut matcher_io);
-    assert!(matcher_io.exit_code() == 1);
+    assert_eq!(matcher_io.exit_code(), 1);
 }
 
 // -ok / -okdir tests
