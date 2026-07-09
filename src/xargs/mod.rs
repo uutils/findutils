@@ -1448,7 +1448,10 @@ mod tests {
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
-        assert!(wrapper.next().err().unwrap().kind() == io::ErrorKind::BrokenPipe);
+        assert_eq!(
+            wrapper.next().err().unwrap().kind(),
+            io::ErrorKind::BrokenPipe
+        );
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
         assert_eq!(wrapper.next().unwrap(), None);
         assert_eq!(wrapper.next().unwrap(), None);
