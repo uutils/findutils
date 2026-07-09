@@ -547,7 +547,7 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
             path.as_encoded_bytes()
                 .iter()
                 .copied()
-                .chain([b'\0'])
+                .chain(*b"\0")
                 .collect(),
         ) else {
             // a file name can't contain an interior nul byte, so this only fails on
