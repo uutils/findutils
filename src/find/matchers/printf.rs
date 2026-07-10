@@ -52,7 +52,7 @@ impl TimeFormat {
             }
             Self::Strftime(format) => {
                 // Handle a special case
-                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S%.f0");
+                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S.%f0");
                 DateTime::<Local>::from(time)
                     .format(&custom_format)
                     .to_string()
