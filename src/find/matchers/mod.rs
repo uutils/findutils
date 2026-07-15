@@ -379,9 +379,10 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
                 m.as_str().to_string()
             });
         // If no year input.
-        let year = captures
-            .get(2)
-            .map_or(now.year(), |m| m.as_str().parse().unwrap());
+        let year = match captures.get(2) {
+            Some(m) => m.as_str().parse().ok()?,
+            None => now.year(),
+        };
         // If the user does not enter a specific time, it will be filled with 0
         let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
         let date_time_str = format!("{month_day}, {year} {time_str}");
@@ -1840,6 +1841,9 @@ mod tests {
             .and_utc()
             .timestamp_millis();
         assert_eq!(none_date_timestamps, Some(now_but_zero_hour_min_sec));
+
+        // A year of non-ASCII decimal digits must be rejected, not panic.
+        assert_eq!(parse_date_str_to_timestamps("jan 01, ٠٠٠٠"), None);
     }
 
     #[test]
