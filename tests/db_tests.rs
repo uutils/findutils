@@ -131,6 +131,19 @@ fn test_locate_outdated_db() {
 }
 
 #[test]
+fn test_locate_large_max_database_age() {
+    for age in ["1000000000000", "18446744073709551615"] {
+        Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .arg("test_data")
+            .arg(format!("--max-database-age={age}"))
+            .arg(OLD_DB_FLAG)
+            .assert()
+            .success();
+    }
+}
+
+#[test]
 fn test_locate_print_help() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
