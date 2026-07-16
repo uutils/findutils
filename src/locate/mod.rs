@@ -113,35 +113,45 @@ impl Statistics {
         }
     }
 
-    fn print_header(&self, dbreader: &DbReader) {
-        println!(
+    fn print_header(&self, dbreader: &DbReader) -> LocateResult<()> {
+        writeln!(
+            io::stdout(),
             "Database {} is in the {} format.",
             dbreader.path.to_string_lossy(),
             dbreader.format,
-        );
+        )?;
+        Ok(())
     }
 
-    fn print(&self, dbreader: &DbReader) {
+    fn print(&self, dbreader: &DbReader) -> LocateResult<()> {
+        let mut stdout = io::stdout().lock();
         if let Ok(metadata) = fs::metadata(&dbreader.path) {
             if let Ok(time) = metadata.modified() {
                 let time: DateTime<Local> = time.into();
-                println!("Database was last modified at {}", time);
+                writeln!(stdout, "Database was last modified at {}", time)?;
             }
-            println!("Locate database size: {} bytes", metadata.len());
+            writeln!(stdout, "Locate database size: {} bytes", metadata.len())?;
         }
-        println!("Matching Filenames: {}", self.matches);
-        println!(
+        writeln!(stdout, "Matching Filenames: {}", self.matches)?;
+        writeln!(
+            stdout,
             "File names have a cumulative length of {} bytes",
             self.total_length
-        );
-        println!("Of those file names,\n");
-        println!("        {} contain whitespace,", self.whitespace);
-        println!("        {} contain newline characters,", self.newlines);
-        println!(
+        )?;
+        writeln!(stdout, "Of those file names,\n")?;
+        writeln!(stdout, "        {} contain whitespace,", self.whitespace)?;
+        writeln!(
+            stdout,
+            "        {} contain newline characters,",
+            self.newlines
+        )?;
+        writeln!(
+            stdout,
             "        and {} contain characters with the high bit set.",
             self.high_bit
-        );
-        println!();
+        )?;
+        writeln!(stdout)?;
+        Ok(())
     }
 }
 
@@ -598,7 +608,9 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 clap::error::ErrorKind::DisplayHelp => {
                     app.print_help()?;
                 }
-                clap::error::ErrorKind::DisplayVersion => print!("{}", app.render_version()),
+                clap::error::ErrorKind::DisplayVersion => {
+                    write!(io::stdout(), "{}", app.render_version())?;
+                }
                 _ => return Err(e.with_exit_code(1).into()),
             }
         }
@@ -635,10 +647,13 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                     // the first line of the statistics description is printed before matches
                     // (given --print)
                     if config.mode == Mode::Statistics {
-                        stats.print_header(&dbreader);
+                        stats.print_header(&dbreader)?;
                     }
 
-                    // find matches
+                    // find matches. A write to stdout can fail (e.g. a full
+                    // disk); capture the first such error and propagate it after
+                    // iterating rather than panicking inside the closure.
+                    let mut write_result: io::Result<()> = Ok(());
                     let count = dbreader
                         .by_ref()
                         .process_results(|iter|
@@ -646,12 +661,14 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                                 .filter(|s| match_entry(s.as_c_str(), &config, &patterns))
                                 .take(config.limit.unwrap_or(usize::MAX))
                                 .inspect(|s| {
-                                    if config.mode == Mode::Normal || config.print {
-                                        if config.null_bytes {
-                                            print!("{}\0", s.to_string_lossy());
+                                    if (config.mode == Mode::Normal || config.print)
+                                        && write_result.is_ok()
+                                    {
+                                        write_result = if config.null_bytes {
+                                            write!(io::stdout(), "{}\0", s.to_string_lossy())
                                         } else {
-                                            println!("{}", s.to_string_lossy());
-                                        }
+                                            writeln!(io::stdout(), "{}", s.to_string_lossy())
+                                        };
                                     }
                                     if config.mode == Mode::Statistics {
                                         stats.add_match(s);
@@ -659,10 +676,11 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                                 })
                                 .count()
                         );
+                    write_result?;
 
                     // print the rest of the statistics description
                     if config.mode == Mode::Statistics && count.is_ok() {
-                        stats.print(&dbreader);
+                        stats.print(&dbreader)?;
                     }
 
                     count
@@ -670,7 +688,7 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 .try_fold(0, |acc, e| e.map(|e| acc + e))?;
 
             if config.mode == Mode::Count {
-                println!("{count}");
+                writeln!(io::stdout(), "{count}")?;
             }
 
             // zero matches isn't an error if --statistics is passed
