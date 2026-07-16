@@ -953,7 +953,7 @@ fn build_matcher_tree(
                         }
                         #[cfg(target_os = "linux")]
                         if x_option == "B" {
-                            return Err(From::from("find: This system does not provide a way to find the birth time of a file."));
+                            return Err(From::from("This system does not provide a way to find the birth time of a file."));
                         }
                         if y_option == "t" {
                             let time = args[i + 1];
@@ -961,7 +961,7 @@ fn build_matcher_tree(
                             // Convert args to unix timestamps. (expressed in numeric types)
                             let Some(comparable_time) = parse_date_str_to_timestamps(time) else {
                                 return Err(From::from(format!(
-                                    "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                                    "I cannot figure out how to interpret ‘{}’ as a date or time",
                                     args[i + 1]
                                 )));
                             };

@@ -819,7 +819,19 @@ fn find_newer_xy() {
                 .succeeds()
                 .no_stderr();
         }
+
+        ucmd().args(&[".", arg, "invalid"]).fails().stderr_only(
+            "find: I cannot figure out how to interpret ‘invalid’ as a date or time\n",
+        );
     }
+
+    #[cfg(target_os = "linux")]
+    ucmd()
+        .args(&[".", "-newerBt", "jan 01, 2000"])
+        .fails()
+        .stderr_only(
+            "find: This system does not provide a way to find the birth time of a file.\n",
+        );
 }
 
 #[test]
