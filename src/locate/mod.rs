@@ -588,6 +588,15 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     patterns_match && existence_matches
 }
 
+/// Whether a database of the given `age` is older than `max_age` days.
+/// A `max_age` too large for `i64`/`chrono` to represent can never be exceeded.
+fn is_db_too_old(age: TimeDelta, max_age: usize) -> bool {
+    match i64::try_from(max_age).ok().and_then(TimeDelta::try_days) {
+        Some(limit) => age > limit,
+        None => false,
+    }
+}
+
 fn do_locate(args: &[&str]) -> LocateResult<()> {
     let matches = uu_app().try_get_matches_from(args);
     match matches {
@@ -618,9 +627,7 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                             let modified: DateTime<Local> = time.into();
                             let now = Local::now();
                             let delta = now - modified;
-                            if delta
-                                > TimeDelta::days(config.max_age as i64)
-                            {
+                            if is_db_too_old(delta, config.max_age) {
                                 eprintln!(
                                     "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
                                     args[0],
@@ -703,7 +710,27 @@ mod tests {
     use std::io;
     use std::path::Path;
 
-    use super::path_exists;
+    use chrono::TimeDelta;
+
+    use super::{is_db_too_old, path_exists};
+
+    #[test]
+    fn db_too_old_compares_ordinary_ages() {
+        let day = TimeDelta::days(1);
+        assert!(is_db_too_old(day, 0));
+        assert!(!is_db_too_old(day, 8));
+    }
+
+    #[test]
+    fn db_too_old_ignores_max_age_beyond_i64() {
+        assert!(!is_db_too_old(TimeDelta::days(1), usize::MAX));
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn db_too_old_ignores_max_age_beyond_chrono_range() {
+        assert!(!is_db_too_old(TimeDelta::days(1), 1_000_000_000_000));
+    }
 
     /// Create a symlink at `link` pointing at `target`, cross-platform.
     #[cfg(unix)]
