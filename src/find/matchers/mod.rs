@@ -399,6 +399,10 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
 /// X and Y are constrained to a/B/c/m and t.
 /// such as: "-neweraB" -> Some(a, B) "-neweraD" -> None
 ///
+/// The whole argument must match. A trailing suffix after a valid
+/// -newerXY form (for example -neweraBcmty) is not accepted; GNU find
+/// reports those as unknown predicates.
+///
 /// Additionally, there is support for the -anewer and -cnewer short arguments. as follows:
 /// 1. -anewer is equivalent to -neweram
 /// 2. -cnewer is equivalent to -newercm
@@ -421,7 +425,9 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
         return Some(("c".to_string(), "m".to_string()));
     }
 
-    let re = Regex::new(r"-newer([aBcm])([aBcmt])").unwrap();
+    // Require a full-token match so invalid longer forms like
+    // -neweraBcmty are not treated as the valid -neweraB prefix (#782).
+    let re = Regex::new(r"^-newer([aBcm])([aBcmt])$").unwrap();
     if let Some(captures) = re.captures(input) {
         let x = captures.get(1)?.as_str().to_string();
         let y = captures.get(2)?.as_str().to_string();
@@ -976,7 +982,10 @@ fn build_matcher_tree(
                             )
                         }
                     }
-                    None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
+                    // Match GNU find wording for unknown predicates.
+                    None => {
+                        return Err(From::from(format!("unknown predicate `{}'", args[i])));
+                    }
                 }
             }
         };
@@ -1874,6 +1883,31 @@ mod tests {
                 let arg = parse_str_to_newer_args(&format!("-newer{x}{y}").to_string()).unwrap();
                 assert_eq!(eq, arg);
             }
+        }
+
+        // Trailing junk after a valid -newerXY form must not match.
+        // GNU find reports these as unknown predicates (issue #782).
+        assert!(parse_str_to_newer_args("-neweraBcmty").is_none());
+        assert!(parse_str_to_newer_args("-newermmEXTRA").is_none());
+        assert!(parse_str_to_newer_args("-neweramtz").is_none());
+        assert!(parse_str_to_newer_args("-newera").is_none());
+    }
+
+    #[test]
+    fn build_top_level_matcher_rejects_invalid_newer_predicate() {
+        let mut config = Config::default();
+        match build_top_level_matcher(&["-neweraBcmty"], &mut config) {
+            Ok(_) => panic!("invalid -newerXY suffix must be rejected"),
+            Err(err) => assert_eq!(err.to_string(), "unknown predicate `-neweraBcmty'"),
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_rejects_unknown_predicate() {
+        let mut config = Config::default();
+        match build_top_level_matcher(&["-notarealpredicate"], &mut config) {
+            Ok(_) => panic!("unknown predicates must be rejected"),
+            Err(err) => assert_eq!(err.to_string(), "unknown predicate `-notarealpredicate'"),
         }
     }
 
