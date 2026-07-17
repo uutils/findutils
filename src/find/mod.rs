@@ -548,7 +548,7 @@ mod tests {
         //
         let result = super::parse_args(&["-asdadsafsfsadcs"]);
         if let Err(e) = result {
-            assert_eq!(e.to_string(), "Unrecognized flag: '-asdadsafsfsadcs'");
+            assert_eq!(e.to_string(), "unknown predicate `-asdadsafsfsadcs'");
         } else {
             panic!("parse_args should have returned an error");
         }
@@ -1107,12 +1107,15 @@ mod tests {
 
                 assert_eq!(rc, 0);
 
-                let arg = &format!("-follow -newer{x}{y}").to_string();
+                // -follow and -newerXY are separate argv tokens; they must not
+                // be glued into one string or the whole token is an unknown
+                // predicate once -newerXY matching is exact.
                 let deps = FakeDependencies::new();
                 let rc = find_main(
                     &[
                         "find",
                         "./test_data/simple/subdir",
+                        "-follow",
                         arg,
                         "./test_data/simple/subdir/ABBBC",
                     ],
