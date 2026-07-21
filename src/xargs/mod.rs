@@ -141,8 +141,41 @@ impl Clone for LimiterCollection {
 #[cfg(windows)]
 fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
     use std::os::windows::ffi::OsStrExt;
+
+    const BACKSLASH: u16 = b'\\' as u16;
+    const QUOTE: u16 = b'"' as u16;
+    const SPACE: u16 = b' ' as u16;
+    const TAB: u16 = b'\t' as u16;
+
     // Include +1 for either the null terminator or trailing space.
-    s.encode_wide().count() + 1
+    let mut len = 1;
+    let mut backslashes = 0usize;
+    let mut quote = s.is_empty();
+
+    for wch in s.encode_wide() {
+        len += 1;
+
+        match wch {
+            BACKSLASH => backslashes += 1,
+            QUOTE => {
+                // Account for n+1 additional backslashes before a quote.
+                len += backslashes + 1;
+                backslashes = 0;
+            }
+            SPACE | TAB => {
+                quote = true;
+                backslashes = 0;
+            }
+            _ => backslashes = 0,
+        }
+    }
+
+    if quote {
+        // Account for n backslashes before the closing quote.
+        len += backslashes + 2;
+    }
+
+    len
 }
 
 #[cfg(unix)]
@@ -174,8 +207,9 @@ impl MaxCharsCommandSizeLimiter {
 
     #[cfg(windows)]
     fn new_system(_env: &HashMap<OsString, OsString>) -> MaxCharsCommandSizeLimiter {
-        // Taken from the CreateProcess docs.
-        const MAX_CMDLINE: usize = 32767;
+        // Taken from the CreateProcess docs. -2 to account for how
+        // std::process unconditionally surrounds the program name with quotes.
+        const MAX_CMDLINE: usize = 32767 - 2;
         MaxCharsCommandSizeLimiter::new(MAX_CMDLINE)
     }
 
@@ -1288,6 +1322,18 @@ mod tests {
             .try_arg(make_arg_hard("abcd"), empty_cursor())
             .is_err());
         assert!(limiter.try_arg(make_arg_hard("a"), empty_cursor()).is_ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_chars_limiter_windows() {
+        let mut limiter = MaxCharsCommandSizeLimiter::new(6);
+        assert!(limiter
+            .try_arg(make_arg_hard("abcde"), empty_cursor())
+            .is_ok());
+        assert!(limiter
+            .try_arg(make_arg_hard("ab de"), empty_cursor())
+            .is_err());
     }
 
     #[test]
