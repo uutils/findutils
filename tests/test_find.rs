@@ -83,6 +83,23 @@ fn multiple_matcher_success() {
 }
 
 #[test]
+fn invalid_newerxy_predicate_is_rejected() {
+    // GNU find rejects over-long / invalid -newerXY tokens instead of matching a
+    // valid prefix (issue #782: -neweraBcmty was accepted as -neweraB).
+    ucmd()
+        .args(&["-neweraBcmty", "."])
+        .fails()
+        .stderr_contains("unknown predicate `-neweraBcmty'")
+        .no_stdout();
+
+    ucmd()
+        .args(&["-newermmEXTRA", "."])
+        .fails()
+        .stderr_contains("unknown predicate `-newermmEXTRA'")
+        .no_stdout();
+}
+
+#[test]
 fn multiple_matcher_failure() {
     ucmd()
         .args(&["-type", "fd", "-name", "abbb"])
