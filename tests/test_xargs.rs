@@ -179,6 +179,26 @@ fn xargs_max_chars() {
 }
 
 #[test]
+fn xargs_show_limits() {
+    // Debian's python3.13 maintainer scripts parse this GNU xargs diagnostic
+    // to choose a safe --max-chars value:
+    // https://sources.debian.org/src/python3.13/3.13.5-2%2Bdeb13u2/debian/libPVER-minimal.prerm.in/#L8
+    // GNU findutils emits the compatibility target here:
+    // https://git.savannah.gnu.org/cgit/findutils.git/tree/xargs/xargs.c?h=v4.10.0#n795
+    let output = ucmd().args(&["--show-limits"]).pipe_in("").succeeds();
+    let result = output.no_stdout();
+
+    let max = result
+        .stderr_str()
+        .lines()
+        .find_map(|line| line.strip_prefix("Maximum length of command we could actually use: "))
+        .expect("expected GNU-compatible maximum length diagnostic")
+        .parse::<usize>()
+        .expect("expected maximum length diagnostic to end in an integer");
+    assert!(max > 0, "expected a positive maximum length, got {max}");
+}
+
+#[test]
 fn xargs_exit_on_large() {
     ucmd()
         .args(&["-xs11", "-n2"])
