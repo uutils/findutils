@@ -83,6 +83,24 @@ fn multiple_matcher_success() {
 }
 
 #[test]
+fn unknown_predicate_is_rejected() {
+    // GNU find rejects an unrecognized predicate with
+    // "find: unknown predicate '<arg>'" and exit code 1 (see the GNU
+    // testsuite's tests/find/refuse-noop test).
+    ucmd()
+        .arg("-noop")
+        .fails()
+        .stderr_contains("unknown predicate '-noop'")
+        .no_stdout();
+
+    ucmd()
+        .arg("---noop")
+        .fails()
+        .stderr_contains("unknown predicate '---noop'")
+        .no_stdout();
+}
+
+#[test]
 fn multiple_matcher_failure() {
     ucmd()
         .args(&["-type", "fd", "-name", "abbb"])
