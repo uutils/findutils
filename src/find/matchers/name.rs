@@ -31,7 +31,7 @@ impl Matcher for NameMatcher {
             self.pattern.matches(&name)
         }
 
-        #[cfg(windows)]
+        #[cfg(not(unix))]
         self.pattern.matches(&name)
     }
 }

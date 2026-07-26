@@ -126,7 +126,6 @@ impl Ls {
         mut out: impl Write,
         print_error_message: bool,
     ) {
-        use nix::unistd::{Gid, Group, Uid, User};
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
         let metadata = file_info.metadata().unwrap();
@@ -150,14 +149,13 @@ impl Ls {
         let permission =
             { format_permissions(metadata.permissions().mode() as uucore::libc::mode_t) };
         let hard_links = metadata.nlink();
-        let user = {
-            let uid = metadata.uid();
-            User::from_uid(Uid::from_raw(uid)).unwrap().unwrap().name
-        };
-        let group = {
-            let gid = metadata.gid();
-            Group::from_gid(Gid::from_raw(gid)).unwrap().unwrap().name
-        };
+        // Fall back to the numeric id when the uid/gid has no passwd/group entry
+        // (unmapped owner) — matching GNU find, which never crashes. uucore::entries
+        // serializes the non-thread-safe getpwuid/getgrgid behind a mutex.
+        let user =
+            uucore::entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string());
+        let group =
+            uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
         let size = metadata.size();
         let last_modified = {
             let system_time = metadata.modified().unwrap();
@@ -195,7 +193,7 @@ impl Ls {
         }
     }
 
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     fn print(
         &self,
         file_info: &WalkEntry,
@@ -203,16 +201,15 @@ impl Ls {
         mut out: impl Write,
         print_error_message: bool,
     ) {
-        use std::os::windows::fs::MetadataExt;
-
+        // Non-Unix targets (Windows, wasm, ...) don't expose inode, owner,
+        // group or Unix permission bits, so those columns are left blank.
         let metadata = file_info.metadata().unwrap();
 
         let inode_number = 0;
+        let size = metadata.len();
         let number_of_blocks = {
-            let size = metadata.file_size();
             let number_of_blocks = size / 1024;
             let remainder = number_of_blocks % 4;
-
             if remainder == 0 {
                 if number_of_blocks == 0 {
                     4
@@ -220,14 +217,19 @@ impl Ls {
                     number_of_blocks
                 }
             } else {
-                number_of_blocks + (4 - (remainder))
+                number_of_blocks + (4 - remainder)
             }
         };
-        let permission = { format_permissions(metadata.file_attributes()) };
+        #[cfg(windows)]
+        let permission = {
+            use std::os::windows::fs::MetadataExt;
+            format_permissions(metadata.file_attributes())
+        };
+        #[cfg(not(windows))]
+        let permission = "?---------";
         let hard_links = 0;
         let user = 0;
         let group = 0;
-        let size = metadata.file_size();
         let last_modified = {
             let system_time = metadata.modified().unwrap();
             let now_utc: DateTime<chrono::Utc> = system_time.into();
@@ -235,9 +237,9 @@ impl Ls {
         };
         let path = file_info.path().to_string_lossy();
 
-        match write!(
+        match writeln!(
             out,
-            " {:<4} {:>6} {:<10} {:>3} {:<8} {:<8} {:>8} {} {}\n",
+            " {:<4} {:>6} {:<10} {:>3} {:<8} {:<8} {:>8} {} {}",
             inode_number,
             number_of_blocks,
             permission,
@@ -292,15 +294,15 @@ mod tests {
     fn test_format_permissions() {
         use super::format_permissions;
 
-        let mode: uucore::libc::mode_t = 0o100644;
+        let mode: uucore::libc::mode_t = 0o100_644;
         let expected = "-rw-r--r--";
         assert_eq!(format_permissions(mode), expected);
 
-        let mode: uucore::libc::mode_t = 0o040755;
+        let mode: uucore::libc::mode_t = 0o040_755;
         let expected = "drwxr-xr-x";
         assert_eq!(format_permissions(mode), expected);
 
-        let mode: uucore::libc::mode_t = 0o100777;
+        let mode: uucore::libc::mode_t = 0o100_777;
         let expected = "-rwxrwxrwx";
         assert_eq!(format_permissions(mode), expected);
     }

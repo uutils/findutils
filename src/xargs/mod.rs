@@ -141,8 +141,41 @@ impl Clone for LimiterCollection {
 #[cfg(windows)]
 fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
     use std::os::windows::ffi::OsStrExt;
+
+    const BACKSLASH: u16 = b'\\' as u16;
+    const QUOTE: u16 = b'"' as u16;
+    const SPACE: u16 = b' ' as u16;
+    const TAB: u16 = b'\t' as u16;
+
     // Include +1 for either the null terminator or trailing space.
-    s.encode_wide().count() + 1
+    let mut len = 1;
+    let mut backslashes = 0usize;
+    let mut quote = s.is_empty();
+
+    for wch in s.encode_wide() {
+        len += 1;
+
+        match wch {
+            BACKSLASH => backslashes += 1,
+            QUOTE => {
+                // Account for n+1 additional backslashes before a quote.
+                len += backslashes + 1;
+                backslashes = 0;
+            }
+            SPACE | TAB => {
+                quote = true;
+                backslashes = 0;
+            }
+            _ => backslashes = 0,
+        }
+    }
+
+    if quote {
+        // Account for n backslashes before the closing quote.
+        len += backslashes + 2;
+    }
+
+    len
 }
 
 #[cfg(unix)]
@@ -150,6 +183,12 @@ fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
     use std::os::unix::ffi::OsStrExt;
     // Include +1 for the null terminator.
     s.as_bytes().len() + 1
+}
+
+#[cfg(not(any(unix, windows)))]
+fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
+    // Include +1 for the null terminator.
+    s.as_encoded_bytes().len() + 1
 }
 
 #[derive(Clone)]
@@ -168,8 +207,9 @@ impl MaxCharsCommandSizeLimiter {
 
     #[cfg(windows)]
     fn new_system(_env: &HashMap<OsString, OsString>) -> MaxCharsCommandSizeLimiter {
-        // Taken from the CreateProcess docs.
-        const MAX_CMDLINE: usize = 32767;
+        // Taken from the CreateProcess docs. -2 to account for how
+        // std::process unconditionally surrounds the program name with quotes.
+        const MAX_CMDLINE: usize = 32767 - 2;
         MaxCharsCommandSizeLimiter::new(MAX_CMDLINE)
     }
 
@@ -185,7 +225,26 @@ impl MaxCharsCommandSizeLimiter {
             .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
             .sum();
 
-        Self::new(arg_max - ARG_HEADROOM - env_size)
+        Self::new(arg_max.saturating_sub(ARG_HEADROOM + env_size))
+    }
+
+    /// The limiter used when no explicit -s was given. Like GNU xargs, use at
+    /// most 128 KiB per command line by default: sizing command lines all the
+    /// way up to ARG_MAX would make execvp() fail with E2BIG, because the
+    /// kernel additionally charges the argv/envp pointers (since Linux commit
+    /// 98da7d08850f) against the limit, which are not part of the character
+    /// count. An explicit -s can still go beyond this, up to the system limit.
+    fn new_default(env: &HashMap<OsString, OsString>) -> Self {
+        const DEFAULT_MAX_CHARS: usize = 128 * 1024;
+        Self::new(Self::new_system(env).max_chars.min(DEFAULT_MAX_CHARS))
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
+        // No portable way to query the system limit; fall back to the POSIX
+        // minimum guaranteed value for _POSIX_ARG_MAX.
+        const POSIX_ARG_MAX: usize = 4096;
+        Self::new(POSIX_ARG_MAX)
     }
 }
 
@@ -432,7 +491,7 @@ impl CommandBuilder<'_> {
                 .args(&self.extra_args)
                 .env_clear()
                 .envs(&self.options.env);
-        };
+        }
 
         if self.options.close_stdin {
             command.stdin(Stdio::null());
@@ -514,16 +573,16 @@ where
     R: Read,
 {
     fn next(&mut self) -> io::Result<Option<Argument>> {
+        enum Escape {
+            Slash,
+            Quote(u8),
+        }
+
         let mut result = vec![];
         let mut terminated_by_newline = false;
 
         let mut pending = vec![];
         std::mem::swap(&mut pending, &mut self.pending);
-
-        enum Escape {
-            Slash,
-            Quote(u8),
-        }
 
         let mut escape: Option<Escape> = None;
         let mut i = 0;
@@ -534,7 +593,7 @@ where
                 let bytes_read = loop {
                     match self.rd.read(&mut pending[..]) {
                         Ok(bytes_read) => break bytes_read,
-                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                         Err(e) => return Err(e),
                     }
                 };
@@ -918,8 +977,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('x')
                 .long(options::EXIT)
                 .help(
-                    "Exit if the number of arguments allowed by -L or -n do not \
-                    fit into the number of allowed characters",
+                    "Terminate if a constructed command line would exceed the size \
+                    limit (see -s) rather than reducing the argument count",
                 )
                 .action(ArgAction::SetTrue),
         )
@@ -989,7 +1048,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::VERBOSE)
                 .short('t')
                 .long(options::VERBOSE)
-                .help("Be verbose")
+                .help("Print each command to stderr before executing it")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1111,6 +1170,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     }
     if let Some(max_chars) = options.max_chars {
         limiters.add(MaxCharsCommandSizeLimiter::new(max_chars));
+    } else {
+        limiters.add(MaxCharsCommandSizeLimiter::new_default(&env));
     }
     limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
 
@@ -1145,7 +1206,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             options.exit_if_pass_char_limit,
             options.max_args,
             options.max_lines,
-            options.no_run_if_empty,
+            options.no_run_if_empty || options.replace.is_some(),
         ),
     )?;
     Ok(result)
@@ -1266,7 +1327,10 @@ mod tests {
 
     #[test]
     fn test_chars_limiter() {
-        let mut limiter = MaxCharsCommandSizeLimiter::new(6);
+        // Room for exactly "abc" and "a", including terminators and pointers.
+        let max_chars = count_osstr_chars_for_exec(OsStr::new("abc"))
+            + count_osstr_chars_for_exec(OsStr::new("a"));
+        let mut limiter = MaxCharsCommandSizeLimiter::new(max_chars);
         assert!(limiter
             .try_arg(make_arg_hard("abc"), empty_cursor())
             .is_ok());
@@ -1276,6 +1340,28 @@ mod tests {
         assert!(limiter.try_arg(make_arg_hard("a"), empty_cursor()).is_ok());
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn test_chars_limiter_windows() {
+        let mut limiter = MaxCharsCommandSizeLimiter::new(6);
+        assert!(limiter
+            .try_arg(make_arg_hard("abcde"), empty_cursor())
+            .is_ok());
+        assert!(limiter
+            .try_arg(make_arg_hard("ab de"), empty_cursor())
+            .is_err());
+    }
+
+    #[test]
+    fn test_default_chars_limiter_caps_system_limit() {
+        let env = HashMap::new();
+        let system = MaxCharsCommandSizeLimiter::new_system(&env);
+        let default = MaxCharsCommandSizeLimiter::new_default(&env);
+        // The default never exceeds 128 KiB nor what the system allows.
+        assert!(default.max_chars <= 128 * 1024);
+        assert!(default.max_chars <= system.max_chars);
+    }
+
     #[test]
     fn test_chars_limiter_asks_cursor() {
         let mut rejects: [Box<dyn CommandSizeLimiter>; 1] = [Box::new(AlwaysRejectLimiter)];
@@ -1283,7 +1369,8 @@ mod tests {
             limiters: &mut rejects,
         };
 
-        let mut limiter = MaxCharsCommandSizeLimiter::new(5);
+        let mut limiter =
+            MaxCharsCommandSizeLimiter::new(count_osstr_chars_for_exec(OsStr::new("abc")));
         assert!(limiter
             .try_arg(make_arg_hard("abc"), reject_cursor)
             .is_err());
@@ -1434,7 +1521,10 @@ mod tests {
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
-        assert!(wrapper.next().err().unwrap().kind() == io::ErrorKind::BrokenPipe);
+        assert_eq!(
+            wrapper.next().err().unwrap().kind(),
+            io::ErrorKind::BrokenPipe
+        );
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
         assert_eq!(wrapper.next().unwrap(), None);
         assert_eq!(wrapper.next().unwrap(), None);

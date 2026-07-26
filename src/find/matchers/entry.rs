@@ -174,9 +174,9 @@ impl From<walkdir::Error> for WalkError {
 impl From<&walkdir::Error> for WalkError {
     fn from(e: &walkdir::Error) -> Self {
         Self {
-            path: e.path().map(|p| p.to_owned()),
+            path: e.path().map(std::borrow::ToOwned::to_owned),
             depth: Some(e.depth()),
-            raw: e.io_error().and_then(|e| e.raw_os_error()),
+            raw: e.io_error().and_then(std::io::Error::raw_os_error),
         }
     }
 }
@@ -190,8 +190,7 @@ impl From<WalkError> for io::Error {
 impl From<&WalkError> for io::Error {
     fn from(e: &WalkError) -> Self {
         e.raw
-            .map(Self::from_raw_os_error)
-            .unwrap_or_else(|| ErrorKind::Other.into())
+            .map_or_else(|| ErrorKind::Other.into(), Self::from_raw_os_error)
     }
 }
 
@@ -279,8 +278,7 @@ impl WalkEntry {
                 // Path::file_name() only works if the last component is normal
                 path.components()
                     .next_back()
-                    .map(|c| c.as_os_str())
-                    .unwrap_or_else(|| path.as_os_str())
+                    .map_or_else(|| path.as_os_str(), std::path::Component::as_os_str)
             }
             Entry::WalkDir(ent) => ent.file_name(),
         }
@@ -311,7 +309,7 @@ impl WalkEntry {
             Entry::Explicit(_, _) => Ok(self.get_metadata()?),
             Entry::WalkDir(ent) => Ok(ent.metadata()?),
         });
-        result.as_ref().map_err(|e| e.clone())
+        result.as_ref().map_err(std::clone::Clone::clone)
     }
 
     /// Get the file type of this entry.
@@ -319,8 +317,7 @@ impl WalkEntry {
         match &self.inner {
             Entry::Explicit(_, _) => self
                 .metadata()
-                .map(|m| m.file_type().into())
-                .unwrap_or(FileType::Unknown),
+                .map_or(FileType::Unknown, |m| m.file_type().into()),
             Entry::WalkDir(ent) => ent.file_type().into(),
         }
     }

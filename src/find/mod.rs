@@ -9,7 +9,9 @@ pub mod matchers;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
-use std::io::{self, stderr, stdout, BufRead, BufReader, IsTerminal, Write};
+#[cfg(unix)]
+use std::io::IsTerminal;
+use std::io::{self, stderr, stdout, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -187,7 +189,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
     if let Some(new_paths) = &config.new_paths {
         if paths.len() == 1 && paths[0] == "." {
-            paths = new_paths.to_vec();
+            paths.clone_from(new_paths);
         } else {
             return Err(From::from(format!(
                 "extra operand '{}'\nfile operands cannot be combined with -files0-from",
@@ -237,7 +239,7 @@ fn process_dir(
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
 
-                let new_dir = entry.path().parent().map(|x| x.to_path_buf());
+                let new_dir = entry.path().parent().map(std::path::Path::to_path_buf);
                 if new_dir != current_dir {
                     if let Some(dir) = current_dir.take() {
                         matcher.finished_dir(dir.as_path(), &mut matcher_io);
@@ -1323,7 +1325,7 @@ mod tests {
         assert_eq!(rc, 1);
 
         // test empty user name
-        ["-user", "-nouser"].iter().for_each(|&arg| {
+        for &arg in &["-user", "-nouser"] {
             let deps = FakeDependencies::new();
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, ""], &deps);
 
@@ -1333,7 +1335,7 @@ mod tests {
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, " "], &deps);
 
             assert_eq!(rc, 1);
-        });
+        }
     }
 
     #[test]
@@ -1411,7 +1413,7 @@ mod tests {
         assert_eq!(rc, 1);
 
         // test empty user name and group name
-        ["-group", "-nogroup"].iter().for_each(|&arg| {
+        for &arg in &["-group", "-nogroup"] {
             let deps = FakeDependencies::new();
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, ""], &deps);
 
@@ -1421,7 +1423,7 @@ mod tests {
             let rc = find_main(&["find", "./test_data/simple/subdir", arg, " "], &deps);
 
             assert_eq!(rc, 1);
-        });
+        }
     }
 
     #[test]

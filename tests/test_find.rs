@@ -510,6 +510,67 @@ fn find_printf() {
         );
 }
 
+#[test]
+#[cfg(unix)] // %T+ prints local time; TZ only reliably selects it on unix
+fn find_printf_time_plus_fixed_width_fraction() {
+    let temp_dir = Builder::new().prefix("find_time_plus_").tempdir().unwrap();
+    let file_path = temp_dir.path().join("stamped");
+    File::create(&file_path).expect("create test file");
+
+    // The fraction must always be a dot followed by ten digits, even when
+    // the timestamp falls on a whole second.
+    for (nanos, expected) in [
+        (0, "2013-06-20+11:22:33.0000000000\n"),
+        (250_000_000, "2013-06-20+11:22:33.2500000000\n"),
+    ] {
+        filetime::set_file_mtime(
+            &file_path,
+            filetime::FileTime::from_unix_time(1_371_727_353, nanos),
+        )
+        .expect("set test file mtime");
+
+        ucmd()
+            .env("TZ", "UTC0")
+            .arg(&file_path)
+            .args(&["-printf", "%T+\n"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn find_printf_octal_escape_before_multibyte_char() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\0€\\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("\0€\n");
+}
+
+#[test]
+fn find_printf_width_too_large() {
+    ucmd()
+        .args(&[
+            "./test_data/simple",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "%70000s\\n",
+        ])
+        .fails()
+        .stderr_contains("find: Format width too large");
+    ucmd()
+        .args(&[
+            "./test_data/simple",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "%99999999999999999999s\\n",
+        ])
+        .fails()
+        .stderr_contains("find: Invalid format width");
+}
+
 #[cfg(unix)]
 #[test]
 fn find_perm() {
@@ -615,18 +676,18 @@ fn find_time() {
         "-ctime",
         "-mtime",
     ];
-    tests.iter().for_each(|flag| {
-        args.iter().for_each(|arg| {
+    for flag in &tests {
+        for arg in &args {
             ucmd()
                 .args(&["./test_data/simple", flag, arg])
                 .succeeds()
                 .no_stderr();
-        });
+        }
 
-        exception_args.iter().for_each(|arg| {
+        for arg in &exception_args {
             ucmd().args(&[".", flag, arg]).fails().no_stdout();
-        });
-    });
+        }
+    }
 }
 
 #[test]
@@ -786,7 +847,19 @@ fn find_newer_xy() {
                 .succeeds()
                 .no_stderr();
         }
+
+        ucmd().args(&[".", arg, "invalid"]).fails().stderr_only(
+            "find: I cannot figure out how to interpret ‘invalid’ as a date or time\n",
+        );
     }
+
+    #[cfg(target_os = "linux")]
+    ucmd()
+        .args(&[".", "-newerBt", "jan 01, 2000"])
+        .fails()
+        .stderr_only(
+            "find: This system does not provide a way to find the birth time of a file.\n",
+        );
 }
 
 #[test]
@@ -1007,6 +1080,37 @@ fn find_ls() {
         .args(&["./test_data/simple/subdir", "-ls"])
         .succeeds()
         .no_stderr();
+}
+
+// Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
+// a file's owning uid/gid had no passwd/group entry; it must fall back to the
+// numeric id like GNU find. Creating such a file needs privilege to chown to an
+// unmapped id, so skip when that isn't available (e.g. non-root CI).
+#[test]
+#[cfg(unix)]
+fn find_ls_unmapped_owner_renders_numeric_id() {
+    use nix::unistd::{chown, Gid, Uid};
+
+    let temp_dir = Builder::new().prefix("find_ls_unmapped").tempdir().unwrap();
+    let file = temp_dir.path().join("orphan");
+    File::create(&file).unwrap();
+
+    // A uid/gid essentially never present in /etc/passwd or /etc/group.
+    let unmapped = 4_000_000_000u32;
+    if chown(
+        &file,
+        Some(Uid::from_raw(unmapped)),
+        Some(Gid::from_raw(unmapped)),
+    )
+    .is_err()
+    {
+        return;
+    }
+
+    ucmd()
+        .args(&[file.to_str().unwrap(), "-ls"])
+        .succeeds()
+        .stdout_contains(unmapped.to_string());
 }
 
 #[test]

@@ -83,7 +83,10 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
 
                     if matches!(delim, '.' | '=' | ':') {
                         let rest = chars.as_str();
-                        let end = rest.find([delim, ']'])? + 2;
+                        // Search for the two-byte closer `<delim>]` (e.g. `:]`);
+                        // matching either byte alone let `+ 2` overshoot a char boundary.
+                        let closer = format!("{delim}]");
+                        let end = rest.find(closer.as_str())? + 2;
                         expr.push_str(&rest[..end]);
                         chars = rest[end..].chars();
                     }
@@ -122,18 +125,15 @@ fn glob_to_regex(pattern: &str) -> Option<String> {
             '?' => regex.push('.'),
             '*' => regex.push_str(".*"),
             '\\' => {
-                if let Some(ch) = chars.next() {
-                    regex_push_literal(&mut regex, ch);
-                } else {
-                    // https://pubs.opengroup.org/onlinepubs/9699919799/functions/fnmatch.html
-                    //
-                    //     If pattern ends with an unescaped <backslash>, fnmatch() shall return a
-                    //     non-zero value (indicating either no match or an error).
-                    //
-                    // Most implementations return FNM_NOMATCH in this case, so create a pattern that
-                    // never matches.
-                    return None;
-                }
+                // https://pubs.opengroup.org/onlinepubs/9699919799/functions/fnmatch.html
+                //
+                //     If pattern ends with an unescaped <backslash>, fnmatch() shall return a
+                //     non-zero value (indicating either no match or an error).
+                //
+                // Most implementations return FNM_NOMATCH in this case, so create a pattern that
+                // never matches.
+                let ch = chars.next()?;
+                regex_push_literal(&mut regex, ch);
             }
             '[' => {
                 if let Some((expr, rest)) = extract_bracket_expr(chars.as_str()) {
@@ -220,6 +220,16 @@ mod tests {
     #[test]
     fn invalid_brackets() {
         assert_glob_regex(r"foo[bar[!baz", r"foo\[bar\[!baz");
+    }
+
+    #[test]
+    fn malformed_posix_class_with_multibyte_char() {
+        for pat in ["[[:]é", "[[:a]é", "[[.]é", "[[:é]", "[[=]😀"] {
+            assert!(
+                glob_to_regex(pat).is_some(),
+                "panicked or rejected: {pat:?}"
+            );
+        }
     }
 
     #[test]

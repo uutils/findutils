@@ -33,7 +33,7 @@ Finally, feel free to join our [Discord](https://discord.gg/wQVJbvJ)!
 We have the following goals with our development:
 
 - **Compatible**: The utilities should be a drop-in replacement for the GNU
-  coreutils.
+  findutils.
 - **Cross-platform**: All utilities should run on as many of the supported
   platforms as possible.
 - **Reliable**: The utilities should never unexpectedly fail.
@@ -57,7 +57,7 @@ are some tips for writing good issues:
   reported.
 - Make sure to include all relevant information, such as:
   - Which version of uutils did you check?
-  - Which version of GNU coreutils are you comparing with?
+  - Which version of GNU findutils are you comparing with?
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
 - Be as specific as possible!
@@ -95,7 +95,7 @@ submit a patch!
 
 ### Don't `panic!`
 
-The coreutils should be very reliable. This means that we should never `panic!`.
+The findutils should be very reliable. This means that we should never `panic!`.
 Therefore, you should avoid using `.unwrap()` and `panic!`. Sometimes the use of
 `unreachable!` can be justified with a comment explaining why that code is
 unreachable.
@@ -129,7 +129,7 @@ for a solution involving macros.
 Rust has many string-like types, and sometimes it's hard to choose the right
 one. It's tempting to use `str` (and `String`) for everything, but that is not
 always the right choice for uutils, because we need to support invalid UTF-8,
-just like the GNU coreutils. For example, paths on Linux might not be valid
+just like the GNU findutils. For example, paths on Linux might not be valid
 UTF-8! Whenever we are dealing with paths, we should therefore stick with
 `OsStr` and `Path`. Make sure that you only convert to `str`/`String` if you
 know that something is always valid UTF-8. If you need more operations on

@@ -20,6 +20,7 @@ use super::{FileType, Matcher, MatcherIO, WalkEntry, WalkError};
 #[cfg(unix)]
 use std::os::unix::prelude::MetadataExt;
 
+#[cfg(unix)]
 const STANDARD_BLOCK_SIZE: u64 = 512;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -54,7 +55,10 @@ impl TimeFormat {
             }
             Self::Strftime(format) => {
                 // Handle a special case
-                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S%.f0");
+                // GNU prints a fixed-width fraction: dot, nine nanosecond
+                // digits, plus a trailing literal zero. chrono's `%.f` would
+                // drop the fraction (and the dot) entirely when it is zero.
+                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S.%f0");
                 DateTime::<Local>::from(time)
                     .format(&custom_format)
                     .to_string()
@@ -170,16 +174,21 @@ impl FormatStringParser<'_> {
         // Try parsing an octal sequence first.
         let first = self.front()?;
         if first.is_digit(OCTAL_RADIX) {
-            if let Ok(code) = self.peek(OCTAL_LEN).and_then(|octal| {
-                u32::from_str_radix(octal, OCTAL_RADIX).map_err(std::convert::Into::into)
-            }) {
-                // safe to unwrap: .peek() already succeeded above.
-                let octal = self.advance_by(OCTAL_LEN).unwrap();
-                return match char::from_u32(code) {
-                    Some(c) => Ok(FormatComponent::Literal(c.to_string())),
-                    None => Err(format!("Invalid character value: \\{octal}").into()),
-                };
-            }
+            // A GNU octal escape is 1 to 3 octal digits. Consume only the leading
+            // octal digits (which are ASCII), rather than slicing a fixed 3 bytes
+            // that can land inside a following multibyte char.
+            let octal: String = self
+                .string
+                .chars()
+                .take(OCTAL_LEN)
+                .take_while(|c| c.is_digit(OCTAL_RADIX))
+                .collect();
+            let code = u32::from_str_radix(&octal, OCTAL_RADIX)?;
+            self.advance_by(octal.len())?;
+            return match char::from_u32(code) {
+                Some(c) => Ok(FormatComponent::Literal(c.to_string())),
+                None => Err(format!("Invalid character value: \\{octal}").into()),
+            };
         }
 
         self.advance_one()?;
@@ -204,22 +213,27 @@ impl FormatStringParser<'_> {
         }
     }
 
-    fn parse_format_width(&mut self) -> Option<usize> {
+    fn parse_format_width(&mut self) -> Result<Option<usize>, Box<dyn Error>> {
         let start = self.string;
         let mut digits = 0;
 
-        while self.front().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        while self.front().is_ok_and(|c| c.is_ascii_digit()) {
             digits += 1;
             // safe to unwrap: the front() check already succeeded above.
             self.advance_one().unwrap();
         }
 
         if digits > 0 {
-            // safe to unwrap: we already know all the digits are valid due to
-            // the above checks.
-            Some((start[0..digits]).parse().unwrap())
+            let digits = &start[0..digits];
+            let width: usize = digits
+                .parse()
+                .map_err(|_| format!("Invalid format width: {digits}"))?;
+            if width > u16::MAX as usize {
+                return Err(format!("Format width too large: {digits}").into());
+            }
+            Ok(Some(width))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -255,7 +269,7 @@ impl FormatStringParser<'_> {
             self.advance_one().unwrap();
         }
 
-        let width = self.parse_format_width();
+        let width = self.parse_format_width()?;
 
         let first = self.advance_one()?;
         if first == '%' {
@@ -693,6 +707,31 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_octal_escape_before_multibyte_char() {
+        assert_eq!(
+            FormatString::parse("\\0€").unwrap().components,
+            vec![
+                FormatComponent::Literal("\0".to_owned()),
+                FormatComponent::Literal("€".to_owned()),
+            ]
+        );
+        assert_eq!(
+            FormatString::parse("\\1😀").unwrap().components,
+            vec![
+                FormatComponent::Literal("\u{1}".to_owned()),
+                FormatComponent::Literal("😀".to_owned()),
+            ]
+        );
+        assert_eq!(
+            FormatString::parse("\\00é").unwrap().components,
+            vec![
+                FormatComponent::Literal("\0".to_owned()),
+                FormatComponent::Literal("é".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
     fn test_parse_formatting() {
         fn unaligned_directive(directive: FormatDirective) -> FormatComponent {
             FormatComponent::Directive {
@@ -1055,6 +1094,42 @@ mod tests {
             ),
             deps.get_output_as_string()
         );
+    }
+
+    #[test]
+    fn test_printf_time_plus_format() {
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let new_file_name = "newFile";
+        let file_path = temp_dir.path().join(new_file_name);
+        File::create(&file_path).expect("create temp file");
+
+        // GNU findutils always prints a dot and ten fractional digits, even
+        // for timestamps that fall on a whole second.
+        for (nanos, expected_time) in [
+            (0, "2000-01-15+09:30:21.0000000000"),
+            (500_000_000, "2000-01-15+09:30:21.5000000000"),
+        ] {
+            let mtime = chrono::Local
+                .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
+                .unwrap()
+                + Duration::nanoseconds(nanos);
+            filetime::set_file_mtime(
+                &file_path,
+                filetime::FileTime::from_unix_time(
+                    mtime.timestamp(),
+                    mtime.timestamp_subsec_nanos(),
+                ),
+            )
+            .expect("set temp file mtime");
+
+            let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
+            let deps = FakeDependencies::new();
+
+            let matcher = Printf::new("%T+", None).unwrap();
+            assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+            assert_eq!(expected_time, deps.get_output_as_string());
+        }
     }
 
     #[test]

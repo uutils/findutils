@@ -74,6 +74,15 @@ fn xargs_if_empty() {
 }
 
 #[test]
+fn xargs_replace_empty_input() {
+    ucmd()
+        .args(&["-I", "{}", "echo", "hello", "{}"])
+        .succeeds()
+        .no_output();
+    ucmd().args(&["-i", "echo", "{}"]).succeeds().no_output();
+}
+
+#[test]
 fn xargs_max_args() {
     ucmd()
         .args(&["-n2"])
@@ -183,6 +192,46 @@ fn xargs_exit_on_large() {
         .fails_with_code(1)
         .stderr_contains("Error:")
         .no_stdout();
+}
+
+#[test]
+#[cfg(unix)]
+fn xargs_batches_large_input_below_system_limit() {
+    // Arguments totalling more than ARG_MAX must be split into several
+    // command invocations instead of failing with E2BIG.
+    let arg_count = 60_000;
+    let input = (0..arg_count)
+        .map(|i| format!("/some/path/to/a/file/with/a/long/name-{i:06}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let result = ucmd().arg("echo").pipe_in(input).succeeds();
+    assert_eq!(
+        arg_count,
+        result.stdout_str().split_ascii_whitespace().count()
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn xargs_explicit_size_can_exceed_default_cap() {
+    // An explicit -s larger than the 128 KiB default cap must be honored:
+    // ~200 KiB of arguments fit into a single invocation with -s 300000.
+    let arg_count = 4_000;
+    let input = (0..arg_count)
+        .map(|i| format!("/quite/a/long/path/segment/for/padding-{i:06}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let result = ucmd()
+        .args(&["-s", "300000", "echo"])
+        .pipe_in(input)
+        .succeeds();
+    assert_eq!(1, result.stdout_str().lines().count());
+    assert_eq!(
+        arg_count,
+        result.stdout_str().split_ascii_whitespace().count()
+    );
 }
 
 #[test]

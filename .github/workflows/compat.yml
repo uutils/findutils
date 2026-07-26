@@ -3,6 +3,8 @@ on: [push, pull_request]
 name: External-testsuites
 env:
   CARGO_INCREMENTAL: "0"
+  # Default branch, used to fetch the reference (baseline) test results.
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 jobs:
   gnu-tests:
     permissions:
@@ -13,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout findutils
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: findutils
       - name: Checkout GNU findutils
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gnu-mirror-unofficial/findutils
           path: findutils.gnu
@@ -43,7 +45,7 @@ jobs:
         run: |
           cd findutils
           bash util/build-gnu.sh ||:
-          install --strip -Dm755 target/release/{find,xargs} -t findutils-x86_64-unknown-linux-gnu
+          install --strip -Dm755 target/release/{find,locate,updatedb,xargs} -t findutils-x86_64-unknown-linux-gnu
           ZSTD_CLEVEL=19 tar --zstd -caf ../findutils-x86_64-unknown-linux-gnu.tar.zst findutils-x86_64-unknown-linux-gnu
       - name: Publish latest commit
         uses: softprops/action-gh-release@v3
@@ -58,11 +60,9 @@ jobs:
             findutils-x86_64-unknown-linux-gnu.tar.zst
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract testing info
-        shell: bash
-        run: |
 
       - name: Upload gnu-test-report
+        if: success() || failure()
         uses: actions/upload-artifact@v7
         with:
           name: gnu-test-report
@@ -70,70 +70,68 @@ jobs:
             findutils.gnu/find/testsuite/*.log
             findutils.gnu/xargs/testsuite/*.log
             findutils.gnu/tests/**/*.log
-      - name: Upload gnu-result
+      # The per-test JSON summary doubles as the baseline: future runs on the
+      # default branch download this artifact to diff against.
+      - name: Upload gnu-full-result
+        if: success() || failure()
         uses: actions/upload-artifact@v7
         with:
-          name: gnu-result
-          path: gnu-result.json
-      - name: Download artifacts (gnu-result and gnu-test-report)
-        uses: actions/github-script@v9
+          name: gnu-full-result
+          path: findutils-gnu-full-result.json
+          if-no-files-found: warn
+
+      - name: Retrieve reference results
+        uses: dawidd6/action-download-artifact@v21
+        continue-on-error: true
         with:
-          script: |
-            let fs = require('fs');
-            fs.mkdirSync('${{ github.workspace }}/dl', { recursive: true });
+          workflow: compat.yml
+          branch: ${{ env.DEFAULT_BRANCH }}
+          workflow_conclusion: completed
+          name: gnu-full-result
+          path: reference-gnu
+          if_no_artifact_found: warn
 
-            async function downloadArtifact(artifactName) {
-              // List all artifacts from the workflow run
-              let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: ${{ github.run_id }},
-              });
-
-              // Find the specified artifact
-              let matchArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
-              if (!matchArtifact) {
-                throw new Error(`Artifact "${artifactName}" not found.`);
-              }
-
-              // Download the artifact
-              let download = await github.rest.actions.downloadArtifact({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                artifact_id: matchArtifact.id,
-                archive_format: 'zip',
-              });
-
-              // Save the artifact to a file
-              fs.writeFileSync(`${{ github.workspace }}/dl/${artifactName}.zip`, Buffer.from(download.data));
-            }
-
-            // Download the required artifacts
-            await downloadArtifact("gnu-result");
-            await downloadArtifact("gnu-test-report");
-
-      - name: Compare failing tests against master
+      - name: Compare against reference results
         shell: bash
         run: |
-          ./findutils/util/diff-gnu.sh ./dl ./findutils.gnu
-      - name: Compare against main results
-        shell: bash
-        run: |
-          unzip dl/gnu-result.zip -d dl/
-          unzip dl/gnu-test-report.zip -d dl/
-          mv dl/gnu-result.json latest-gnu-result.json
-          python findutils/util/compare_gnu_result.py
+          mkdir -p comment
+          echo "${{ github.event.number }}" > comment/NR
+          REF="reference-gnu/findutils-gnu-full-result.json"
+          CUR="findutils-gnu-full-result.json"
+          : > comment/result-gnu.txt
+          if test ! -f "${CUR}"; then
+            echo "::error ::Missing current GNU results (${CUR}); failing early"
+            exit 1
+          fi
+          if test -f "${REF}"; then
+            python3 findutils/util/compare_test_results.py \
+              --ignore-file findutils/.github/workflows/ignore-intermittent.txt \
+              --output comment/result-gnu.txt \
+              "${CUR}" "${REF}"
+          else
+            echo "::warning ::No GNU reference results available yet; skipping comparison."
+          fi
+
+      - name: Upload GNU comparison comment
+        if: ${{ github.event_name == 'pull_request' && (success() || failure()) }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: comment-gnu
+          path: comment/
 
   bfs-tests:
     name: Run BFS tests
+    permissions:
+      actions: read
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout findutils
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: findutils
       - name: Checkout BFS
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: tavianator/bfs
           path: bfs
@@ -152,110 +150,54 @@ jobs:
           export CARGO_INCREMENTAL=0
           bash util/build-bfs.sh ||:
       - name: Upload bfs-test-report
+        if: success() || failure()
         uses: actions/upload-artifact@v7
         with:
           name: bfs-test-report
           path: bfs/tests.log
-      - name: Upload bfs-result
+      - name: Upload bfs-full-result
+        if: success() || failure()
         uses: actions/upload-artifact@v7
         with:
-          name: bfs-result
-          path: bfs-result.json
-      - name: Download artifacts (gnu-result and bfs-test-report)
-        uses: actions/github-script@v9
+          name: bfs-full-result
+          path: bfs-full-result.json
+          if-no-files-found: warn
+
+      - name: Retrieve reference results
+        uses: dawidd6/action-download-artifact@v21
+        continue-on-error: true
         with:
-          script: |
-            let fs = require('fs');
-            fs.mkdirSync('${{ github.workspace }}/dl', { recursive: true });
+          workflow: compat.yml
+          branch: ${{ env.DEFAULT_BRANCH }}
+          workflow_conclusion: completed
+          name: bfs-full-result
+          path: reference-bfs
+          if_no_artifact_found: warn
 
-            async function downloadArtifact(artifactName) {
-              // List all artifacts from the workflow run
-              let artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: ${{ github.run_id }},
-              });
-
-              // Find the specified artifact
-              let matchArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
-              if (!matchArtifact) {
-                throw new Error(`Artifact "${artifactName}" not found.`);
-              }
-
-              // Download the artifact
-              let download = await github.rest.actions.downloadArtifact({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                artifact_id: matchArtifact.id,
-                archive_format: 'zip',
-              });
-
-              // Save the artifact to a file
-              fs.writeFileSync(`${{ github.workspace }}/dl/${artifactName}.zip`, Buffer.from(download.data));
-            }
-
-            // Download the required artifacts
-            await downloadArtifact("bfs-result");
-            await downloadArtifact("bfs-test-report");
-      - name: Compare failing tests against main
+      - name: Compare against reference results
         shell: bash
         run: |
-          ./findutils/util/diff-bfs.sh dl/tests.log bfs/tests.log
-      - name: Compare against main results
-        shell: bash
-        run: |
-          unzip dl/bfs-result.zip -d dl/
-          unzip dl/bfs-test-report.zip -d dl/
-          mv dl/bfs-result.json latest-bfs-result.json
-          python findutils/util/compare_bfs_result.py
+          mkdir -p comment
+          echo "${{ github.event.number }}" > comment/NR
+          REF="reference-bfs/bfs-full-result.json"
+          CUR="bfs-full-result.json"
+          : > comment/result-bfs.txt
+          if test ! -f "${CUR}"; then
+            echo "::error ::Missing current bfs results (${CUR}); failing early"
+            exit 1
+          fi
+          if test -f "${REF}"; then
+            python3 findutils/util/compare_test_results.py \
+              --ignore-file findutils/.github/workflows/ignore-intermittent.txt \
+              --output comment/result-bfs.txt \
+              "${CUR}" "${REF}"
+          else
+            echo "::warning ::No bfs reference results available yet; skipping comparison."
+          fi
 
-  upload-annotations:
-    name: Upload annotations
-    runs-on: ubuntu-latest
-    needs: [gnu-tests, bfs-tests]
-    if: ${{ github.event_name == 'pull_request' }}
-
-    steps:
-      - name: List Annotations
-        uses: actions/github-script@v9
-
-        with:
-          script: |
-            let runs = await github.rest.checks.listForRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: '${{ github.event.pull_request.head.sha }}'
-            });
-
-            let names = ['Run GNU findutils tests', 'Run BFS tests'];
-            let results = [];
-            runs.data.check_runs.filter(check => names.includes(check.name)).forEach(run => results.push(run));
-
-            let annotations = { data: [], pull_request_number: '${{ github.event.number }}' };
-            for (let result of results) {
-              let run = await github.rest.checks.listAnnotations({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                check_run_id: result.id
-              });
-
-              run.data.forEach(data => {
-                annotations.data.push({
-                  run: result.name,
-                  annotation: data
-                });
-              });
-            }
-
-            // Remove duplicate items.
-            annotations.data = annotations.data.filter((value, index, self) =>
-              self.findIndex(v => v.annotation.message === value.annotation.message) === index);
-
-            let fs = require('fs');
-            fs.writeFileSync('${{ github.workspace }}/annotations.json', JSON.stringify(annotations));
-
-      - name: Upload annotations
+      - name: Upload BFS comparison comment
+        if: ${{ github.event_name == 'pull_request' && (success() || failure()) }}
         uses: actions/upload-artifact@v7
         with:
-          name: comment
-          path: annotations.json
+          name: comment-bfs
+          path: comment/

@@ -2,6 +2,9 @@
 
 set -eo pipefail
 
+# Repository root (where util/ lives), captured before we cd into the bfs tree.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 if ! test -d ../bfs; then
     echo "Could not find ../bfs"
     echo "git clone https://github.com/tavianator/bfs.git"
@@ -24,30 +27,18 @@ fi
 LOG_FILE=tests.log
 ./tests/tests.sh --bfs="$FIND" "$@" 2>&1 | tee "$LOG_FILE" || :
 
-PASS=$(sed -En 's|^\[PASS] *([0-9]+) / .*|\1|p' "$LOG_FILE")
-SKIP=$(sed -En 's|^\[SKIP] *([0-9]+) / .*|\1|p' "$LOG_FILE")
-FAIL=$(sed -En 's|^\[FAIL] *([0-9]+) / .*|\1|p' "$LOG_FILE")
+# Build a per-test JSON summary (name + status for every test) used by
+# compare_test_results.py to detect per-test improvements/regressions.
+RESULT_JSON="${RESULT_JSON:-../bfs-full-result.json}"
+output="$(python3 "${REPO_DIR}/util/bfs_json_result.py" "$LOG_FILE" "${RESULT_JSON}")"
+echo "${output}"
 
-# Default any missing numbers to zero (e.g. no tests skipped)
-: ${PASS:=0}
-: ${SKIP:=0}
-: ${FAIL:=0}
+TOTAL=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['total'])" "${RESULT_JSON}")
+FAIL=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['summary']['failed'])" "${RESULT_JSON}")
 
-TOTAL=$((PASS + SKIP + FAIL))
 if (( TOTAL <= 1 )); then
     echo "Error in the execution, failing early"
     exit 1
 fi
 
-output="BFS tests summary = TOTAL: $TOTAL / PASS: $PASS / SKIP: $SKIP / FAIL: $FAIL"
-echo "${output}"
 if (( FAIL > 0 )); then echo "::warning ::${output}"; fi
-
-jq -n \
-   --arg date "$(date --rfc-email)" \
-   --arg sha "$GITHUB_SHA" \
-   --arg total "$TOTAL" \
-   --arg pass "$PASS" \
-   --arg skip "$SKIP" \
-   --arg fail "$FAIL" \
-   '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > ../bfs-result.json

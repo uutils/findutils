@@ -379,9 +379,10 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
                 m.as_str().to_string()
             });
         // If no year input.
-        let year = captures
-            .get(2)
-            .map_or(now.year(), |m| m.as_str().parse().unwrap());
+        let year = match captures.get(2) {
+            Some(m) => m.as_str().parse().ok()?,
+            None => now.year(),
+        };
         // If the user does not enter a specific time, it will be filled with 0
         let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
         let date_time_str = format!("{month_day}, {year} {time_str}");
@@ -952,7 +953,7 @@ fn build_matcher_tree(
                         }
                         #[cfg(target_os = "linux")]
                         if x_option == "B" {
-                            return Err(From::from("find: This system does not provide a way to find the birth time of a file."));
+                            return Err(From::from("This system does not provide a way to find the birth time of a file."));
                         }
                         if y_option == "t" {
                             let time = args[i + 1];
@@ -960,7 +961,7 @@ fn build_matcher_tree(
                             // Convert args to unix timestamps. (expressed in numeric types)
                             let Some(comparable_time) = parse_date_str_to_timestamps(time) else {
                                 return Err(From::from(format!(
-                                    "find: I cannot figure out how to interpret ‘{}’ as a date or time",
+                                    "I cannot figure out how to interpret ‘{}’ as a date or time",
                                     args[i + 1]
                                 )));
                             };
@@ -1032,7 +1033,7 @@ fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
     let mut string_segments: Vec<String> = buffer_split
         .iter()
         .filter_map(|s| std::str::from_utf8(s).ok())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     // empty starting point checker
     if string_segments.iter().any(|s| s.is_empty()) {
@@ -1840,6 +1841,9 @@ mod tests {
             .and_utc()
             .timestamp_millis();
         assert_eq!(none_date_timestamps, Some(now_but_zero_hour_min_sec));
+
+        // A year of non-ASCII decimal digits must be rejected, not panic.
+        assert_eq!(parse_date_str_to_timestamps("jan 01, ٠٠٠٠"), None);
     }
 
     #[test]

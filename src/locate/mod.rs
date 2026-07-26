@@ -113,35 +113,38 @@ impl Statistics {
         }
     }
 
-    fn print_header(&self, dbreader: &DbReader) {
-        println!(
+    fn print_header<W: Write>(&self, out: &mut W, dbreader: &DbReader) -> io::Result<()> {
+        writeln!(
+            out,
             "Database {} is in the {} format.",
             dbreader.path.to_string_lossy(),
             dbreader.format,
-        );
+        )
     }
 
-    fn print(&self, dbreader: &DbReader) {
+    fn print<W: Write>(&self, out: &mut W, dbreader: &DbReader) -> io::Result<()> {
         if let Ok(metadata) = fs::metadata(&dbreader.path) {
             if let Ok(time) = metadata.modified() {
                 let time: DateTime<Local> = time.into();
-                println!("Database was last modified at {}", time);
+                writeln!(out, "Database was last modified at {}", time)?;
             }
-            println!("Locate database size: {} bytes", metadata.len());
+            writeln!(out, "Locate database size: {} bytes", metadata.len())?;
         }
-        println!("Matching Filenames: {}", self.matches);
-        println!(
+        writeln!(out, "Matching Filenames: {}", self.matches)?;
+        writeln!(
+            out,
             "File names have a cumulative length of {} bytes",
             self.total_length
-        );
-        println!("Of those file names,\n");
-        println!("        {} contain whitespace,", self.whitespace);
-        println!("        {} contain newline characters,", self.newlines);
-        println!(
+        )?;
+        writeln!(out, "Of those file names,\n")?;
+        writeln!(out, "        {} contain whitespace,", self.whitespace)?;
+        writeln!(out, "        {} contain newline characters,", self.newlines)?;
+        writeln!(
+            out,
             "        and {} contain characters with the high bit set.",
             self.high_bit
-        );
-        println!();
+        )?;
+        writeln!(out)
     }
 }
 
@@ -448,7 +451,7 @@ impl Iterator for DbReader {
                 .take(self.prefix as usize)
                 .collect::<Vec<_>>()
         });
-        if (prefix.as_ref().map(|v| v.len()).unwrap_or(0) as isize) < size {
+        if (prefix.as_ref().map_or(0, std::vec::Vec::len) as isize) < size {
             return Some(Err(Error::InvalidDb(
                 self.path.to_string_lossy().to_string(),
             )));
@@ -490,8 +493,10 @@ impl DbReader {
             return None;
         };
 
-        // drop nul byte when matching
-        match String::from_utf8_lossy(&buf[..buf.len() - 1]).as_ref() {
+        // drop the trailing nul byte when matching. `read_until` may stop at EOF
+        // without one (e.g. a too-short file), so strip it only if present rather
+        // than slicing `buf.len() - 1`, which underflows when `buf` is empty.
+        match String::from_utf8_lossy(buf.strip_suffix(b"\0").unwrap_or(&buf)).as_ref() {
             "LOCATE02" => Some(DbFormat::Locate02),
             _ => None,
         }
@@ -528,6 +533,13 @@ fn path_exists(path: &Path, follow_symlinks: bool) -> bool {
 }
 
 fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
+    // glob metacharacters in a stored path aren't handled yet, so such entries are skipped. On
+    // Windows `\` is the path separator (present in every path), so it must not count here.
+    #[cfg(windows)]
+    const GLOB_METACHARS: &str = "*?[]";
+    #[cfg(not(windows))]
+    const GLOB_METACHARS: &str = r"*?[]\";
+
     let buf = bytes_to_path(entry.to_bytes());
     let name = if config.basename {
         let Some(path) = buf.file_name() else {
@@ -538,7 +550,7 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
             path.as_encoded_bytes()
                 .iter()
                 .copied()
-                .chain([b'\0'])
+                .chain(*b"\0")
                 .collect(),
         ) else {
             // a file name can't contain an interior nul byte, so this only fails on
@@ -552,30 +564,20 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     };
     let entry = name.to_string_lossy();
 
-    // glob metacharacters in a stored path aren't handled yet, so such entries are skipped. On
-    // Windows `\` is the path separator (present in every path), so it must not count here.
-    #[cfg(windows)]
-    const GLOB_METACHARS: &str = "*?[]";
-    #[cfg(not(windows))]
-    const GLOB_METACHARS: &str = r"*?[]\";
-
     let has_metachars = entry.chars().any(|c| GLOB_METACHARS.contains(c));
-    let patterns_match = match config.all {
-        false => {
-            if has_metachars {
-                // TODO: parse metacharacters
-                false
-            } else {
-                patterns.any_match(entry.as_ref())
-            }
+    let patterns_match = if config.all {
+        if has_metachars {
+            // TODO: parse metacharacters
+            false
+        } else {
+            patterns.all_match(entry.as_ref())
         }
-        true => {
-            if has_metachars {
-                // TODO: parse metacharacters
-                false
-            } else {
-                patterns.all_match(entry.as_ref())
-            }
+    } else {
+        if has_metachars {
+            // TODO: parse metacharacters
+            false
+        } else {
+            patterns.any_match(entry.as_ref())
         }
     };
 
@@ -599,80 +601,84 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 clap::error::ErrorKind::DisplayHelp => {
                     app.print_help()?;
                 }
-                clap::error::ErrorKind::DisplayVersion => print!("{}", app.render_version()),
+                clap::error::ErrorKind::DisplayVersion => {
+                    write!(io::stdout(), "{}", app.render_version())?;
+                }
                 _ => return Err(e.with_exit_code(1).into()),
             }
         }
         Ok(matches) => {
             let ParsedInfo { patterns, config } = ParsedInfo::try_from(matches)?;
             let mut stats = Statistics::new();
+            let stdout = io::stdout();
+            let mut out = stdout.lock();
 
             // iterate over each given database
-            let count = config
+            let mut count = 0;
+            for mut dbreader in config
                 .db
                 .iter()
                 .filter_map(|p| DbReader::new(p.as_path()).ok())
-                .map(|mut dbreader| {
-                    // if we can get the mtime of the file, check it against the current time
-                    if let Ok(metadata) = fs::metadata(&dbreader.path) {
-                        if let Ok(time) = metadata.modified() {
-                            let modified: DateTime<Local> = time.into();
-                            let now = Local::now();
-                            let delta = now - modified;
-                            if delta
-                                > TimeDelta::days(config.max_age as i64)
-                            {
-                                eprintln!(
-                                    "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
-                                    args[0],
-                                    dbreader.path.to_string_lossy(),
-                                    config.max_age,
-                                    delta.num_seconds() as f64 / (60 * 60 * 24) as f64
-                                );
-                            }
+            {
+                // if we can get the mtime of the file, check it against the current time
+                if let Ok(metadata) = fs::metadata(&dbreader.path) {
+                    if let Ok(time) = metadata.modified() {
+                        let modified: DateTime<Local> = time.into();
+                        let now = Local::now();
+                        let delta = now - modified;
+                        if delta > TimeDelta::days(config.max_age as i64) {
+                            eprintln!(
+                                "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
+                                args[0],
+                                dbreader.path.to_string_lossy(),
+                                config.max_age,
+                                delta.num_seconds() as f64 / (60 * 60 * 24) as f64
+                            );
                         }
                     }
+                }
 
-                    // the first line of the statistics description is printed before matches
-                    // (given --print)
-                    if config.mode == Mode::Statistics {
-                        stats.print_header(&dbreader);
-                    }
+                // the first line of the statistics description is printed before matches
+                // (given --print)
+                if config.mode == Mode::Statistics {
+                    stats.print_header(&mut out, &dbreader)?;
+                }
 
-                    // find matches
-                    let count = dbreader
-                        .by_ref()
-                        .process_results(|iter|
-                            iter
-                                .filter(|s| match_entry(s.as_c_str(), &config, &patterns))
-                                .take(config.limit.unwrap_or(usize::MAX))
-                                .inspect(|s| {
-                                    if config.mode == Mode::Normal || config.print {
-                                        if config.null_bytes {
-                                            print!("{}\0", s.to_string_lossy());
-                                        } else {
-                                            println!("{}", s.to_string_lossy());
-                                        }
-                                    }
-                                    if config.mode == Mode::Statistics {
-                                        stats.add_match(s);
-                                    }
-                                })
-                                .count()
-                        );
+                // find matches
+                let mut write_result = Ok(());
+                let db_count = dbreader.by_ref().process_results(|iter| {
+                    iter.filter(|s| match_entry(s.as_c_str(), &config, &patterns))
+                        .take(config.limit.unwrap_or(usize::MAX))
+                        .inspect(|s| {
+                            if (config.mode == Mode::Normal || config.print) && write_result.is_ok()
+                            {
+                                write_result = if config.null_bytes {
+                                    write!(out, "{}\0", s.to_string_lossy())
+                                } else {
+                                    writeln!(out, "{}", s.to_string_lossy())
+                                };
+                            }
+                            if config.mode == Mode::Statistics {
+                                stats.add_match(s);
+                            }
+                        })
+                        .count()
+                })?;
+                write_result?;
 
-                    // print the rest of the statistics description
-                    if config.mode == Mode::Statistics && count.is_ok() {
-                        stats.print(&dbreader);
-                    }
+                // print the rest of the statistics description
+                if config.mode == Mode::Statistics {
+                    stats.print(&mut out, &dbreader)?;
+                }
 
-                    count
-                })
-                .try_fold(0, |acc, e| e.map(|e| acc + e))?;
+                count += db_count;
+            }
 
             if config.mode == Mode::Count {
-                println!("{count}");
+                writeln!(out, "{count}")?;
             }
+
+            out.flush()?;
 
             // zero matches isn't an error if --statistics is passed
             if count == 0 && config.mode != Mode::Statistics {
@@ -701,10 +707,37 @@ pub fn locate_main(args: &[&str]) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
+    use std::io::{self, Write};
     use std::path::Path;
 
-    use super::path_exists;
+    use super::{path_exists, DbReader, Statistics};
+
+    /// A writer that always fails, to emulate stdout with no space left
+    /// (`> /dev/full`) or a closed pipe.
+    struct FailWriter;
+
+    impl Write for FailWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from(io::ErrorKind::BrokenPipe))
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::from(io::ErrorKind::BrokenPipe))
+        }
+    }
+
+    #[test]
+    fn statistics_print_reports_write_errors_instead_of_panicking() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("db.bin");
+        std::fs::write(&db, b"\0LOCATE02\0\0/foo\0").unwrap();
+        let dbreader = DbReader::new(&db).unwrap();
+
+        let stats = Statistics::new();
+        // A failing writer must surface an error rather than panicking, so a
+        // full disk or closed pipe exits with a diagnostic instead of exit 101.
+        assert!(stats.print_header(&mut FailWriter, &dbreader).is_err());
+        assert!(stats.print(&mut FailWriter, &dbreader).is_err());
+    }
 
     /// Create a symlink at `link` pointing at `target`, cross-platform.
     #[cfg(unix)]

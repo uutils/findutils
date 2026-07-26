@@ -842,13 +842,11 @@ mod tests {
         // - find test_data/simple -cmin +1
         // - find test_data/simple -mmin +1
         // Means to find files accessed / modified more than 1 minute ago.
-        [
+        for time_type in &[
             FileTimeType::Accessed,
             FileTimeType::Changed,
             FileTimeType::Modified,
-        ]
-        .iter()
-        .for_each(|time_type| {
+        ] {
             let more_matcher =
                 FileAgeRangeMatcher::new(*time_type, ComparableValue::MoreThan(1), true);
             assert!(
@@ -863,7 +861,7 @@ mod tests {
                     }
                 )
             );
-        });
+        }
 
         // less test
         // mocks:
@@ -871,14 +869,12 @@ mod tests {
         // - find test_data/simple -cmin -1
         // - find test_data/simple -mmin -1
         // Means to find files accessed / modified less than 1 minute ago.
-        [
+        for time_type in &[
             FileTimeType::Accessed,
             #[cfg(unix)]
             FileTimeType::Changed,
             FileTimeType::Modified,
-        ]
-        .iter()
-        .for_each(|time_type| {
+        ] {
             let less_matcher =
                 FileAgeRangeMatcher::new(*time_type, ComparableValue::LessThan(1), true);
             assert!(
@@ -893,7 +889,7 @@ mod tests {
                     }
                 )
             );
-        });
+        }
 
         // catch file error
         let _ = fs::remove_file(&*new_file.path().to_string_lossy());

@@ -1,0 +1,16 @@
+# List of intermittent test names to ignore when comparing GNU/bfs results.
+# Format: one test name per line; lines starting with # are comments.
+#
+# A test listed here is still reported in the PR comment (marked
+# "intermittent"), but a *new* failure of it will not fail the CI job. Use this
+# for tests that are known to be flaky or environment-dependent, so genuine
+# regressions in other tests stay actionable.
+#
+# Names must match those in the *-full-result.json files:
+#   * GNU dejagnu find tests:  <name>.new-O[0-3]   (e.g. printf.new-O0)
+#   * GNU dejagnu xargs tests: <name>              (e.g. IARG, space)
+#   * GNU automake tests:      tests/<dir>/<name>  (e.g. tests/find/used)
+#   * bfs tests:               <dir>/<name>        (e.g. posix/HL)
+#
+# Example:
+# tests/find/some-flaky-test

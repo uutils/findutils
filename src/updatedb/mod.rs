@@ -14,7 +14,7 @@ use std::{
 };
 
 use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
-use uucore::error::UResult;
+use uucore::error::{strip_errno, UResult, USimpleError};
 
 use crate::find::{find_main, Dependencies};
 
@@ -37,36 +37,44 @@ impl From<ArgMatches> for Config {
                 .get_one::<String>("findoptions")
                 .cloned()
                 .unwrap_or_else(String::new),
-            local_paths: value
-                .get_one::<String>("localpaths")
-                .map(|s| {
+            local_paths: value.get_one::<String>("localpaths").map_or_else(
+                || vec![PathBuf::from("/")],
+                |s| {
                     s.split_whitespace()
                         .filter_map(|s| PathBuf::from_str(s).ok())
                         .collect()
-                })
-                .unwrap_or_else(|| vec![PathBuf::from("/")]),
+                },
+            ),
             net_paths: value
                 .get_one::<String>("netpaths")
-                .map(|s| s.split_whitespace().map(|s| s.to_owned()).collect())
+                .map(|s| {
+                    s.split_whitespace()
+                        .map(std::borrow::ToOwned::to_owned)
+                        .collect()
+                })
                 .unwrap_or_default(),
-            prune_paths: value
-                .get_one::<String>("prunepaths")
-                .map(|s| s.split_whitespace().map(PathBuf::from).collect())
-                .unwrap_or_else(|| {
+            prune_paths: value.get_one::<String>("prunepaths").map_or_else(
+                || {
                     ["/tmp", "/usr/tmp", "/var/tmp", "/afs"]
                         .into_iter()
                         .map(PathBuf::from)
                         .collect()
-                }),
-            prune_fs: value
-                .get_one::<String>("prunefs")
-                .map(|s| s.split_whitespace().map(|s| s.to_owned()).collect())
-                .unwrap_or_else(|| {
+                },
+                |s| s.split_whitespace().map(PathBuf::from).collect(),
+            ),
+            prune_fs: value.get_one::<String>("prunefs").map_or_else(
+                || {
                     ["nfs", "NFS", "proc"]
                         .into_iter()
                         .map(str::to_string)
                         .collect()
-                }),
+                },
+                |s| {
+                    s.split_whitespace()
+                        .map(std::borrow::ToOwned::to_owned)
+                        .collect()
+                },
+            ),
             db_format: value
                 .get_one::<DbFormat>("dbformat")
                 .copied()
@@ -315,22 +323,46 @@ fn do_updatedb(args: &[&str]) -> UResult<()> {
     let deps = CapturedDependencies::new(output.clone());
     find_main(find_args.as_slice(), &deps);
 
-    let mut writer = BufWriter::new(
-        OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(config.output)?,
-    );
+    let output_path = config.output;
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(&output_path)
+        .map_err(|e| {
+            USimpleError::new(
+                1,
+                format!(
+                    "cannot create '{}': {}",
+                    output_path.display(),
+                    strip_errno(&e)
+                ),
+            )
+        })?;
+    let mut writer = BufWriter::new(file);
+
+    // strip the trailing "(os error N)" so write failures read like the create error above
+    let write_err = |e: std::io::Error| {
+        USimpleError::new(
+            1,
+            format!(
+                "error writing '{}': {}",
+                output_path.display(),
+                strip_errno(&e)
+            ),
+        )
+    };
 
     let output = output.borrow();
     let frcoder = Frcoder::new(output.as_slice(), config.db_format);
-    writer.write_all(&frcoder.generate_header())?;
+    writer
+        .write_all(&frcoder.generate_header())
+        .map_err(&write_err)?;
     for v in frcoder {
-        writer.write_all(v.as_slice())?;
+        writer.write_all(v.as_slice()).map_err(&write_err)?;
     }
 
-    writer.flush()?;
+    writer.flush().map_err(&write_err)?;
 
     Ok(())
 }

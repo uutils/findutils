@@ -11,6 +11,8 @@ use nix::unistd::User;
 use std::os::unix::fs::MetadataExt;
 
 pub struct UserMatcher {
+    // Only read on Unix; the non-Unix `matches` implementation is a stub.
+    #[cfg_attr(not(unix), allow(dead_code))]
     uid: ComparableValue,
 }
 
@@ -31,7 +33,7 @@ impl UserMatcher {
         Self { uid }
     }
 
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     pub fn from_user_name(_user: &str) -> Option<Self> {
         None
     }
@@ -46,7 +48,7 @@ impl Matcher for UserMatcher {
         }
     }
 
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     fn matches(&self, _file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         false
     }
@@ -78,7 +80,7 @@ impl Matcher for NoUserMatcher {
         false
     }
 
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     fn matches(&self, _file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         false
     }
