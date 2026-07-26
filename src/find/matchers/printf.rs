@@ -52,7 +52,10 @@ impl TimeFormat {
             }
             Self::Strftime(format) => {
                 // Handle a special case
-                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S%.f0");
+                // GNU prints a fixed-width fraction: dot, nine nanosecond
+                // digits, plus a trailing literal zero. chrono's `%.f` would
+                // drop the fraction (and the dot) entirely when it is zero.
+                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S.%f0");
                 DateTime::<Local>::from(time)
                     .format(&custom_format)
                     .to_string()
@@ -1087,6 +1090,42 @@ mod tests {
             ),
             deps.get_output_as_string()
         );
+    }
+
+    #[test]
+    fn test_printf_time_plus_format() {
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let new_file_name = "newFile";
+        let file_path = temp_dir.path().join(new_file_name);
+        File::create(&file_path).expect("create temp file");
+
+        // GNU findutils always prints a dot and ten fractional digits, even
+        // for timestamps that fall on a whole second.
+        for (nanos, expected_time) in [
+            (0, "2000-01-15+09:30:21.0000000000"),
+            (500_000_000, "2000-01-15+09:30:21.5000000000"),
+        ] {
+            let mtime = chrono::Local
+                .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
+                .unwrap()
+                + Duration::nanoseconds(nanos);
+            filetime::set_file_mtime(
+                &file_path,
+                filetime::FileTime::from_unix_time(
+                    mtime.timestamp(),
+                    mtime.timestamp_subsec_nanos(),
+                ),
+            )
+            .expect("set temp file mtime");
+
+            let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
+            let deps = FakeDependencies::new();
+
+            let matcher = Printf::new("%T+", None).unwrap();
+            assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+            assert_eq!(expected_time, deps.get_output_as_string());
+        }
     }
 
     #[test]
