@@ -211,6 +211,16 @@ fn process_dir(
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
 ) -> i32 {
+    // No depth can satisfy both bounds when -mindepth exceeds -maxdepth, so GNU
+    // find visits nothing at all. walkdir clamps min_depth down to max_depth
+    // instead (see `WalkDir::min_depth`), which would make us descend anyway, so
+    // handle the empty traversal ourselves.
+    if config.min_depth > config.max_depth {
+        let mut matcher_io = matchers::MatcherIO::new(deps);
+        matcher.finished(&mut matcher_io);
+        return matcher_io.exit_code();
+    }
+
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
@@ -814,6 +824,67 @@ mod tests {
                  ./test_data/depth/1/2/f2\n"
             )
         );
+    }
+
+    #[test]
+    fn find_mindepth_greater_than_maxdepth() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-mindepth",
+                "2",
+                "-maxdepth",
+                "1",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
+    fn find_maxdepth_less_than_mindepth_reversed_order() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-maxdepth",
+                "1",
+                "-mindepth",
+                "2",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
+    fn find_mindepth_greater_than_maxdepth_depth_first() {
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-mindepth",
+                "2",
+                "-maxdepth",
+                "1",
+                "-depth",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
     }
 
     #[test]
