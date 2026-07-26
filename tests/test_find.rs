@@ -511,6 +511,34 @@ fn find_printf() {
 }
 
 #[test]
+#[cfg(unix)] // %T+ prints local time; TZ only reliably selects it on unix
+fn find_printf_time_plus_fixed_width_fraction() {
+    let temp_dir = Builder::new().prefix("find_time_plus_").tempdir().unwrap();
+    let file_path = temp_dir.path().join("stamped");
+    File::create(&file_path).expect("create test file");
+
+    // The fraction must always be a dot followed by ten digits, even when
+    // the timestamp falls on a whole second.
+    for (nanos, expected) in [
+        (0, "2013-06-20+11:22:33.0000000000\n"),
+        (250_000_000, "2013-06-20+11:22:33.2500000000\n"),
+    ] {
+        filetime::set_file_mtime(
+            &file_path,
+            filetime::FileTime::from_unix_time(1_371_727_353, nanos),
+        )
+        .expect("set test file mtime");
+
+        ucmd()
+            .env("TZ", "UTC0")
+            .arg(&file_path)
+            .args(&["-printf", "%T+\n"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
 fn find_printf_octal_escape_before_multibyte_char() {
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\0€\\n"])
