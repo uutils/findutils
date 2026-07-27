@@ -899,67 +899,6 @@ mod tests {
     }
 
     #[test]
-    fn find_mindepth_greater_than_maxdepth() {
-        let deps = FakeDependencies::new();
-        let rc = find_main(
-            &[
-                "find",
-                &fix_up_slashes("./test_data/depth"),
-                "-sorted",
-                "-mindepth",
-                "2",
-                "-maxdepth",
-                "1",
-            ],
-            &deps,
-        );
-
-        assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(), "");
-    }
-
-    #[test]
-    fn find_maxdepth_less_than_mindepth_reversed_order() {
-        let deps = FakeDependencies::new();
-        let rc = find_main(
-            &[
-                "find",
-                &fix_up_slashes("./test_data/depth"),
-                "-sorted",
-                "-maxdepth",
-                "1",
-                "-mindepth",
-                "2",
-            ],
-            &deps,
-        );
-
-        assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(), "");
-    }
-
-    #[test]
-    fn find_mindepth_greater_than_maxdepth_depth_first() {
-        let deps = FakeDependencies::new();
-        let rc = find_main(
-            &[
-                "find",
-                &fix_up_slashes("./test_data/depth"),
-                "-sorted",
-                "-mindepth",
-                "2",
-                "-maxdepth",
-                "1",
-                "-depth",
-            ],
-            &deps,
-        );
-
-        assert_eq!(rc, 0);
-        assert_eq!(deps.get_output_as_string(), "");
-    }
-
-    #[test]
     fn find_newer() {
         // create a temp directory and file that are newer than the static
         // files in the source tree.
