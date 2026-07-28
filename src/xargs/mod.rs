@@ -626,6 +626,12 @@ where
 
             match (&escape, pending[i]) {
                 (Some(Escape::Quote(quote)), c) if c == *quote => escape = None,
+                (Some(Escape::Quote(q)), b'\n') => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Unterminated quote: {q}"),
+                    ));
+                }
                 (Some(Escape::Quote(_)), c) => result.push(c),
                 (Some(Escape::Slash), c) => {
                     result.push(c);
