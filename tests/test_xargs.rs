@@ -419,6 +419,25 @@ fn xargs_unterminated_quote() {
 }
 
 #[test]
+fn xargs_quotes_cannot_span_lines() {
+    let temp_file = tempfile::NamedTempFile::new().unwrap();
+
+    for quote in ['\'', '"'] {
+        std::fs::write(
+            temp_file.path(),
+            format!("alpha{quote}beta\ngamma{quote}\n"),
+        )
+        .unwrap();
+
+        ucmd()
+            .args(&["-a", &temp_file.path().to_string_lossy()])
+            .fails_with_code(1)
+            .stderr_contains("Error: Unterminated quote:")
+            .no_stdout();
+    }
+}
+
+#[test]
 fn xargs_zero_lines() {
     ucmd()
         .args(&[
