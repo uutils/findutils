@@ -1041,9 +1041,8 @@ fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
 
     let mut string_segments: Vec<String> = buffer_split
         .iter()
-        .filter_map(|s| std::str::from_utf8(s).ok())
-        .map(std::string::ToString::to_string)
-        .collect();
+        .map(|segment| std::str::from_utf8(segment).map(std::string::ToString::to_string))
+        .collect::<Result<_, _>>()?;
     // empty starting point checker
     if string_segments.iter().any(std::string::String::is_empty) {
         eprintln!("find: invalid zero-length file name");
