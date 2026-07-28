@@ -195,6 +195,20 @@ fn files0_file_basic_success() {
 }
 
 #[test]
+fn files0_invalid_utf8_fails() {
+    let temp_dir = Builder::new().prefix("find_files0_").tempdir().unwrap();
+    let path_list = temp_dir.path().join("paths0");
+    fs::write(&path_list, b"\xff\nfile2.txt\n").expect("wrote path list");
+
+    ucmd()
+        .arg("-files0-from")
+        .arg(path_list)
+        .fails()
+        .stderr_contains("invalid utf-8 sequence")
+        .no_stdout();
+}
+
+#[test]
 fn files0_empty_pipe() {
     ucmd()
         .args(&["-files0-from", "-"])
