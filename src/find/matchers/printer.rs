@@ -44,31 +44,27 @@ impl Printer {
         mut out: impl Write,
         print_error_message: bool,
     ) {
-        match write!(
+        let result = write!(
             out,
             "{}{}",
             file_info.path().to_string_lossy(),
             self.delimiter
-        ) {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(0),
-            Err(e) => {
-                if print_error_message {
-                    writeln!(
-                        &mut stderr(),
-                        "Error writing {:?} for {}",
-                        file_info.path().to_string_lossy(),
-                        e
-                    )
-                    .unwrap();
-                    matcher_io.set_exit_code(1);
-                }
-            }
-        }
-        if let Err(e) = out.flush() {
+        )
+        .and_then(|()| out.flush());
+        if let Err(e) = result {
             if e.kind() == std::io::ErrorKind::BrokenPipe {
                 std::process::exit(0);
             }
+            if print_error_message {
+                writeln!(
+                    &mut stderr(),
+                    "Error writing {:?} for {}",
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+            }
+            matcher_io.set_exit_code(1);
         }
     }
 }

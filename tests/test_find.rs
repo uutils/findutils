@@ -1347,3 +1347,90 @@ fn version_write_error_is_handled() {
     let rc = findutils::find::find_main(&["find", "--version"], &deps);
     assert_eq!(rc, 1);
 }
+
+#[test]
+fn print_write_error_is_reported_not_swallowed() {
+    // Regression test: a write/flush failure other than a broken pipe
+    // (e.g. a full disk) must be reported with a nonzero exit code,
+    // not silently ignored or turned into a panic.
+    use std::cell::RefCell;
+
+    struct BrokenWriter;
+    impl std::io::Write for BrokenWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from_raw_os_error(28)) // ENOSPC
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from_raw_os_error(28))
+        }
+    }
+
+    struct BrokenDependencies {
+        output: RefCell<BrokenWriter>,
+    }
+
+    impl BrokenDependencies {
+        fn new() -> Self {
+            Self {
+                output: RefCell::new(BrokenWriter),
+            }
+        }
+    }
+
+    impl findutils::find::Dependencies for BrokenDependencies {
+        fn get_output(&self) -> &RefCell<dyn Write> {
+            &self.output
+        }
+
+        fn now(&self) -> time::SystemTime {
+            time::SystemTime::now()
+        }
+
+        fn confirm(&self, _prompt: &str) -> bool {
+            false
+        }
+    }
+
+    let deps = BrokenDependencies::new();
+    let rc = findutils::find::find_main(&["find", "test_data/simple", "-maxdepth", "0"], &deps);
+    assert_eq!(rc, 1);
+}
+
+#[test]
+fn find_exits_cleanly_on_broken_pipe() {
+    // Regression test: `find | head` must exit cleanly instead of
+    // panicking when the reader closes its end of the pipe early. (See issue#801)
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_find"))
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .arg(".")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    // Drop the read end without reading, so `find`'s writes fail with
+    // EPIPE once it produces more output than the pipe buffer holds.
+    drop(child.stdout.take());
+
+    let status = child.wait().unwrap();
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+
+    assert!(
+        status.success(),
+        "find should exit cleanly on a broken pipe instead of panicking, \
+         got status {status:?}, stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains("panicked"),
+        "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
+    );
+}
