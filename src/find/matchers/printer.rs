@@ -51,6 +51,7 @@ impl Printer {
             self.delimiter
         ) {
             Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(0),
             Err(e) => {
                 if print_error_message {
                     writeln!(
@@ -64,7 +65,11 @@ impl Printer {
                 }
             }
         }
-        out.flush().unwrap();
+        if let Err(e) = out.flush() {
+            if e.kind() == std::io::ErrorKind::BrokenPipe {
+                std::process::exit(0);
+            }
+        }
     }
 }
 
