@@ -5,6 +5,7 @@ Notes for every published findutils release, newest first. They mirror the
 
 | Version | Date | Notes |
 |---------|------|-------|
+| 0.10.0 | 2026-08-03 | [Release notes](RELEASE-NOTES-0.10.0.md) |
 | 0.9.1 | 2026-06-22 | [Release notes](RELEASE-NOTES-0.9.1.md) |
 | 0.9.0 | 2026-06-08 | [Release notes](RELEASE-NOTES-0.9.0.md) |
 | 0.8.0 | 2025-04-06 | [Release notes](RELEASE-NOTES-0.8.0.md) |

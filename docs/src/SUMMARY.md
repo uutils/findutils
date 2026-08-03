@@ -8,6 +8,7 @@
 * [GNU test coverage](test_coverage.md)
 * [Extensions](extensions.md)
 * [Release notes](release-notes/index.md)
+  * [0.10.0](release-notes/RELEASE-NOTES-0.10.0.md)
   * [0.9.1](release-notes/RELEASE-NOTES-0.9.1.md)
   * [0.9.0](release-notes/RELEASE-NOTES-0.9.0.md)
   * [0.8.0](release-notes/RELEASE-NOTES-0.8.0.md)
