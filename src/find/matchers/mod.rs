@@ -62,6 +62,7 @@ use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
+use std::os::unix::fs::FileTypeExt;
 use std::{
     error::Error,
     fs::{File, Metadata},
@@ -1031,6 +1032,21 @@ fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
         let mut file =
             File::open(mode).map_err(|e| format!("cannot open '{}' for reading: {}", mode, e))?;
         file.read_to_end(&mut buffer)?;
+
+        let meta = file
+            .metadata()
+            .map_err(|e| format!("cannot stat '{}': {}", mode, e))?;
+
+        // Read the entire file.
+        let bytes_read = file.read_to_end(&mut buffer)?;
+
+        if bytes_read == 0
+            && (meta.file_type().is_char_device() || meta.file_type().is_block_device())
+        {
+            let err =
+                std::io::Error::other("File descriptor in bad state");
+            return Err(format!("read error: {}: {}", mode, err).into());
+        }
     }
 
     let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();

@@ -1434,3 +1434,19 @@ fn find_exits_cleanly_on_broken_pipe() {
         "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
     );
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn files0_from_special_file_read_error() {
+    for path in &["/dev/vhost-net", "/dev/vhost-vsock"] {
+        if !Path::new(path).exists() {
+            continue;
+        }
+        ucmd()
+            .arg("-files0-from")
+            .arg(path)
+            .fails()
+            .stderr_contains("read error")
+            .no_stdout();
+    }
+}
