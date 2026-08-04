@@ -62,6 +62,7 @@ use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::{
     error::Error,
@@ -1033,18 +1034,26 @@ fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
             File::open(mode).map_err(|e| format!("cannot open '{}' for reading: {}", mode, e))?;
         file.read_to_end(&mut buffer)?;
 
-        let meta = file
-            .metadata()
-            .map_err(|e| format!("cannot stat '{}': {}", mode, e))?;
-
         // Read the entire file.
         let bytes_read = file.read_to_end(&mut buffer)?;
 
-        if bytes_read == 0
-            && (meta.file_type().is_char_device() || meta.file_type().is_block_device())
-        {
-            let err =
-                std::io::Error::other("File descriptor in bad state");
+        let is_special = {
+            #[cfg(unix)]
+            {
+                let meta = file
+                    .metadata()
+                    .map_err(|e| format!("cannot stat '{}': {}", mode, e))?;
+                let file_type = meta.file_type();
+                file_type.is_char_device() || file_type.is_block_device()
+            }
+            #[cfg(not(unix))]
+            {
+                false
+            }
+        };
+
+        if bytes_read == 0 && is_special {
+            let err = std::io::Error::other("File descriptor in bad state");
             return Err(format!("read error: {}: {}", mode, err).into());
         }
     }
