@@ -447,6 +447,42 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
     Ok(file)
 }
 
+/// GNU find warns if a pattern that is matched against basenames only
+/// (the argument to -name/-iname) contains a directory separator, because
+/// such a pattern can never match. Returns the warning message, if any.
+fn basename_pattern_warning(option_name: &str, pattern: &str) -> Option<String> {
+    if pattern.contains('/') && pattern != "/" {
+        Some(format!(
+            "‘{option_name}’ matches against basenames only, but the given \
+             pattern contains a directory separator (‘/’), thus the \
+             expression will evaluate to false all the time.  Did you mean \
+             ‘-wholename’?"
+        ))
+    } else {
+        None
+    }
+}
+
+/// GNU find warns if a pattern that is matched against the full path (the
+/// argument to -path/-ipath/-wholename/-iwholename) ends with a directory
+/// separator, because such a pattern can never match. Returns the warning
+/// message, if any.
+fn fullpath_pattern_warning(option_name: &str, pattern: &str) -> Option<String> {
+    if pattern.ends_with('/') && pattern != "/" {
+        Some(format!(
+            "{option_name} {pattern} will not match anything because it ends with /."
+        ))
+    } else {
+        None
+    }
+}
+
+fn issue_warning(warning: Option<String>) {
+    if let Some(warning) = warning {
+        eprintln!("find: warning: {warning}");
+    }
+}
+
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -533,6 +569,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
+                issue_warning(basename_pattern_warning(args[i - 1], args[i]));
                 Some(NameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-path" | "-ipath" | "-wholename" | "-iwholename" => {
@@ -540,6 +577,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
+                issue_warning(fullpath_pattern_warning(args[i - 1], args[i]));
                 Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-readable" => Some(AccessMatcher::Readable.into_box()),
