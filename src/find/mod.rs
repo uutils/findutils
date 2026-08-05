@@ -211,6 +211,16 @@ fn process_dir(
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
 ) -> i32 {
+    // No depth can satisfy both bounds when -mindepth exceeds -maxdepth, so GNU
+    // find visits nothing at all. walkdir clamps min_depth down to max_depth
+    // instead (see `WalkDir::min_depth`), which would make us descend anyway, so
+    // handle the empty traversal ourselves.
+    if config.min_depth > config.max_depth {
+        let mut matcher_io = matchers::MatcherIO::new(deps);
+        matcher.finished(&mut matcher_io);
+        return matcher_io.exit_code();
+    }
+
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
