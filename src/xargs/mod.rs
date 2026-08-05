@@ -1183,11 +1183,14 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     builder_options.verbose = options.verbose;
     builder_options.close_stdin = options.arg_file.is_none();
 
-    let args_file: Box<dyn Read> = if let Some(path) = &options.arg_file {
-        Box::new(fs::File::open(path).map_err(|e| format!("Failed to open {path}: {e}"))?)
-    } else {
-        Box::new(io::stdin())
-    };
+    let args_file: Box<dyn Read> =
+        if let Some(path) = &options.arg_file {
+            Box::new(fs::File::open(path).map_err(|e| {
+                format!("Failed to open {path}: {}", uucore::error::strip_errno(&e))
+            })?)
+        } else {
+            Box::new(io::stdin())
+        };
 
     let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
         Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
