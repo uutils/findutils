@@ -522,7 +522,7 @@ mod tests {
     #[cfg(windows)]
     /// Windows-only bodge for converting between path separators.
     pub fn fix_up_slashes(path: &str) -> String {
-        path.replace("/", "\\")
+        path.replace('/', "\\")
     }
 
     #[cfg(not(windows))]
