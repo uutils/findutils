@@ -578,6 +578,21 @@ fn find_printf_octal_escape_before_multibyte_char() {
         .stdout_only("\0€\n");
 }
 
+#[cfg(unix)]
+#[test]
+fn find_printf_invalid_utf8_format_does_not_panic() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0"])
+        .arg("-printf")
+        .arg(OsStr::from_bytes(b"%\xff|\n"))
+        .fails()
+        .code_is(1)
+        .stderr_contains("invalid UTF-8");
+}
+
 #[test]
 fn find_printf_width_too_large() {
     ucmd()
