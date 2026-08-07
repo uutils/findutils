@@ -206,11 +206,11 @@ impl MaxCharsCommandSizeLimiter {
     }
 
     #[cfg(windows)]
-    fn new_system(_env: &HashMap<OsString, OsString>) -> MaxCharsCommandSizeLimiter {
+    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
         // Taken from the CreateProcess docs. -2 to account for how
         // std::process unconditionally surrounds the program name with quotes.
         const MAX_CMDLINE: usize = 32767 - 2;
-        MaxCharsCommandSizeLimiter::new(MAX_CMDLINE)
+        Self::new(MAX_CMDLINE)
     }
 
     #[cfg(unix)]

@@ -186,7 +186,7 @@ mod tests {
             }
         };
         #[cfg(windows)]
-        let _ = {
+        {
             if let Err(e) = symlink_file("abbbc", "test_data/links/link-f") {
                 assert!(
                     e.kind() == ErrorKind::AlreadyExists,

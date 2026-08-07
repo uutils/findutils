@@ -450,7 +450,7 @@ mod tests {
     #[cfg(windows)]
     /// Windows-only bodge for converting between path separators.
     pub fn fix_up_slashes(path: &str) -> String {
-        path.replace("/", "\\")
+        path.replace('/', "\\")
     }
 
     #[cfg(not(windows))]
@@ -494,6 +494,7 @@ mod tests {
         }
 
         /// Queue a response to be returned by the next call to confirm().
+        #[cfg(unix)]
         pub fn push_confirm_response(&self, response: bool) {
             self.confirm_responses.borrow_mut().push_back(response);
         }
