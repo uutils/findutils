@@ -605,7 +605,13 @@ where
                             format!("Unterminated quote: {q}"),
                         ));
                     }
-                    if i == 0 {
+                    // Input that consists only of delimiters (whitespace)
+                    // produces no argument — a run of delimiters with no
+                    // content between them yields nothing, matching GNU xargs.
+                    // `i == 0` handles the case where we read no bytes at all;
+                    // `result.is_empty()` additionally covers input we consumed
+                    // but that was pure whitespace.
+                    if result.is_empty() {
                         return Ok(None);
                     }
                     pending.clear();
