@@ -90,7 +90,7 @@ pub fn path_to_testing_commandline() -> String {
 /// TODO: find out how to share #[cfg(test)] functions/structs between unit
 /// and integration tests.
 pub fn fix_up_slashes(path: &str) -> String {
-    path.replace("/", "\\")
+    path.replace('/', "\\")
 }
 
 #[cfg(not(windows))]
