@@ -74,6 +74,50 @@ fn xargs_if_empty() {
 }
 
 #[test]
+fn xargs_whitespace_only_input() {
+    // Input that consists only of delimiters (whitespace) produces no
+    // argument, matching GNU xargs: a run of delimiters with no content
+    // between them yields no argument. The command still runs once with no
+    // extra args (the default, as with empty input).
+    ucmd().pipe_in(" ").succeeds().no_stderr().stdout_only("\n");
+
+    // Other ASCII whitespace should behave the same as a space.
+    ucmd()
+        .pipe_in("\t")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("\n");
+    ucmd()
+        .pipe_in(" \t\n \n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("\n");
+
+    // With --no-run-if-empty, whitespace-only input means nothing to do.
+    ucmd()
+        .args(&["--no-run-if-empty"])
+        .pipe_in(" ")
+        .succeeds()
+        .no_output();
+
+    // The same holds when reading from a file with -a (issue #771 repro):
+    // the child must receive zero arguments, not an empty-string argument.
+    let temp_file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(temp_file.path(), b" ").unwrap();
+    let result = ucmd()
+        .args(&[
+            "-a",
+            &temp_file.path().to_string_lossy(),
+            &path_to_testing_commandline(),
+            "-",
+            "--no_print_cwd",
+        ])
+        .succeeds();
+    result.no_stderr();
+    assert_eq!(result.stdout_str(), "args=\n--no_print_cwd\n");
+}
+
+#[test]
 fn xargs_replace_empty_input() {
     ucmd()
         .args(&["-I", "{}", "echo", "hello", "{}"])
