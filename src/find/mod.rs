@@ -566,6 +566,7 @@ mod tests {
         }
 
         /// Queue a response to be returned by the next call to confirm().
+        #[cfg(unix)]
         pub fn push_confirm_response(&self, response: bool) {
             self.confirm_responses.borrow_mut().push_back(response);
         }
