@@ -357,12 +357,12 @@ fn do_updatedb(args: &[&str]) -> UResult<()> {
     let frcoder = Frcoder::new(output.as_slice(), config.db_format);
     writer
         .write_all(&frcoder.generate_header())
-        .map_err(&write_err)?;
+        .map_err(write_err)?;
     for v in frcoder {
-        writer.write_all(v.as_slice()).map_err(&write_err)?;
+        writer.write_all(v.as_slice()).map_err(write_err)?;
     }
 
-    writer.flush().map_err(&write_err)?;
+    writer.flush().map_err(write_err)?;
 
     Ok(())
 }
