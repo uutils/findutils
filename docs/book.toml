@@ -1,5 +1,4 @@
 [book]
-authors = ["Terts Diepraam"]
 language = "en"
 multilingual = false
 src = "src"
