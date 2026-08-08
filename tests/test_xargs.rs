@@ -556,3 +556,16 @@ fn xargs_eof_with_delimiter() {
         .succeeds()
         .stdout_only("ab cd ef\n");
 }
+
+#[test]
+fn xargs_arg_file_missing_strips_errno() {
+    // A missing --arg-file should fail with a clean "No such file or
+    // directory" message and *not* expose the trailing "(os error N)"
+    // detail — matching GNU xargs. See issue #811.
+    ucmd()
+        .args(&["--arg-file", "/no/such/findutils-test-path", "echo"])
+        .fails_with_code(1)
+        .stderr_contains("Failed to open")
+        .stderr_contains("No such file or directory")
+        .stderr_str_check(|s| !s.contains("(os error"));
+}
