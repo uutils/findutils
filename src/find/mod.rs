@@ -211,6 +211,15 @@ fn process_dir(
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
 ) -> i32 {
+    // GNU/BSD find semantics: `-mindepth N -maxdepth M` with N > M matches no
+    // depth (none is simultaneously >= N and <= M), so the walk yields nothing.
+    // We must short-circuit here because walkdir's `min_depth`/`max_depth`
+    // setters silently clamp to resolve the contradiction (whichever is set last
+    // wins), which would instead surface entries at the smaller depth. See #778.
+    if config.min_depth > config.max_depth {
+        return 0;
+    }
+
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
@@ -814,6 +823,51 @@ mod tests {
                  ./test_data/depth/1/2/f2\n"
             )
         );
+    }
+
+    #[test]
+    fn find_mindepth_greater_than_maxdepth() {
+        // `-mindepth N -maxdepth M` with N > M matches no depth, so GNU/BSD
+        // find print nothing. Regression test for #778: walkdir's setters
+        // silently clamp the contradiction, which previously surfaced entries
+        // at the smaller depth instead of nothing.
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-mindepth",
+                "2",
+                "-maxdepth",
+                "1",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
+    }
+
+    #[test]
+    fn find_mindepth_greater_than_maxdepth_reversed_order() {
+        // The depth flags may be given in either order; both must yield nothing.
+        let deps = FakeDependencies::new();
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-maxdepth",
+                "1",
+                "-mindepth",
+                "2",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
     }
 
     #[test]
