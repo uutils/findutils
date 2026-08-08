@@ -7,7 +7,6 @@ edition = "2021"
 license = "MIT"
 readme = "README.md"
 description = "Rust implementation of GNU findutils"
-authors = ["uutils developers"]
 
 [dependencies]
 argmax = "0.4.0"
