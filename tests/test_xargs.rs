@@ -556,3 +556,20 @@ fn xargs_eof_with_delimiter() {
         .succeeds()
         .stdout_only("ab cd ef\n");
 }
+
+#[test]
+fn xargs_arg_file_missing_strips_errno() {
+    // A missing --arg-file should fail with a message naming the path and
+    // must *not* expose the trailing "(os error N)" detail — matching GNU
+    // xargs. The OS wording differs (Unix: "No such file or directory",
+    // Windows: "The system cannot find the path specified."), so we assert
+    // only the portable parts: our "Failed to open <path>:" wrapper is
+    // present and the "(os error N)" suffix is gone. See issue #811.
+    const MISSING: &str = "/no/such/findutils-test-path";
+    ucmd()
+        .args(&["--arg-file", MISSING, "echo"])
+        .fails_with_code(1)
+        .stderr_contains("Failed to open")
+        .stderr_contains(MISSING)
+        .stderr_str_check(|s| !s.contains("(os error"));
+}

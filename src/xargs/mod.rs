@@ -15,6 +15,7 @@ use std::{
 };
 
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
+use uucore::error::strip_errno;
 
 mod options {
     pub const COMMAND: &str = "COMMAND";
@@ -1184,7 +1185,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     builder_options.close_stdin = options.arg_file.is_none();
 
     let args_file: Box<dyn Read> = if let Some(path) = &options.arg_file {
-        Box::new(fs::File::open(path).map_err(|e| format!("Failed to open {path}: {e}"))?)
+        Box::new(
+            fs::File::open(path)
+                .map_err(|e| format!("Failed to open {path}: {}", strip_errno(&e)))?,
+        )
     } else {
         Box::new(io::stdin())
     };
