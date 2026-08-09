@@ -11,14 +11,18 @@ fn main() {
     uucore::panic::mute_sigpipe_panic();
 
     let args = std::env::args_os()
-        .map(|arg| {
-            arg.into_string().unwrap_or_else(|invalid| {
+        .map(|arg| match arg.into_string() {
+            Ok(s) => s,
+            // GNU find treats an invalid-UTF-8 argument as a warning and
+            // continues with a lossy conversion (exiting 0), rather than
+            // aborting — so do the same instead of hard-erroring with exit 1.
+            Err(invalid) => {
                 eprintln!(
                     "find: invalid UTF-8 was found in one of the arguments: {}",
                     invalid.to_string_lossy()
                 );
-                std::process::exit(1);
-            })
+                invalid.to_string_lossy().into_owned()
+            }
         })
         .collect::<Vec<String>>();
     let strs: Vec<&str> = args.iter().map(std::convert::AsRef::as_ref).collect();

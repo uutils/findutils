@@ -152,7 +152,11 @@ impl FormatStringParser<'_> {
 
     fn advance_one(&mut self) -> Result<char, Box<dyn Error>> {
         let c = self.front()?;
-        self.string = &self.string[1..];
+        // Slice off one *character*, not one byte: byte slicing `[1..]` panics
+        // when the next character is multibyte (e.g. a lossy-converted
+        // replacement char from an invalid-UTF-8 argument, or any non-ASCII
+        // character following a `%` directive).
+        self.string = &self.string[c.len_utf8()..];
         Ok(c)
     }
 

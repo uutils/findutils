@@ -584,12 +584,14 @@ fn find_printf_invalid_utf8_format_does_not_panic() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
+    // GNU find treats an invalid-UTF-8 argument as a warning and continues
+    // (exit 0) with a lossy conversion, so the run succeeds and warns on
+    // stderr rather than failing with exit 1.
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0"])
         .arg("-printf")
         .arg(OsStr::from_bytes(b"%\xff|\n"))
-        .fails()
-        .code_is(1)
+        .succeeds()
         .stderr_contains("invalid UTF-8");
 }
 
