@@ -551,7 +551,7 @@ dependencies = [
  "rstest",
  "tempfile",
  "thiserror",
- "uucore",
+ "uucore 0.9.0",
  "uutests",
  "walkdir",
 ]
@@ -1582,8 +1582,30 @@ checksum = "069b34217c27f611e1589f540f58118dbf226a9e407d38ab472052ff075a1dc2"
 dependencies = [
  "bstr",
  "clap",
- "dns-lookup",
  "dunce",
+ "fluent",
+ "fluent-syntax",
+ "libc",
+ "nix 0.31.3",
+ "os_display",
+ "rustc-hash",
+ "rustix",
+ "thiserror",
+ "unic-langid",
+ "uucore_procs 0.9.0",
+ "wild",
+ "winapi-util",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "uucore"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e97dd0fd8bb2ed12affba9f956c3b94b8ad3f9432746717475420e916ae0b8d4"
+dependencies = [
+ "clap",
+ "dns-lookup",
  "fluent",
  "fluent-syntax",
  "jiff",
@@ -1595,9 +1617,9 @@ dependencies = [
  "thiserror",
  "time",
  "unic-langid",
- "uucore_procs",
+ "unicode-width",
+ "uucore_procs 0.10.0",
  "wild",
- "winapi-util",
  "windows-sys 0.61.2",
 ]
 
@@ -1612,10 +1634,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "uutests"
-version = "0.9.0"
+name = "uucore_procs"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31623284a3244635c0c5c247f3c86e54c7769650db55de0fc843c72146ad7ef8"
+checksum = "907f1b828046ea42cdb4bd898f05b48ab873a41937bf75ebe12f09a5bf411f58"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "uutests"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1964e8e6785ac67086063269970a327ba64d22e9983039ab88e1bb13b88cbe68"
 dependencies = [
  "ctor",
  "libc",
@@ -1625,7 +1657,7 @@ dependencies = [
  "regex",
  "rlimit",
  "tempfile",
- "uucore",
+ "uucore 0.10.0",
  "xattr",
 ]
 
