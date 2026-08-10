@@ -30,7 +30,7 @@ filetime = "0.2"
 nix = { version = "0.31", features = ["fs"] }
 rstest = "0.26.1"
 tempfile = "3"
-uutests = "0.9.0"
+uutests = "0.10.0"
 
 [[bench]]
 name = "find_bench"
