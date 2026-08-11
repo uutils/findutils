@@ -65,7 +65,9 @@ use ls::Ls;
 use std::{
     error::Error,
     fs::{File, Metadata},
+    io::Read,
     path::{Path, PathBuf},
+    rc::Rc,
     str::FromStr,
     time::SystemTime,
 };
@@ -440,10 +442,21 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
-/// Creates a file if it doesn't exist.
-/// If it does exist, it will be overwritten.
-fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
-    let file = File::create(path)?;
+/// Returns the output file for `path`, creating (and truncating) it the first
+/// time it is requested.
+///
+/// Later requests for the same path reuse the handle opened earlier, so that
+/// several output predicates writing to one file share a single file offset
+/// instead of overwriting each other.
+fn get_or_create_file(config: &mut Config, path: &str) -> Result<Rc<File>, Box<dyn Error>> {
+    if let Some(file) = config.output_files.get(path) {
+        return Ok(Rc::clone(file));
+    }
+
+    let file = Rc::new(File::create(path)?);
+    config
+        .output_files
+        .insert(path.to_string(), Rc::clone(&file));
     Ok(file)
 }
 
@@ -484,7 +497,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(config, args[i])?;
                 Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
             }
             "-fprintf" => {
@@ -496,7 +509,7 @@ fn build_matcher_tree(
                 // Args + 1: output file path
                 // Args + 2: format string
                 i += 1;
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(config, args[i])?;
                 let output_path = PathBuf::from(args[i]);
                 i += 1;
                 Some(Printf::new(args[i], Some((file, output_path)))?.into_box())
@@ -507,7 +520,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(config, args[i])?;
                 Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
             }
             "-ls" => Some(Ls::new(None).into_box()),
@@ -517,7 +530,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(config, args[i])?;
                 Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
@@ -1029,6 +1042,8 @@ mod tests {
     use super::*;
     use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
+    use std::io::Write;
+    use tempfile::Builder;
 
     /// Helper function for tests to get a [WalkEntry] object. root should
     /// probably be a string starting with `test_data/` (cargo's tests run with
@@ -1908,25 +1923,66 @@ mod tests {
     fn get_or_create_file_test() {
         use std::fs;
 
+        let mut config = Config::default();
+
         // remove file if hard link file exist.
         // But you can't delete a file that doesn't exist,
         // so ignore the error returned here.
         let _ = fs::remove_file("test_data/get_or_create_file_test");
 
         // test create file
-        let file = get_or_create_file("test_data/get_or_create_file_test");
+        let file = get_or_create_file(&mut config, "test_data/get_or_create_file_test");
         assert!(file.is_ok());
 
-        let file = get_or_create_file("test_data/get_or_create_file_test");
+        let file = get_or_create_file(&mut config, "test_data/get_or_create_file_test");
         assert!(file.is_ok());
 
         // test error when file no permission
         #[cfg(unix)]
         {
-            let result = get_or_create_file("/etc/shadow");
+            let result = get_or_create_file(&mut config, "/etc/shadow");
             assert!(result.is_err());
         }
 
         let _ = fs::remove_file("test_data/get_or_create_file_test");
+    }
+
+    #[test]
+    fn get_or_create_file_reuses_handle_for_same_path() {
+        use std::fs;
+
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let path = temp_dir.path().join("out");
+        let path = path.to_string_lossy().to_string();
+        let mut config = Config::default();
+
+        let first = get_or_create_file(&mut config, &path).unwrap();
+        let second = get_or_create_file(&mut config, &path).unwrap();
+        assert!(Rc::ptr_eq(&first, &second));
+
+        // Writes through both handles share one file offset, so neither
+        // overwrites the other.
+        writeln!(&*first, "one").unwrap();
+        writeln!(&*second, "two").unwrap();
+        assert_eq!("one\ntwo\n", fs::read_to_string(&path).unwrap());
+    }
+
+    #[test]
+    fn two_fprints_to_the_same_file_do_not_overwrite_each_other() {
+        use std::fs;
+
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let path = temp_dir.path().join("out");
+        let path = path.to_string_lossy().to_string();
+        let mut config = Config::default();
+
+        let matcher =
+            build_top_level_matcher(&["-fprint", &path, "-fprint", &path], &mut config).unwrap();
+        let deps = FakeDependencies::new();
+        let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+        matcher.matches(&abbbc, &mut deps.new_matcher_io());
+
+        let expected = format!("{0}\n{0}\n", abbbc.path().to_string_lossy());
+        assert_eq!(expected, fs::read_to_string(&path).unwrap());
     }
 }

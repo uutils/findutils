@@ -6,6 +6,7 @@
 
 use std::fs::File;
 use std::io::{stderr, Write};
+use std::rc::Rc;
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -26,11 +27,11 @@ impl std::fmt::Display for PrintDelimiter {
 /// This matcher just prints the name of the file to stdout.
 pub struct Printer {
     delimiter: PrintDelimiter,
-    output_file: Option<File>,
+    output_file: Option<Rc<File>>,
 }
 
 impl Printer {
-    pub fn new(delimiter: PrintDelimiter, output_file: Option<File>) -> Self {
+    pub fn new(delimiter: PrintDelimiter, output_file: Option<Rc<File>>) -> Self {
         Self {
             delimiter,
             output_file,
@@ -72,7 +73,7 @@ impl Printer {
 impl Matcher for Printer {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, matcher_io, file, true);
+            self.print(file_info, matcher_io, &**file, true);
         } else {
             self.print(
                 file_info,
