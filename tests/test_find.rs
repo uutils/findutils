@@ -237,6 +237,19 @@ fn files0_pipe_double_nul() {
         .stdout_contains("./test_data/");
 }
 
+/// The starting points are read incrementally, so output for the earlier ones
+/// appears even though a later one is invalid UTF-8 (see issue #779: the input
+/// used to be slurped into memory in its entirety before anything was walked).
+#[test]
+fn files0_streams_before_invalid_utf8() {
+    ucmd()
+        .pipe_in(b"./test_data/simple\0\xff\0" as &[u8])
+        .args(&["-files0-from", "-"])
+        .fails()
+        .stdout_contains("./test_data/simple")
+        .stderr_contains("invalid utf-8 sequence");
+}
+
 #[test]
 fn files0_no_file() {
     #[cfg(unix)]
