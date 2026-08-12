@@ -203,7 +203,13 @@ impl FormatStringParser<'_> {
                 'v' => "\x0B",
                 '0' => "\0",
                 '\\' => "\\",
-                c => return Err(format!("Invalid escape sequence: \\{c}").into()),
+                _ => {
+                    // Match GNU find: an unrecognized `\X` escape is a
+                    // warning, not an error, and the directive text is
+                    // emitted verbatim (including the leading backslash).
+                    eprintln!("find: warning: unrecognized escape sequence '\\{first}'");
+                    return Ok(FormatComponent::Literal(format!("\\{first}")));
+                }
             };
 
             Ok(FormatComponent::Literal(c.to_string()))
@@ -273,46 +279,64 @@ impl FormatStringParser<'_> {
             return Ok(FormatComponent::Literal("%".to_owned()));
         }
 
-        let directive = match first {
-            'a' => FormatDirective::AccessTime(TimeFormat::Ctime),
-            'A' => FormatDirective::AccessTime(self.parse_time_specifier(first)?),
-            'b' => FormatDirective::Blocks {
+        // Match against the known directive characters. Anything that does not
+        // match is an unrecognized `%X` directive: warn (matching GNU find)
+        // and emit the literal text `%X` so the user can see what they asked
+        // for, rather than silently dropping the `%` or hard-erroring.
+        let directive_result = match first {
+            'a' => Ok(FormatDirective::AccessTime(TimeFormat::Ctime)),
+            'A' => Ok(FormatDirective::AccessTime(
+                self.parse_time_specifier(first)?,
+            )),
+            'b' => Ok(FormatDirective::Blocks {
                 large_blocks: false,
-            },
-            'c' => FormatDirective::ChangeTime(TimeFormat::Ctime),
-            'C' => FormatDirective::ChangeTime(self.parse_time_specifier(first)?),
-            'd' => FormatDirective::Depth,
-            'D' => FormatDirective::Device,
-            'f' => FormatDirective::Basename,
-            'F' => FormatDirective::Filesystem,
-            'g' => FormatDirective::Group { as_name: true },
-            'G' => FormatDirective::Group { as_name: false },
-            'h' => FormatDirective::Dirname,
-            'H' => FormatDirective::StartingPoint,
-            'k' => FormatDirective::Blocks { large_blocks: true },
-            'i' => FormatDirective::Inode,
-            'l' => FormatDirective::SymlinkTarget,
-            'm' => FormatDirective::Permissions(PermissionsFormat::Octal),
-            'M' => FormatDirective::Permissions(PermissionsFormat::Symbolic),
-            'n' => FormatDirective::HardlinkCount,
-            'p' => FormatDirective::Path {
+            }),
+            'c' => Ok(FormatDirective::ChangeTime(TimeFormat::Ctime)),
+            'C' => Ok(FormatDirective::ChangeTime(
+                self.parse_time_specifier(first)?,
+            )),
+            'd' => Ok(FormatDirective::Depth),
+            'D' => Ok(FormatDirective::Device),
+            'f' => Ok(FormatDirective::Basename),
+            'F' => Ok(FormatDirective::Filesystem),
+            'g' => Ok(FormatDirective::Group { as_name: true }),
+            'G' => Ok(FormatDirective::Group { as_name: false }),
+            'h' => Ok(FormatDirective::Dirname),
+            'H' => Ok(FormatDirective::StartingPoint),
+            'k' => Ok(FormatDirective::Blocks { large_blocks: true }),
+            'i' => Ok(FormatDirective::Inode),
+            'l' => Ok(FormatDirective::SymlinkTarget),
+            'm' => Ok(FormatDirective::Permissions(PermissionsFormat::Octal)),
+            'M' => Ok(FormatDirective::Permissions(PermissionsFormat::Symbolic)),
+            'n' => Ok(FormatDirective::HardlinkCount),
+            'p' => Ok(FormatDirective::Path {
                 strip_starting_point: false,
-            },
-            'P' => FormatDirective::Path {
+            }),
+            'P' => Ok(FormatDirective::Path {
                 strip_starting_point: true,
-            },
-            's' => FormatDirective::Size,
-            'S' => FormatDirective::Sparseness,
-            't' => FormatDirective::ModificationTime(TimeFormat::Ctime),
-            'T' => FormatDirective::ModificationTime(self.parse_time_specifier(first)?),
-            'u' => FormatDirective::User { as_name: true },
-            'U' => FormatDirective::User { as_name: false },
-            'y' => FormatDirective::Type {
+            }),
+            's' => Ok(FormatDirective::Size),
+            'S' => Ok(FormatDirective::Sparseness),
+            't' => Ok(FormatDirective::ModificationTime(TimeFormat::Ctime)),
+            'T' => Ok(FormatDirective::ModificationTime(
+                self.parse_time_specifier(first)?,
+            )),
+            'u' => Ok(FormatDirective::User { as_name: true }),
+            'U' => Ok(FormatDirective::User { as_name: false }),
+            'y' => Ok(FormatDirective::Type {
                 follow_links: false,
-            },
-            'Y' => FormatDirective::Type { follow_links: true },
+            }),
+            'Y' => Ok(FormatDirective::Type { follow_links: true }),
             // TODO: %Z
-            _ => return Ok(FormatComponent::Literal(first.to_string())),
+            _ => Err(()),
+        };
+
+        let directive = match directive_result {
+            Ok(d) => d,
+            Err(()) => {
+                eprintln!("find: warning: unrecognized format directive '%{first}'");
+                return Ok(FormatComponent::Literal(format!("%{first}")));
+            }
         };
 
         Ok(FormatComponent::Directive {
@@ -698,7 +722,12 @@ mod tests {
             ]
         );
 
-        assert!(FormatString::parse("\\X").is_err());
+        // GNU findutils treats unrecognized `\X` as a warning and passes the
+        // text through literally (issue #815).
+        assert_eq!(
+            FormatString::parse("\\X").unwrap().components,
+            vec![FormatComponent::Literal("\\X".to_owned())]
+        );
         assert!(FormatString::parse("\\").is_err());
     }
 
@@ -798,7 +827,9 @@ mod tests {
                     follow_links: false
                 }),
                 unaligned_directive(FormatDirective::Type { follow_links: true }),
-                FormatComponent::Literal("?".to_owned()),
+                // `%?` is an unrecognized directive: issue #815 says warn and
+                // emit literally, so the leading `%` is preserved.
+                FormatComponent::Literal("%?".to_owned()),
             ]
         );
 
