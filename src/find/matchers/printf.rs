@@ -331,12 +331,9 @@ impl FormatStringParser<'_> {
             _ => Err(()),
         };
 
-        let directive = match directive_result {
-            Ok(d) => d,
-            Err(()) => {
-                eprintln!("find: warning: unrecognized format directive '%{first}'");
-                return Ok(FormatComponent::Literal(format!("%{first}")));
-            }
+        let Ok(directive) = directive_result else {
+            eprintln!("find: warning: unrecognized format directive '%{first}'");
+            return Ok(FormatComponent::Literal(format!("%{first}")));
         };
 
         Ok(FormatComponent::Directive {
