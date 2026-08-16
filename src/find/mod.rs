@@ -408,7 +408,7 @@ Actions:
 fn print_version(deps: &dyn Dependencies) -> Result<(), io::Error> {
     writeln!(
         &mut deps.get_output().borrow_mut(),
-        "find (Rust) {}",
+        "find {}",
         env!("CARGO_PKG_VERSION")
     )
 }

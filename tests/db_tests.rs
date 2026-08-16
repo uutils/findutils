@@ -153,6 +153,50 @@ fn test_locate_print_help() {
 }
 
 #[test]
+fn test_locate_version() {
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .arg("--version")
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.starts_with("locate "),
+        "expected stdout to start with 'locate ', got: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_updatedb_version() {
+    // Regression test: `updatedb --version` used to print
+    // "Error: updatedb X.Y.Z" to stderr and exit non-zero. It must print
+    // "updatedb X.Y.Z" to stdout and succeed, like the other utilities.
+    let assert = Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .arg("--version")
+        .assert()
+        .success();
+
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        stdout.starts_with("updatedb "),
+        "expected stdout to start with 'updatedb ', got: {stdout:?}"
+    );
+    assert!(
+        !stdout.contains("Error") && !stderr.contains("Error"),
+        "version output must not contain 'Error': stdout={stdout:?}, stderr={stderr:?}"
+    );
+    assert!(
+        stderr.is_empty(),
+        "--version should write nothing to stderr, got: {stderr:?}"
+    );
+}
+
+#[test]
 fn test_locate_invalid_flag() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")

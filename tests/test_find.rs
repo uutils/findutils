@@ -51,6 +51,36 @@ fn no_args() {
 }
 
 #[test]
+fn find_version() {
+    // Regression test: `find --version` used to print "find (Rust) X.Y.Z",
+    // deviating from the format used by the other utilities. It must print
+    // "find X.Y.Z" to stdout and exit successfully.
+    let output = ucmd().arg("--version").succeeds();
+    let result = output.no_stderr();
+
+    assert!(
+        result.stdout_str().starts_with("find "),
+        "expected stdout to start with 'find ', got: {:?}",
+        result.stdout_str()
+    );
+    assert!(
+        !result.stdout_str().contains("(Rust)"),
+        "version output should not contain '(Rust)': {:?}",
+        result.stdout_str()
+    );
+
+    let second_word = result.stdout_str().split_whitespace().nth(1).unwrap_or("");
+    assert!(
+        second_word
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit()),
+        "expected the second word to be the version number, got: {:?}",
+        result.stdout_str()
+    );
+}
+
+#[test]
 fn two_matchers_both_match() {
     ucmd()
         .args(&["-type", "d", "-name", "test_data"])
