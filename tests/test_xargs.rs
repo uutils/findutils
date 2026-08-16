@@ -26,6 +26,34 @@ fn xargs_basics() {
 }
 
 #[test]
+fn xargs_trailing_blanks() {
+    // A blank before the final newline is a delimiter, so it must not produce
+    // a trailing empty argument (GNU findutils behaves the same way).
+    for input in [
+        "aaa \nbbb \n",
+        "aaa\nbbb \n",
+        "aaa \nbbb\n",
+        "aaa  \nbbb  \n",
+    ] {
+        ucmd()
+            .arg("-n1")
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("aaa\nbbb\n");
+    }
+}
+
+#[test]
+fn xargs_quoted_empty_argument() {
+    // An empty quoted string is a real argument, unlike a run of blanks.
+    ucmd()
+        .args(&["-n1"])
+        .pipe_in("'' aaa \"\"\n")
+        .succeeds()
+        .stdout_only("\naaa\n\n");
+}
+
+#[test]
 fn xargs_null() {
     ucmd()
         .args(&["-0n1"])

@@ -581,6 +581,11 @@ where
 
         let mut result = vec![];
         let mut terminated_by_newline = false;
+        // Whether we're inside an argument. This is *not* the same as
+        // `!result.is_empty()`: quotes and escapes start an argument without
+        // necessarily contributing any bytes to it, so `''` is a genuine empty
+        // argument, while a run of blanks is just a delimiter.
+        let mut in_argument = false;
 
         let mut pending = vec![];
         std::mem::swap(&mut pending, &mut self.pending);
@@ -606,7 +611,9 @@ where
                             format!("Unterminated quote: {q}"),
                         ));
                     }
-                    if i == 0 {
+                    // Anything we skipped over was a delimiter, not an
+                    // argument, so there is nothing left to emit.
+                    if result.is_empty() {
                         return Ok(None);
                     }
                     pending.clear();
@@ -624,15 +631,24 @@ where
                     result.push(c);
                     escape = None;
                 }
-                (None, c @ (b'"' | b'\'')) => escape = Some(Escape::Quote(c)),
-                (None, b'\\') => escape = Some(Escape::Slash),
+                (None, c @ (b'"' | b'\'')) => {
+                    in_argument = true;
+                    escape = Some(Escape::Quote(c));
+                }
+                (None, b'\\') => {
+                    in_argument = true;
+                    escape = Some(Escape::Slash);
+                }
                 (None, c) if c.is_ascii_whitespace() => {
-                    if !result.is_empty() {
+                    if in_argument {
                         terminated_by_newline = c == b'\n';
                         break;
                     }
                 }
-                (None, c) => result.push(c),
+                (None, c) => {
+                    in_argument = true;
+                    result.push(c);
+                }
             }
 
             i += 1;
@@ -1487,6 +1503,65 @@ mod tests {
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("mn\t o"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("ab \""));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("xy' z"));
+        assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_whitespace_delimited_reader_trailing_blanks() {
+        // A run of blanks before the final newline is a delimiter, not an
+        // empty argument, no matter where in the input it appears.
+        for input in [
+            &b"aaa \nbbb \n"[..],
+            &b"aaa\nbbb \n"[..],
+            &b"aaa \nbbb\n"[..],
+            &b"aaa \nbbb \n \t \n"[..],
+        ] {
+            let mut reader =
+                WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(input)]));
+            assert_eq!(reader.next().unwrap().unwrap().arg, "aaa", "{input:?}");
+            assert_eq!(reader.next().unwrap().unwrap().arg, "bbb", "{input:?}");
+            assert_eq!(reader.next().unwrap(), None, "{input:?}");
+        }
+
+        // Blanks are only a soft terminator, so the newline that follows them
+        // does not end the logical line (this matters for -L).
+        let mut reader =
+            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b"aaa \n")]));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("aaa"));
+        assert_eq!(reader.next().unwrap(), None);
+
+        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
+            Chunk::Data(b"aaa  "),
+            Chunk::Error(io::ErrorKind::Interrupted),
+            Chunk::Data(b" \t "),
+        ]));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("aaa"));
+        assert_eq!(reader.next().unwrap(), None);
+
+        let mut reader =
+            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b" \n\t\n")]));
+        assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_whitespace_delimited_reader_quoted_empty_arguments() {
+        // Quotes start an argument even when they contribute no bytes, so an
+        // empty quoted string is a real (empty) argument.
+        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
+            Chunk::Data(b"'' x \"\"\n"),
+            Chunk::Data(b"y ''\n"),
+        ]));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("x"));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("y"));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap(), None);
+
+        // ...but an unterminated one at end of input is dropped, as GNU does.
+        let mut reader =
+            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b"x ''")]));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("x"));
         assert_eq!(reader.next().unwrap(), None);
     }
 
