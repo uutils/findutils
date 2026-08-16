@@ -8,8 +8,8 @@ pub mod matchers;
 
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
+use std::env;
 use std::error::Error;
-#[cfg(unix)]
 use std::io::IsTerminal;
 use std::io::{self, stderr, stdout, BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -27,6 +27,8 @@ pub struct Config {
     version_requested: bool,
     today_start: bool,
     no_leaf_dirs: bool,
+    warnings_enabled: bool,
+    last_non_option: Option<String>,
     follow: Follow,
     files0_argument: Option<String>,
 }
@@ -46,6 +48,8 @@ impl Default for Config {
             // and this configuration field will exist as
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
+            warnings_enabled: false,
+            last_non_option: None,
             follow: Follow::Never,
             files0_argument: None, // This option exclusively for -files0-from argument.
         }
@@ -202,7 +206,11 @@ impl Iterator for Files0Paths {
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut paths = vec![];
     let mut i = 0;
-    let mut config = Config::default();
+    let mut config = Config {
+        warnings_enabled: std::io::stdin().is_terminal()
+            && env::var_os("POSIXLY_CORRECT").is_none(),
+        ..Config::default()
+    };
 
     while i < args.len() {
         match args[i] {
@@ -399,6 +407,7 @@ Positional options:
  -sorted                  Sort directory contents by name (non-standard)
  -regextype type          Set regex syntax (default: emacs)
  -files0-from file        Read starting points from file, NUL-separated
+ -warn / -nowarn          Turn warning messages on or off
 
 Tests:
  -name pattern            Base name matches shell pattern

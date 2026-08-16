@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::cell::RefCell;
+use std::env;
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{stderr, Write};
@@ -27,6 +28,22 @@ fn parse_arg(s: &str) -> Arg {
     }
 }
 
+fn validate_execdir_path() -> Result<(), Box<dyn Error>> {
+    let Some(path) = env::var_os("PATH") else {
+        return Err("PATH is not set; -execdir and -okdir require an absolute search path".into());
+    };
+
+    if let Some(entry) = env::split_paths(&path).find(|entry| !entry.is_absolute()) {
+        return Err(format!(
+            "relative PATH entry {} is insecure with -execdir and -okdir",
+            entry.display()
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
 pub struct SingleExecMatcher {
     executable: Arg,
     args: Vec<Arg>,
@@ -40,7 +57,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        Ok(Self::new_impl(executable, args, exec_in_parent_dir, false))
+        Self::new_impl(executable, args, exec_in_parent_dir, false)
     }
 
     pub fn new_interactive(
@@ -48,7 +65,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        Ok(Self::new_impl(executable, args, exec_in_parent_dir, true))
+        Self::new_impl(executable, args, exec_in_parent_dir, true)
     }
 
     fn new_impl(
@@ -56,15 +73,18 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
         interactive: bool,
-    ) -> Self {
+    ) -> Result<Self, Box<dyn Error>> {
+        if exec_in_parent_dir {
+            validate_execdir_path()?;
+        }
         let transformed_args = args.iter().map(|&a| parse_arg(a)).collect();
 
-        Self {
+        Ok(Self {
             executable: parse_arg(executable),
             args: transformed_args,
             exec_in_parent_dir,
             interactive,
-        }
+        })
     }
 }
 
@@ -158,6 +178,9 @@ impl MultiExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
+        if exec_in_parent_dir {
+            validate_execdir_path()?;
+        }
         let transformed_args = args.iter().map(OsString::from).collect();
 
         Ok(Self {

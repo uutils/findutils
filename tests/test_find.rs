@@ -98,6 +98,36 @@ fn two_matchers_one_matches() {
 }
 
 #[test]
+fn warns_when_global_option_follows_test() {
+    ucmd()
+        .args(&["-warn", "-type", "d", "-maxdepth", "0"])
+        .succeeds()
+        .stdout_is(".\n")
+        .stderr_is(
+            "find: warning: you have specified the global option -maxdepth after the argument \
+             -type, but global options are not positional, i.e., -maxdepth affects tests \
+             specified before it as well as those specified after it.  Please specify global \
+             options before other arguments.\n",
+        );
+
+    ucmd()
+        .args(&["-warn", "-type", "d", "-nowarn", "-maxdepth", "0"])
+        .succeeds()
+        .stdout_only(".\n")
+        .no_stderr();
+}
+
+#[test]
+fn does_not_warn_for_help_or_version_after_test() {
+    for option in ["-help", "--help", "-version", "--version"] {
+        ucmd()
+            .args(&["-warn", "-type", "d", option])
+            .succeeds()
+            .no_stderr();
+    }
+}
+
+#[test]
 fn multiple_matcher_success() {
     ucmd()
         .args(&["-type", "f,d,l", "-name", "abbbc"])
@@ -1362,6 +1392,17 @@ fn find_ok_missing_semicolon() {
         .fails()
         .stderr_contains("missing argument to -ok")
         .no_stdout();
+}
+
+#[test]
+fn find_directory_exec_rejects_relative_path_entries() {
+    for action in ["-execdir", "-okdir"] {
+        ucmd()
+            .env("PATH", "relative")
+            .args(&[".", action, "echo", "{}", ";"])
+            .fails()
+            .stderr_contains("relative PATH entry");
+    }
 }
 
 #[test]
