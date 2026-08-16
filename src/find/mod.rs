@@ -28,7 +28,6 @@ pub struct Config {
     today_start: bool,
     no_leaf_dirs: bool,
     follow: Follow,
-    new_paths: Option<Vec<String>>,
     files0_argument: Option<String>,
 }
 
@@ -48,8 +47,7 @@ impl Default for Config {
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
             follow: Follow::Never,
-            new_paths: None, // This option exclusively for -files0-from argument.
-            files0_argument: None, //This option also is used for file0-from
+            files0_argument: None, // This option exclusively for -files0-from argument.
         }
     }
 }
@@ -146,7 +144,58 @@ impl Dependencies for StandardDependencies {
 struct ParsedInfo {
     matcher: Box<dyn self::matchers::Matcher>,
     paths: Vec<String>,
+    /// Starting points supplied via `-files0-from`, read lazily so that an
+    /// endless or very large input (e.g. `-files0-from /dev/urandom`) does not
+    /// have to fit in memory.
+    files0_paths: Option<Files0Paths>,
     config: Config,
+}
+
+/// Iterator over the NUL-separated starting points of `-files0-from`.
+///
+/// <https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html>
+struct Files0Paths {
+    reader: Box<dyn BufRead>,
+}
+
+impl Files0Paths {
+    /// Open the source named by `-files0-from`; `-` means standard input.
+    fn open(name: &str) -> Result<Self, Box<dyn Error>> {
+        let reader: Box<dyn BufRead> = if name == "-" {
+            Box::new(BufReader::new(io::stdin()))
+        } else {
+            let file = std::fs::File::open(name)
+                .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
+            Box::new(BufReader::new(file))
+        };
+        Ok(Self { reader })
+    }
+}
+
+impl Iterator for Files0Paths {
+    type Item = Result<String, Box<dyn Error>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let mut buffer = Vec::new();
+            match self.reader.read_until(0, &mut buffer) {
+                Err(e) => return Some(Err(e.into())),
+                Ok(0) => return None,
+                Ok(_) => {}
+            }
+            // A trailing separator terminates the name; without one we are at
+            // EOF and the bytes read are still a name.
+            if buffer.last() == Some(&0) {
+                buffer.pop();
+            }
+            if buffer.is_empty() {
+                // Skip it so as to avoid a file not found error.
+                eprintln!("find: invalid zero-length file name");
+                continue;
+            }
+            return Some(String::from_utf8(buffer).map_err(Into::into));
+        }
+    }
 }
 
 /// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
@@ -187,9 +236,11 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         paths.push(".".to_string());
     }
     let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
-    if let Some(new_paths) = &config.new_paths {
+    let mut files0_paths = None;
+    if let Some(name) = &config.files0_argument {
         if paths.len() == 1 && paths[0] == "." {
-            paths.clone_from(new_paths);
+            files0_paths = Some(Files0Paths::open(name)?);
+            paths.clear();
         } else {
             return Err(From::from(format!(
                 "extra operand '{}'\nfile operands cannot be combined with -files0-from",
@@ -200,6 +251,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     Ok(ParsedInfo {
         matcher,
         paths,
+        files0_paths,
         config,
     })
 }
@@ -288,9 +340,16 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
         return Ok(0);
     }
 
+    let paths: Box<dyn Iterator<Item = Result<String, Box<dyn Error>>>> =
+        match paths_and_matcher.files0_paths {
+            Some(files0_paths) => Box::new(files0_paths),
+            None => Box::new(paths_and_matcher.paths.into_iter().map(Ok)),
+        };
+
     let mut ret = 0;
     let mut quit = false;
-    for path in paths_and_matcher.paths {
+    for path in paths {
+        let path = path?;
         let dir_ret = process_dir(
             &path,
             &paths_and_matcher.config,

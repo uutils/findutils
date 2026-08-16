@@ -65,7 +65,6 @@ use ls::Ls;
 use std::{
     error::Error,
     fs::{File, Metadata},
-    io::Read,
     path::Path,
     str::FromStr,
     time::SystemTime,
@@ -1010,48 +1009,7 @@ fn build_matcher_tree(
              did not see one.",
         ));
     }
-    if config.files0_argument.is_some() {
-        parse_files0_args(config)?;
-    }
     Ok((i, top_level_matcher.build()))
-}
-
-// https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html
-// This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
-// eg. dummy | find -files0-from -
-// eg. find -files0-from rust.txt -name "cargo"
-fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
-    let mode = config.files0_argument.as_ref().unwrap();
-    let mut buffer = Vec::new();
-    let new_paths = config.new_paths.insert(Vec::new());
-
-    if mode == "-" {
-        std::io::stdin().read_to_end(&mut buffer)?;
-    } else {
-        let mut file =
-            File::open(mode).map_err(|e| format!("cannot open '{}' for reading: {}", mode, e))?;
-        file.read_to_end(&mut buffer)?;
-    }
-
-    let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
-    // if the pipe/file ends with ASCII NULL
-    if buffer_split.last().is_some_and(|s| s.is_empty()) {
-        buffer_split.remove(buffer_split.len() - 1);
-    }
-
-    let mut string_segments: Vec<String> = buffer_split
-        .iter()
-        .map(|segment| std::str::from_utf8(segment).map(std::string::ToString::to_string))
-        .collect::<Result<_, _>>()?;
-    // empty starting point checker
-    if string_segments.iter().any(std::string::String::is_empty) {
-        eprintln!("find: invalid zero-length file name");
-        // remove the empty ones so as to avoid file not found error
-        string_segments.retain(|s| !s.is_empty());
-    }
-
-    new_paths.extend(string_segments);
-    Ok(())
 }
 
 #[cfg(test)]
