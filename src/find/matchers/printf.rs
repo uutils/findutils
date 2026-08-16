@@ -152,7 +152,7 @@ impl FormatStringParser<'_> {
 
     fn advance_one(&mut self) -> Result<char, Box<dyn Error>> {
         let c = self.front()?;
-        self.string = &self.string[1..];
+        self.string = &self.string[c.len_utf8()..];
         Ok(c)
     }
 
@@ -203,7 +203,10 @@ impl FormatStringParser<'_> {
                 'v' => "\x0B",
                 '0' => "\0",
                 '\\' => "\\",
-                c => return Err(format!("Invalid escape sequence: \\{c}").into()),
+                c => {
+                    eprintln!("find: warning: unrecognized escape '\\{c}'");
+                    return Ok(FormatComponent::Literal(format!("\\{c}")));
+                }
             };
 
             Ok(FormatComponent::Literal(c.to_string()))
@@ -312,7 +315,10 @@ impl FormatStringParser<'_> {
             },
             'Y' => FormatDirective::Type { follow_links: true },
             // TODO: %Z
-            _ => return Ok(FormatComponent::Literal(first.to_string())),
+            _ => {
+                eprintln!("find: warning: unrecognized format directive '%{first}'");
+                return Ok(FormatComponent::Literal(format!("%{first}")));
+            }
         };
 
         Ok(FormatComponent::Directive {
@@ -698,7 +704,12 @@ mod tests {
             ]
         );
 
-        assert!(FormatString::parse("\\X").is_err());
+        // An unrecognized escape is a warning, not an error: it's printed
+        // literally (backslash included), matching GNU find.
+        assert_eq!(
+            FormatString::parse("\\X").unwrap().components,
+            vec![FormatComponent::Literal("\\X".to_owned())]
+        );
         assert!(FormatString::parse("\\").is_err());
     }
 
@@ -798,7 +809,9 @@ mod tests {
                     follow_links: false
                 }),
                 unaligned_directive(FormatDirective::Type { follow_links: true }),
-                FormatComponent::Literal("?".to_owned()),
+                // An unrecognized directive is a warning, not a silent drop of
+                // the '%': it's printed literally, matching GNU find.
+                FormatComponent::Literal("%?".to_owned()),
             ]
         );
 

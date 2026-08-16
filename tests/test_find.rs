@@ -622,6 +622,24 @@ fn find_printf_octal_escape_before_multibyte_char() {
 }
 
 #[test]
+fn find_printf_unrecognized_directive_prints_literally() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%€|\n"])
+        .succeeds()
+        .stdout_contains("%€|\n")
+        .stderr_contains("unrecognized format directive '%€'");
+}
+
+#[test]
+fn find_printf_unrecognized_escape_prints_literally() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\€|\n"])
+        .succeeds()
+        .stdout_contains("\\€|\n")
+        .stderr_contains("unrecognized escape '\\€'");
+}
+
+#[test]
 fn find_printf_width_too_large() {
     ucmd()
         .args(&[
