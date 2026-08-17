@@ -4,11 +4,12 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{self, File};
-use std::path::Path;
+use std::io::{stderr, Write};
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use std::{borrow::Cow, io::Write};
 
 use chrono::{format::StrftimeItems, DateTime, Local};
 
@@ -592,22 +593,22 @@ fn format_directive<'entry>(
 /// find's printf syntax.
 pub struct Printf {
     format: FormatString,
-    output_file: Option<File>,
+    output_file: Option<(File, PathBuf)>,
 }
 
 impl Printf {
-    pub fn new(format: &str, output_file: Option<File>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(format: &str, output_file: Option<(File, PathBuf)>) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             format: FormatString::parse(format)?,
             output_file,
         })
     }
 
-    fn print(&self, file_info: &WalkEntry, mut out: impl Write) {
+    fn print(&self, file_info: &WalkEntry, mut out: impl Write) -> std::io::Result<()> {
         for component in &self.format.components {
             match component {
-                FormatComponent::Literal(literal) => write!(out, "{literal}").unwrap(),
-                FormatComponent::Flush => out.flush().unwrap(),
+                FormatComponent::Literal(literal) => write!(out, "{literal}")?,
+                FormatComponent::Flush => out.flush()?,
                 FormatComponent::Directive {
                     directive,
                     width,
@@ -617,14 +618,14 @@ impl Printf {
                         if let Some(width) = width {
                             match justify {
                                 Justify::Left => {
-                                    write!(out, "{content:<width$}").unwrap();
+                                    write!(out, "{content:<width$}")?;
                                 }
                                 Justify::Right => {
-                                    write!(out, "{content:>width$}").unwrap();
+                                    write!(out, "{content:>width$}")?;
                                 }
                             }
                         } else {
-                            write!(out, "{content}").unwrap();
+                            write!(out, "{content}")?;
                         }
                     }
                     Err(e) => {
@@ -638,15 +639,35 @@ impl Printf {
                 },
             }
         }
+
+        Ok(())
+    }
+
+    fn handle_output_error(&self, error: &std::io::Error, matcher_io: &mut MatcherIO) {
+        if error.kind() == std::io::ErrorKind::BrokenPipe {
+            matcher_io.quit();
+            return;
+        }
+
+        if let Some((_, path)) = &self.output_file {
+            let _ = writeln!(&mut stderr(), "find: {}: {error}", path.display());
+        } else {
+            let _ = writeln!(&mut stderr(), "find: {error}");
+        }
+        matcher_io.set_exit_code(1);
     }
 }
 
 impl Matcher for Printf {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
-        if let Some(file) = &self.output_file {
-            self.print(file_info, file);
+        let result = if let Some((file, _)) = &self.output_file {
+            self.print(file_info, file)
         } else {
-            self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut());
+            self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut())
+        };
+
+        if let Err(error) = result {
+            self.handle_output_error(&error, matcher_io);
         }
 
         true
@@ -660,7 +681,7 @@ impl Matcher for Printf {
 #[cfg(test)]
 mod tests {
     use std::fs::File;
-    use std::io::ErrorKind;
+    use std::io::{ErrorKind, Write};
 
     use chrono::{Duration, TimeZone};
     use tempfile::Builder;
@@ -675,6 +696,56 @@ mod tests {
 
     #[cfg(windows)]
     use std::os::windows::fs::{symlink_dir, symlink_file};
+
+    struct FailingWriter(ErrorKind);
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(self.0.into())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(self.0.into())
+        }
+    }
+
+    #[test]
+    fn print_propagates_output_errors() -> Result<(), Box<dyn Error>> {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+
+        for format in ["literal", "%p", "\\c"] {
+            let printf = Printf::new(format, None)?;
+            assert_eq!(
+                printf
+                    .print(&abbbc, FailingWriter(ErrorKind::Other))
+                    .map_err(|error| error.kind()),
+                Err(ErrorKind::Other)
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn handles_output_errors() -> Result<(), Box<dyn Error>> {
+        let printf = Printf::new("literal", None)?;
+
+        for (error_kind, initial_exit_code, expected_exit_code, expected_quit) in [
+            (ErrorKind::Other, 0, 1, false),
+            (ErrorKind::BrokenPipe, 0, 0, true),
+            (ErrorKind::BrokenPipe, 1, 1, true),
+        ] {
+            let deps = FakeDependencies::new();
+            let mut matcher_io = MatcherIO::new(&deps);
+            matcher_io.set_exit_code(initial_exit_code);
+
+            printf.handle_output_error(&error_kind.into(), &mut matcher_io);
+            assert_eq!(matcher_io.exit_code(), expected_exit_code);
+            assert_eq!(matcher_io.should_quit(), expected_quit);
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn test_parse_basics() {
