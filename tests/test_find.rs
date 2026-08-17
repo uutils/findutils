@@ -129,6 +129,19 @@ fn invalid_newerxy_predicate_is_rejected() {
         .no_stdout();
 }
 
+#[cfg(unix)]
+#[test]
+fn non_utf8_argument_is_rejected_gracefully() {
+    // A non-UTF-8 argument must produce a clean error, not a panic (#816).
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    ucmd()
+        .arg(OsString::from_vec(vec![b'-', b'p', 0xff]))
+        .fails()
+        .stderr_contains("non-UTF-8")
+        .no_stdout();
+}
+
 #[test]
 fn size_rejects_non_numeric_prefix() {
     // A non-numeric prefix or an invalid double sign is rejected, matching GNU.
