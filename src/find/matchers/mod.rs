@@ -65,7 +65,7 @@ use ls::Ls;
 use std::{
     error::Error,
     fs::{File, Metadata},
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     time::SystemTime,
 };
@@ -497,8 +497,9 @@ fn build_matcher_tree(
                 // Args + 2: format string
                 i += 1;
                 let file = get_or_create_file(args[i])?;
+                let output_path = PathBuf::from(args[i]);
                 i += 1;
-                Some(Printf::new(args[i], Some(file))?.into_box())
+                Some(Printf::new(args[i], Some((file, output_path)))?.into_box())
             }
             "-fprint0" => {
                 if i >= args.len() - 1 {

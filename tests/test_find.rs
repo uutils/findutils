@@ -1256,6 +1256,21 @@ fn find_fprintf() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn find_fprintf_reports_write_error() {
+    let result = ucmd()
+        .args(&[".", "-maxdepth", "0", "-fprintf", "/dev/full", "%p\n"])
+        .fails();
+    result.no_stdout();
+    let stderr = result.stderr_str();
+
+    assert!(stderr.contains("find:"));
+    assert!(stderr.contains("/dev/full"));
+    assert!(stderr.contains("No space left on device"));
+    assert!(!stderr.contains("panicked"));
+}
+
+#[test]
 fn find_fprintf_missing_arguments() {
     // Regression test: `-fprintf` with no file/format argument must report a
     // missing-argument error instead of panicking (see issue #696).
