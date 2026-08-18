@@ -265,7 +265,16 @@ impl Dependencies for CapturedDependencies {
 }
 
 fn do_updatedb(args: &[&str]) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = match uu_app().try_get_matches_from(args) {
+        Ok(m) => m,
+        Err(e) => match e.kind() {
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
+                print!("{e}");
+                return Ok(());
+            }
+            _ => return Err(uucore::error::UClapError::with_exit_code(e, 1).into()),
+        },
+    };
     let config = Config::from(matches);
 
     // offload most of the logic to find. Build the argument list as discrete tokens rather than

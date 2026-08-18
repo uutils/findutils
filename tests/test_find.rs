@@ -51,6 +51,36 @@ fn no_args() {
 }
 
 #[test]
+fn find_version() {
+    // Regression test: `find --version` used to print "find (Rust) X.Y.Z",
+    // deviating from the format used by the other utilities. It must print
+    // "find X.Y.Z" to stdout and exit successfully.
+    let output = ucmd().arg("--version").succeeds();
+    let result = output.no_stderr();
+
+    assert!(
+        result.stdout_str().starts_with("find "),
+        "expected stdout to start with 'find ', got: {:?}",
+        result.stdout_str()
+    );
+    assert!(
+        !result.stdout_str().contains("(Rust)"),
+        "version output should not contain '(Rust)': {:?}",
+        result.stdout_str()
+    );
+
+    let second_word = result.stdout_str().split_whitespace().nth(1).unwrap_or("");
+    assert!(
+        second_word
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit()),
+        "expected the second word to be the version number, got: {:?}",
+        result.stdout_str()
+    );
+}
+
+#[test]
 fn two_matchers_both_match() {
     ucmd()
         .args(&["-type", "d", "-name", "test_data"])
@@ -80,6 +110,38 @@ fn multiple_matcher_success() {
         .succeeds()
         .no_stderr()
         .stdout_contains("abbbc");
+}
+
+#[test]
+fn invalid_newerxy_predicate_is_rejected() {
+    // GNU find rejects over-long / invalid -newerXY tokens instead of matching a
+    // valid prefix (issue #782: -neweraBcmty was accepted as -neweraB).
+    ucmd()
+        .args(&["-neweraBcmty", "."])
+        .fails()
+        .stderr_contains("unknown predicate `-neweraBcmty'")
+        .no_stdout();
+
+    ucmd()
+        .args(&["-newermmEXTRA", "."])
+        .fails()
+        .stderr_contains("unknown predicate `-newermmEXTRA'")
+        .no_stdout();
+}
+
+#[test]
+fn size_rejects_non_numeric_prefix() {
+    // A non-numeric prefix or an invalid double sign is rejected, matching GNU.
+    for bad in ["x5c", "abc5c", "+-5c", "--5c", "+++5c"] {
+        ucmd()
+            .args(&["./test_data", "-size", bad])
+            .fails()
+            .stderr_contains("argument to -size")
+            .no_stdout();
+    }
+    for good in ["5c", "+5c", "-5c", "++5c", "-+5c"] {
+        ucmd().args(&["./test_data", "-size", good]).succeeds();
+    }
 }
 
 #[test]
@@ -178,6 +240,20 @@ fn files0_file_basic_success() {
 }
 
 #[test]
+fn files0_invalid_utf8_fails() {
+    let temp_dir = Builder::new().prefix("find_files0_").tempdir().unwrap();
+    let path_list = temp_dir.path().join("paths0");
+    fs::write(&path_list, b"\xff\nfile2.txt\n").expect("wrote path list");
+
+    ucmd()
+        .arg("-files0-from")
+        .arg(path_list)
+        .fails()
+        .stderr_contains("invalid utf-8 sequence")
+        .no_stdout();
+}
+
+#[test]
 fn files0_empty_pipe() {
     ucmd()
         .args(&["-files0-from", "-"])
@@ -204,6 +280,95 @@ fn files0_pipe_double_nul() {
         .succeeds()
         .stderr_contains("invalid zero-length file name")
         .stdout_contains("./test_data/");
+}
+
+/// The starting points are read incrementally, so output for the earlier ones
+/// appears even though a later one is invalid UTF-8 (see issue #779: the input
+/// used to be slurped into memory in its entirety before anything was walked).
+#[test]
+fn files0_streams_before_invalid_utf8() {
+    ucmd()
+        .pipe_in(b"./test_data/simple\0\xff\0" as &[u8])
+        .args(&["-files0-from", "-"])
+        .fails()
+        .stdout_contains("./test_data/simple")
+        .stderr_contains("invalid utf-8 sequence");
+}
+
+/// Both the starting points and the answers to the prompts would be read from
+/// stdin, so GNU find rejects the combination up front (bfs `gnu/*_ok` tests).
+#[test]
+fn files0_stdin_with_ok_is_rejected() {
+    // No pipe_in(): find must reject the combination before reading anything,
+    // so feeding it input would just race the exit and break the pipe.
+    for action in ["-ok", "-okdir"] {
+        ucmd()
+            .args(&["-files0-from", "-", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains(
+                "option -files0-from reading from standard input cannot be combined \
+                 with -ok, -okdir",
+            );
+    }
+}
+
+/// Reading the starting points from a file leaves stdin free for the prompts,
+/// so the combination is allowed.
+#[test]
+fn files0_file_with_ok_is_allowed() {
+    let temp_dir = Builder::new().prefix("find_files0_ok_").tempdir().unwrap();
+    let starting_points = temp_dir.path().join("starting_points");
+    fs::write(&starting_points, b"./test_data/simple\0").unwrap();
+
+    ucmd()
+        .args(&[
+            "-files0-from",
+            &starting_points.display().to_string(),
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        // Declined, so nothing is run and every entry is consumed.
+        .pipe_in(b"n\n" as &[u8])
+        .succeeds()
+        .no_stdout()
+        .stderr_contains("< echo ... ./test_data/simple > ?");
+}
+
+/// -execdir/-okdir chdir into the directory being scanned, so a relative $PATH
+/// entry would resolve there; GNU find refuses to run at all.
+#[cfg(unix)]
+#[test]
+fn execdir_rejects_relative_path_entries() {
+    for action in ["-execdir", "-okdir"] {
+        ucmd()
+            .env("PATH", "/nonexistent-bin:")
+            .args(&["./test_data/simple", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("The current directory is included in the PATH");
+
+        ucmd()
+            .env("PATH", "tools/bin:/nonexistent-bin")
+            .args(&["./test_data/simple", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("The relative path 'tools/bin' is included in the PATH");
+    }
+}
+
+/// An absolute $PATH is fine, and -exec/-ok (which do not chdir) never care.
+#[cfg(unix)]
+#[test]
+fn exec_accepts_relative_path_entries() {
+    // /bin on Linux, /usr/bin on macOS: keep both so `true` resolves either way.
+    ucmd()
+        .env("PATH", "tools/bin:/bin:/usr/bin")
+        .args(&["./test_data/simple", "-exec", "true", "{}", ";"])
+        .succeeds()
+        .no_output();
 }
 
 #[test]
@@ -545,6 +710,24 @@ fn find_printf_octal_escape_before_multibyte_char() {
         .succeeds()
         .no_stderr()
         .stdout_only("\0€\n");
+}
+
+#[test]
+fn find_printf_unrecognized_directive_prints_literally() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%€|\n"])
+        .succeeds()
+        .stdout_contains("%€|\n")
+        .stderr_contains("unrecognized format directive '%€'");
+}
+
+#[test]
+fn find_printf_unrecognized_escape_prints_literally() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\€|\n"])
+        .succeeds()
+        .stdout_contains("\\€|\n")
+        .stderr_contains("unrecognized escape '\\€'");
 }
 
 #[test]
@@ -1315,4 +1498,91 @@ fn version_write_error_is_handled() {
     let deps = BrokenDependencies::new();
     let rc = findutils::find::find_main(&["find", "--version"], &deps);
     assert_eq!(rc, 1);
+}
+
+#[test]
+fn print_write_error_is_reported_not_swallowed() {
+    // Regression test: a write/flush failure other than a broken pipe
+    // (e.g. a full disk) must be reported with a nonzero exit code,
+    // not silently ignored or turned into a panic.
+    use std::cell::RefCell;
+
+    struct BrokenWriter;
+    impl std::io::Write for BrokenWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from_raw_os_error(28)) // ENOSPC
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from_raw_os_error(28))
+        }
+    }
+
+    struct BrokenDependencies {
+        output: RefCell<BrokenWriter>,
+    }
+
+    impl BrokenDependencies {
+        fn new() -> Self {
+            Self {
+                output: RefCell::new(BrokenWriter),
+            }
+        }
+    }
+
+    impl findutils::find::Dependencies for BrokenDependencies {
+        fn get_output(&self) -> &RefCell<dyn Write> {
+            &self.output
+        }
+
+        fn now(&self) -> time::SystemTime {
+            time::SystemTime::now()
+        }
+
+        fn confirm(&self, _prompt: &str) -> bool {
+            false
+        }
+    }
+
+    let deps = BrokenDependencies::new();
+    let rc = findutils::find::find_main(&["find", "test_data/simple", "-maxdepth", "0"], &deps);
+    assert_eq!(rc, 1);
+}
+
+#[test]
+fn find_exits_cleanly_on_broken_pipe() {
+    // Regression test: `find | head` must exit cleanly instead of
+    // panicking when the reader closes its end of the pipe early. (See issue#801)
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_find"))
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .arg(".")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    // Drop the read end without reading, so `find`'s writes fail with
+    // EPIPE once it produces more output than the pipe buffer holds.
+    drop(child.stdout.take());
+
+    let status = child.wait().unwrap();
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+
+    assert!(
+        status.success(),
+        "find should exit cleanly on a broken pipe instead of panicking, \
+         got status {status:?}, stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains("panicked"),
+        "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
+    );
 }

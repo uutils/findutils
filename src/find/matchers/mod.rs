@@ -34,7 +34,7 @@ mod user;
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
-use self::exec::{MultiExecMatcher, SingleExecMatcher};
+use self::exec::{check_path_for_relative_entries, MultiExecMatcher, SingleExecMatcher};
 use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
@@ -65,7 +65,6 @@ use ls::Ls;
 use std::{
     error::Error,
     fs::{File, Metadata},
-    io::Read,
     path::Path,
     str::FromStr,
     time::SystemTime,
@@ -341,7 +340,11 @@ fn convert_arg_to_comparable_value_and_suffix(
     option_name: &str,
     value_as_string: &str,
 ) -> Result<(ComparableValue, String), Box<dyn Error>> {
-    let re = Regex::new(r"([-+]?)[-+]?(\d+)(.*)$")?;
+    // Anchor at the start so a non-numeric prefix like "x5c" is rejected instead
+    // of silently parsing the "5c" in the middle. After the comparison sign GNU
+    // accepts one more optional '+' (so "++5c" and "-+5c" are valid, but "+-5c"
+    // and "--5c" are not), which `\+?` reproduces.
+    let re = Regex::new(r"^([-+]?)\+?(\d+)(.*)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok((
@@ -399,6 +402,10 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
 /// X and Y are constrained to a/B/c/m and t.
 /// such as: "-neweraB" -> Some(a, B) "-neweraD" -> None
 ///
+/// The whole argument must match. A trailing suffix after a valid
+/// -newerXY form (for example -neweraBcmty) is not accepted; GNU find
+/// reports those as unknown predicates.
+///
 /// Additionally, there is support for the -anewer and -cnewer short arguments. as follows:
 /// 1. -anewer is equivalent to -neweram
 /// 2. -cnewer is equivalent to -newercm
@@ -421,7 +428,9 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
         return Some(("c".to_string(), "m".to_string()));
     }
 
-    let re = Regex::new(r"-newer([aBcm])([aBcmt])").unwrap();
+    // Require a full-token match so invalid longer forms like
+    // -neweraBcmty are not treated as the valid -neweraB prefix (#782).
+    let re = Regex::new(r"^-newer([aBcm])([aBcmt])$").unwrap();
     if let Some(captures) = re.captures(input) {
         let x = captures.get(1)?.as_str().to_string();
         let y = captures.get(2)?.as_str().to_string();
@@ -651,6 +660,9 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let expression = args[i];
+                if expression == "-execdir" {
+                    check_path_for_relative_entries(expression)?;
+                }
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
@@ -691,6 +703,10 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let expression = args[i];
+                if expression == "-okdir" {
+                    check_path_for_relative_entries(expression)?;
+                }
+                config.interactive_exec = true;
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
@@ -976,7 +992,10 @@ fn build_matcher_tree(
                             )
                         }
                     }
-                    None => return Err(From::from(format!("Unrecognized flag: '{}'", args[i]))),
+                    // Match GNU find wording for unknown predicates.
+                    None => {
+                        return Err(From::from(format!("unknown predicate `{}'", args[i])));
+                    }
                 }
             }
         };
@@ -1001,49 +1020,7 @@ fn build_matcher_tree(
              did not see one.",
         ));
     }
-    if config.files0_argument.is_some() {
-        parse_files0_args(config)?;
-    }
     Ok((i, top_level_matcher.build()))
-}
-
-// https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html
-// This allows users to take the entry point for find from stdin (eg. pipe) or from a text file.
-// eg. dummy | find -files0-from -
-// eg. find -files0-from rust.txt -name "cargo"
-fn parse_files0_args(config: &mut Config) -> Result<(), Box<dyn Error>> {
-    let mode = config.files0_argument.as_ref().unwrap();
-    let mut buffer = Vec::new();
-    let new_paths = config.new_paths.insert(Vec::new());
-
-    if mode == "-" {
-        std::io::stdin().read_to_end(&mut buffer)?;
-    } else {
-        let mut file =
-            File::open(mode).map_err(|e| format!("cannot open '{}' for reading: {}", mode, e))?;
-        file.read_to_end(&mut buffer)?;
-    }
-
-    let mut buffer_split: Vec<&[u8]> = buffer.split(|&b| b == 0).collect();
-    // if the pipe/file ends with ASCII NULL
-    if buffer_split.last().is_some_and(|s| s.is_empty()) {
-        buffer_split.remove(buffer_split.len() - 1);
-    }
-
-    let mut string_segments: Vec<String> = buffer_split
-        .iter()
-        .filter_map(|s| std::str::from_utf8(s).ok())
-        .map(std::string::ToString::to_string)
-        .collect();
-    // empty starting point checker
-    if string_segments.iter().any(std::string::String::is_empty) {
-        eprintln!("find: invalid zero-length file name");
-        // remove the empty ones so as to avoid file not found error
-        string_segments.retain(|s| !s.is_empty());
-    }
-
-    new_paths.extend(string_segments);
-    Ok(())
 }
 
 #[cfg(test)]
@@ -1874,6 +1851,31 @@ mod tests {
                 let arg = parse_str_to_newer_args(&format!("-newer{x}{y}").to_string()).unwrap();
                 assert_eq!(eq, arg);
             }
+        }
+
+        // Trailing junk after a valid -newerXY form must not match.
+        // GNU find reports these as unknown predicates (issue #782).
+        assert!(parse_str_to_newer_args("-neweraBcmty").is_none());
+        assert!(parse_str_to_newer_args("-newermmEXTRA").is_none());
+        assert!(parse_str_to_newer_args("-neweramtz").is_none());
+        assert!(parse_str_to_newer_args("-newera").is_none());
+    }
+
+    #[test]
+    fn build_top_level_matcher_rejects_invalid_newer_predicate() {
+        let mut config = Config::default();
+        match build_top_level_matcher(&["-neweraBcmty"], &mut config) {
+            Ok(_) => panic!("invalid -newerXY suffix must be rejected"),
+            Err(err) => assert_eq!(err.to_string(), "unknown predicate `-neweraBcmty'"),
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_rejects_unknown_predicate() {
+        let mut config = Config::default();
+        match build_top_level_matcher(&["-notarealpredicate"], &mut config) {
+            Ok(_) => panic!("unknown predicates must be rejected"),
+            Err(err) => assert_eq!(err.to_string(), "unknown predicate `-notarealpredicate'"),
         }
     }
 

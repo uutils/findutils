@@ -81,7 +81,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Retrieve reference results
-        uses: dawidd6/action-download-artifact@v21
+        uses: dawidd6/action-download-artifact@v23
         continue-on-error: true
         with:
           workflow: compat.yml
@@ -164,7 +164,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Retrieve reference results
-        uses: dawidd6/action-download-artifact@v21
+        uses: dawidd6/action-download-artifact@v23
         continue-on-error: true
         with:
           workflow: compat.yml
