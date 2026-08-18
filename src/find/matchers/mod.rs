@@ -447,6 +447,12 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
     Ok(file)
 }
 
+/// A "global option" (GNU find's term) applies to the whole command instead
+/// of a specific test, so unlike a test it takes effect no matter where in
+/// the expression it appears; `-maxdepth` after `-type f`, for instance,
+/// still limits the depth of every path find visits, not just descendants of
+/// paths matching `-type f`. GNU find warns when one appears after a test, as
+/// implemented by `warn_if_global_option_follows_test` below.
 fn is_global_option(argument: &str) -> bool {
     matches!(
         argument,
