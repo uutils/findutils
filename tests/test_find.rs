@@ -295,6 +295,40 @@ fn files0_streams_before_invalid_utf8() {
         .stderr_contains("invalid utf-8 sequence");
 }
 
+/// -execdir/-okdir chdir into the directory being scanned, so a relative $PATH
+/// entry would resolve there; GNU find refuses to run at all.
+#[cfg(unix)]
+#[test]
+fn execdir_rejects_relative_path_entries() {
+    for action in ["-execdir", "-okdir"] {
+        ucmd()
+            .env("PATH", "/nonexistent-bin:")
+            .args(&["./test_data/simple", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("The current directory is included in the PATH");
+
+        ucmd()
+            .env("PATH", "tools/bin:/nonexistent-bin")
+            .args(&["./test_data/simple", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("The relative path 'tools/bin' is included in the PATH");
+    }
+}
+
+/// An absolute $PATH is fine, and -exec/-ok (which do not chdir) never care.
+#[cfg(unix)]
+#[test]
+fn exec_accepts_relative_path_entries() {
+    // /bin on Linux, /usr/bin on macOS: keep both so `true` resolves either way.
+    ucmd()
+        .env("PATH", "tools/bin:/bin:/usr/bin")
+        .args(&["./test_data/simple", "-exec", "true", "{}", ";"])
+        .succeeds()
+        .no_output();
+}
+
 #[test]
 fn files0_no_file() {
     #[cfg(unix)]
