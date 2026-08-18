@@ -9,6 +9,11 @@ the comment workflow can decide to stay silent). Exits 1 when there are new,
 non-intermittent failures; intermittent (flaky) tests listed in --ignore-file
 are reported but never fail the job.
 
+A test that ran in the reference but produced no result at all in the current
+run (it hung, crashed, or was renamed upstream) is reported under its own
+heading rather than being counted as an improvement: "no longer failing" and
+"no longer running" look identical if only the failure lists are compared.
+
 Adapted from the uutils sed/grep workflow.
 """
 
@@ -31,17 +36,16 @@ def load_ignore_list(ignore_file):
 
 
 def extract_test_results(json_data):
-    """Return (summary, failed_test_names) from parsed JSON data."""
+    """Return (summary, {test_name: status}) from parsed JSON data."""
     if not json_data or "summary" not in json_data:
-        return {"total": 0, "passed": 0, "failed": 0, "skipped": 0}, []
+        return {"total": 0, "passed": 0, "failed": 0, "skipped": 0}, {}
 
     summary = json_data["summary"]
-    failed_tests = [
-        test.get("name", "unknown")
+    statuses = {
+        test.get("name", "unknown"): test.get("status", "FAIL")
         for test in json_data.get("tests", [])
-        if test.get("status") == "FAIL"
-    ]
-    return summary, failed_tests
+    }
+    return summary, statuses
 
 
 def compare_results(current_file, reference_file, ignore_file=None, output_file=None):
@@ -50,14 +54,14 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
 
     try:
         with open(current_file, "r") as f:
-            current_summary, current_failed = extract_test_results(json.load(f))
+            current_summary, current_statuses = extract_test_results(json.load(f))
     except Exception as e:
         print(f"Error loading current results: {e}")
         return 1
 
     try:
         with open(reference_file, "r") as f:
-            reference_summary, reference_failed = extract_test_results(json.load(f))
+            reference_summary, reference_statuses = extract_test_results(json.load(f))
     except Exception as e:
         print(f"Error loading reference results: {e}")
         return 1
@@ -72,11 +76,15 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
         reference_summary.get("total", 0)
     )
 
-    current_failed_set = set(current_failed)
-    reference_failed_set = set(reference_failed)
+    current_failed_set = {n for n, st in current_statuses.items() if st == "FAIL"}
+    reference_failed_set = {n for n, st in reference_statuses.items() if st == "FAIL"}
 
     new_failures = current_failed_set - reference_failed_set
-    improvements = reference_failed_set - current_failed_set
+    # A test the current run did not report at all is not an improvement: it
+    # hung, took the harness down with it, or was renamed upstream. Keep those
+    # out of the improvement list so a hang cannot masquerade as a fix.
+    disappeared = set(reference_statuses) - set(current_statuses)
+    improvements = reference_failed_set - current_failed_set - disappeared
 
     non_intermittent_new_failures = new_failures - ignore_set
 
@@ -86,6 +94,7 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
         and total_diff == 0
         and not new_failures
         and not improvements
+        and not disappeared
     )
 
     # Empty output tells the comment workflow there is nothing to post.
@@ -127,6 +136,14 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
         output_lines.append(f"Test improvements ({len(improvements)}):")
         for test in sorted(improvements):
             output_lines.append(f"  + {test}")
+        output_lines.append("")
+
+    if disappeared:
+        output_lines.append(
+            f"No result in this run ({len(disappeared)}) - hung, crashed, or renamed:"
+        )
+        for test in sorted(disappeared):
+            output_lines.append(f"  ? {test} (was {reference_statuses[test]})")
         output_lines.append("")
 
     output_text = "\n".join(output_lines)

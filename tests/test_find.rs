@@ -160,6 +160,21 @@ fn invalid_newerxy_predicate_is_rejected() {
 }
 
 #[test]
+fn size_rejects_non_numeric_prefix() {
+    // A non-numeric prefix or an invalid double sign is rejected, matching GNU.
+    for bad in ["x5c", "abc5c", "+-5c", "--5c", "+++5c"] {
+        ucmd()
+            .args(&["./test_data", "-size", bad])
+            .fails()
+            .stderr_contains("argument to -size")
+            .no_stdout();
+    }
+    for good in ["5c", "+5c", "-5c", "++5c", "-+5c"] {
+        ucmd().args(&["./test_data", "-size", good]).succeeds();
+    }
+}
+
+#[test]
 fn multiple_matcher_failure() {
     ucmd()
         .args(&["-type", "fd", "-name", "abbb"])
@@ -308,6 +323,82 @@ fn files0_streams_before_invalid_utf8() {
         .fails()
         .stdout_contains("./test_data/simple")
         .stderr_contains("invalid utf-8 sequence");
+}
+
+/// Both the starting points and the answers to the prompts would be read from
+/// stdin, so GNU find rejects the combination up front (bfs `gnu/*_ok` tests).
+#[test]
+fn files0_stdin_with_ok_is_rejected() {
+    // No pipe_in(): find must reject the combination before reading anything,
+    // so feeding it input would just race the exit and break the pipe.
+    for action in ["-ok", "-okdir"] {
+        ucmd()
+            .args(&["-files0-from", "-", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains(
+                "option -files0-from reading from standard input cannot be combined \
+                 with -ok, -okdir",
+            );
+    }
+}
+
+/// Reading the starting points from a file leaves stdin free for the prompts,
+/// so the combination is allowed.
+#[test]
+fn files0_file_with_ok_is_allowed() {
+    let temp_dir = Builder::new().prefix("find_files0_ok_").tempdir().unwrap();
+    let starting_points = temp_dir.path().join("starting_points");
+    fs::write(&starting_points, b"./test_data/simple\0").unwrap();
+
+    ucmd()
+        .args(&[
+            "-files0-from",
+            &starting_points.display().to_string(),
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        // Declined, so nothing is run and every entry is consumed.
+        .pipe_in(b"n\n" as &[u8])
+        .succeeds()
+        .no_stdout()
+        .stderr_contains("< echo ... ./test_data/simple > ?");
+}
+
+/// -execdir/-okdir chdir into the directory being scanned, so a relative $PATH
+/// entry would resolve there; GNU find refuses to run at all.
+#[cfg(unix)]
+#[test]
+fn execdir_rejects_relative_path_entries() {
+    for action in ["-execdir", "-okdir"] {
+        ucmd()
+            .env("PATH", "/nonexistent-bin:")
+            .args(&["./test_data/simple", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("The current directory is included in the PATH");
+
+        ucmd()
+            .env("PATH", "tools/bin:/nonexistent-bin")
+            .args(&["./test_data/simple", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("The relative path 'tools/bin' is included in the PATH");
+    }
+}
+
+/// An absolute $PATH is fine, and -exec/-ok (which do not chdir) never care.
+#[cfg(unix)]
+#[test]
+fn exec_accepts_relative_path_entries() {
+    // /bin on Linux, /usr/bin on macOS: keep both so `true` resolves either way.
+    ucmd()
+        .env("PATH", "tools/bin:/bin:/usr/bin")
+        .args(&["./test_data/simple", "-exec", "true", "{}", ";"])
+        .succeeds()
+        .no_output();
 }
 
 #[test]
@@ -1392,17 +1483,6 @@ fn find_ok_missing_semicolon() {
         .fails()
         .stderr_contains("missing argument to -ok")
         .no_stdout();
-}
-
-#[test]
-fn find_directory_exec_rejects_relative_path_entries() {
-    for action in ["-execdir", "-okdir"] {
-        ucmd()
-            .env("PATH", "relative")
-            .args(&[".", action, "echo", "{}", ";"])
-            .fails()
-            .stderr_contains("relative PATH entry");
-    }
 }
 
 #[test]

@@ -5,9 +5,8 @@
 // https://opensource.org/licenses/MIT.
 
 use std::cell::RefCell;
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{stderr, Write};
 use std::path::Path;
 use std::process::Command;
@@ -28,19 +27,34 @@ fn parse_arg(s: &str) -> Arg {
     }
 }
 
-fn validate_execdir_path() -> Result<(), Box<dyn Error>> {
-    let Some(path) = env::var_os("PATH") else {
-        return Err("PATH is not set; -execdir and -okdir require an absolute search path".into());
-    };
-
-    if let Some(entry) = env::split_paths(&path).find(|entry| !entry.is_absolute()) {
-        return Err(format!(
-            "relative PATH entry {} is insecure with -execdir and -okdir",
-            entry.display()
-        )
-        .into());
+/// Reject a relative `$PATH` entry, which GNU find refuses for
+/// `-execdir`/`-okdir` since they run the command from the scanned directory.
+pub fn check_path_for_relative_entries(action: &str) -> Result<(), Box<dyn Error>> {
+    match std::env::var_os("PATH") {
+        Some(path) => check_path_entries(&path, action),
+        None => Ok(()),
     }
+}
 
+fn check_path_entries(path: &OsStr, action: &str) -> Result<(), Box<dyn Error>> {
+    for entry in std::env::split_paths(path) {
+        if entry.as_os_str().is_empty() || entry == Path::new(".") {
+            return Err(From::from(format!(
+                "The current directory is included in the PATH environment variable, \
+                 which is insecure in combination with the {action} action of find.  \
+                 Please remove the current directory from your $PATH (that is, remove \
+                 \".\", doubled colons, or leading or trailing colons)"
+            )));
+        }
+        if entry.is_relative() {
+            return Err(From::from(format!(
+                "The relative path '{}' is included in the PATH environment variable, \
+                 which is insecure in combination with the {action} action of find.  \
+                 Please remove that entry from $PATH",
+                entry.display()
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -57,7 +71,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::new_impl(executable, args, exec_in_parent_dir, false)
+        Ok(Self::new_impl(executable, args, exec_in_parent_dir, false))
     }
 
     pub fn new_interactive(
@@ -65,7 +79,7 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::new_impl(executable, args, exec_in_parent_dir, true)
+        Ok(Self::new_impl(executable, args, exec_in_parent_dir, true))
     }
 
     fn new_impl(
@@ -73,18 +87,15 @@ impl SingleExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
         interactive: bool,
-    ) -> Result<Self, Box<dyn Error>> {
-        if exec_in_parent_dir {
-            validate_execdir_path()?;
-        }
+    ) -> Self {
         let transformed_args = args.iter().map(|&a| parse_arg(a)).collect();
 
-        Ok(Self {
+        Self {
             executable: parse_arg(executable),
             args: transformed_args,
             exec_in_parent_dir,
             interactive,
-        })
+        }
     }
 }
 
@@ -178,9 +189,6 @@ impl MultiExecMatcher {
         args: &[&str],
         exec_in_parent_dir: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        if exec_in_parent_dir {
-            validate_execdir_path()?;
-        }
         let transformed_args = args.iter().map(OsString::from).collect();
 
         Ok(Self {
@@ -286,7 +294,48 @@ impl Matcher for MultiExecMatcher {
     }
 }
 
-#[cfg(test)]
-/// No tests here, because we need to call out to an external executable. See
-/// `tests/exec_unit_tests.rs` instead.
-mod tests {}
+// Unix-only: the cases below are written with ':' separators and rootless
+// absolute paths, neither of which means the same thing on Windows.
+#[cfg(all(test, unix))]
+/// Only the pure helpers are tested here: everything else needs to call out to
+/// an external executable, see `tests/exec_unit_tests.rs` instead.
+mod tests {
+    use super::check_path_entries;
+    use std::ffi::OsStr;
+
+    fn error_for(path: &str) -> String {
+        check_path_entries(OsStr::new(path), "-okdir")
+            .expect_err("expected the PATH to be rejected")
+            .to_string()
+    }
+
+    #[test]
+    fn absolute_path_entries_are_accepted() {
+        assert!(check_path_entries(OsStr::new("/opt/bin:/sbin"), "-execdir").is_ok());
+    }
+
+    #[test]
+    fn empty_path_entries_are_rejected() {
+        for path in ["", ":/sbin", "/sbin:", "/sbin::/opt/bin"] {
+            assert!(
+                error_for(path).starts_with("The current directory is included"),
+                "PATH {path:?} was not rejected as the current directory"
+            );
+        }
+    }
+
+    #[test]
+    fn dot_path_entry_is_rejected() {
+        assert!(error_for("/sbin:.").starts_with("The current directory is included"));
+    }
+
+    #[test]
+    fn relative_path_entry_is_rejected() {
+        let message = error_for("/sbin:tools/bin");
+        assert!(
+            message.starts_with("The relative path 'tools/bin' is included"),
+            "unexpected message: {message}"
+        );
+        assert!(message.contains("the -okdir action of find"));
+    }
+}

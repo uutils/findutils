@@ -31,6 +31,9 @@ pub struct Config {
     last_non_option: Option<String>,
     follow: Follow,
     files0_argument: Option<String>,
+    /// Whether the expression uses -ok or -okdir, which prompt on stderr and
+    /// read the answer from stdin when there is no terminal.
+    interactive_exec: bool,
 }
 
 impl Default for Config {
@@ -52,6 +55,7 @@ impl Default for Config {
             last_non_option: None,
             follow: Follow::Never,
             files0_argument: None, // This option exclusively for -files0-from argument.
+            interactive_exec: false,
         }
     }
 }
@@ -247,6 +251,15 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut files0_paths = None;
     if let Some(name) = &config.files0_argument {
         if paths.len() == 1 && paths[0] == "." {
+            // Both would read stdin, so the starting points and the answers to
+            // the prompts would compete for the same bytes.  GNU find rejects
+            // the combination rather than producing arbitrary results.
+            if name == "-" && config.interactive_exec {
+                return Err(From::from(
+                    "option -files0-from reading from standard input cannot be combined \
+                     with -ok, -okdir",
+                ));
+            }
             files0_paths = Some(Files0Paths::open(name)?);
             paths.clear();
         } else {
