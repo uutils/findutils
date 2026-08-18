@@ -130,6 +130,21 @@ fn invalid_newerxy_predicate_is_rejected() {
 }
 
 #[test]
+fn size_rejects_non_numeric_prefix() {
+    // A non-numeric prefix or an invalid double sign is rejected, matching GNU.
+    for bad in ["x5c", "abc5c", "+-5c", "--5c", "+++5c"] {
+        ucmd()
+            .args(&["./test_data", "-size", bad])
+            .fails()
+            .stderr_contains("argument to -size")
+            .no_stdout();
+    }
+    for good in ["5c", "+5c", "-5c", "++5c", "-+5c"] {
+        ucmd().args(&["./test_data", "-size", good]).succeeds();
+    }
+}
+
+#[test]
 fn multiple_matcher_failure() {
     ucmd()
         .args(&["-type", "fd", "-name", "abbb"])

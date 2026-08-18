@@ -340,7 +340,11 @@ fn convert_arg_to_comparable_value_and_suffix(
     option_name: &str,
     value_as_string: &str,
 ) -> Result<(ComparableValue, String), Box<dyn Error>> {
-    let re = Regex::new(r"([-+]?)[-+]?(\d+)(.*)$")?;
+    // Anchor at the start so a non-numeric prefix like "x5c" is rejected instead
+    // of silently parsing the "5c" in the middle. After the comparison sign GNU
+    // accepts one more optional '+' (so "++5c" and "-+5c" are valid, but "+-5c"
+    // and "--5c" are not), which `\+?` reproduces.
+    let re = Regex::new(r"^([-+]?)\+?(\d+)(.*)$")?;
     if let Some(groups) = re.captures(value_as_string) {
         if let Ok(val) = groups[2].parse::<u64>() {
             return Ok((
