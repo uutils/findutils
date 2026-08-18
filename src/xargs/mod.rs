@@ -1255,7 +1255,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     if let Some(max_lines) = options.max_lines {
         limiters.add(MaxLinesCommandSizeLimiter::new(max_lines));
     }
-    let effective_max_chars = MaxCharsCommandSizeLimiter::effective_max_chars(options.max_chars, &env);
+    let effective_max_chars =
+        MaxCharsCommandSizeLimiter::effective_max_chars(options.max_chars, &env);
     limiters.add(MaxCharsCommandSizeLimiter::new(effective_max_chars));
     limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
 
@@ -1292,7 +1293,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             max_arg_size,
         ))
     } else {
-        Box::new(WhitespaceDelimitedArgumentReader::new(args_file, max_arg_size))
+        Box::new(WhitespaceDelimitedArgumentReader::new(
+            args_file,
+            max_arg_size,
+        ))
     };
 
     if let Some(eof_delimiter) = options.eof_delimiter {
@@ -1567,16 +1571,19 @@ mod tests {
 
     #[test]
     fn test_whitespace_delimited_reader() {
-        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"abc "),
-            Chunk::Data(b" def"),
-            Chunk::Data(b"\nghi\t\tj"),
-            Chunk::Data(b"kl\n"),
-            Chunk::Data(b"mn"),
-            Chunk::Error(io::ErrorKind::Interrupted),
-            Chunk::Data(b"\\\t\\ o 'ab"),
-            Chunk::Data(b" \"' \"xy' z\""),
-        ]), usize::MAX);
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![
+                Chunk::Data(b"abc "),
+                Chunk::Data(b" def"),
+                Chunk::Data(b"\nghi\t\tj"),
+                Chunk::Data(b"kl\n"),
+                Chunk::Data(b"mn"),
+                Chunk::Error(io::ErrorKind::Interrupted),
+                Chunk::Data(b"\\\t\\ o 'ab"),
+                Chunk::Data(b" \"' \"xy' z\""),
+            ]),
+            usize::MAX,
+        );
 
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("def"));
@@ -1651,17 +1658,19 @@ mod tests {
     fn test_eof_argument_reader() {
         let filter = String::from("def");
 
-        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
-            b"abc def ghi",
-        )]), usize::MAX);
+        let reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"abc def ghi")]),
+            usize::MAX,
+        );
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap(), None);
         assert_eq!(wrapper.next().unwrap(), None);
 
-        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
-            b"abc define undef undefined ghi",
-        )]), usize::MAX);
+        let reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"abc define undef undefined ghi")]),
+            usize::MAX,
+        );
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("define"));
@@ -1670,15 +1679,18 @@ mod tests {
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
         assert_eq!(wrapper.next().unwrap(), None);
 
-        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"abc "),
-            Chunk::Error(io::ErrorKind::Interrupted),
-            Chunk::Data(b"deF "),
-            Chunk::Error(io::ErrorKind::BrokenPipe),
-            Chunk::Data(b"ghi "),
-            Chunk::Data(b"def "),
-            Chunk::Error(io::ErrorKind::BrokenPipe),
-        ]), usize::MAX);
+        let reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![
+                Chunk::Data(b"abc "),
+                Chunk::Error(io::ErrorKind::Interrupted),
+                Chunk::Data(b"deF "),
+                Chunk::Error(io::ErrorKind::BrokenPipe),
+                Chunk::Data(b"ghi "),
+                Chunk::Data(b"def "),
+                Chunk::Error(io::ErrorKind::BrokenPipe),
+            ]),
+            usize::MAX,
+        );
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
@@ -1727,10 +1739,7 @@ mod tests {
             8,
         );
         let mut reader = reader;
-        assert!(matches!(
-            reader.next(),
-            Err(XargsError::ArgumentTooLarge),
-        ));
+        assert!(matches!(reader.next(), Err(XargsError::ArgumentTooLarge),));
     }
 
     #[test]
@@ -1743,10 +1752,7 @@ mod tests {
             8,
         );
         let mut reader = reader;
-        assert!(matches!(
-            reader.next(),
-            Err(XargsError::ArgumentTooLarge),
-        ));
+        assert!(matches!(reader.next(), Err(XargsError::ArgumentTooLarge),));
     }
 
     #[test]
