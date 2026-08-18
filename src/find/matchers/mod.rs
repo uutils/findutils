@@ -706,6 +706,7 @@ fn build_matcher_tree(
                 if expression == "-okdir" {
                     check_path_for_relative_entries(expression)?;
                 }
+                config.interactive_exec = true;
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
