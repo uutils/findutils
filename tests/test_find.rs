@@ -280,6 +280,48 @@ fn files0_streams_before_invalid_utf8() {
         .stderr_contains("invalid utf-8 sequence");
 }
 
+/// Both the starting points and the answers to the prompts would be read from
+/// stdin, so GNU find rejects the combination up front (bfs `gnu/*_ok` tests).
+#[test]
+fn files0_stdin_with_ok_is_rejected() {
+    // No pipe_in(): find must reject the combination before reading anything,
+    // so feeding it input would just race the exit and break the pipe.
+    for action in ["-ok", "-okdir"] {
+        ucmd()
+            .args(&["-files0-from", "-", action, "echo", "{}", ";"])
+            .fails()
+            .no_stdout()
+            .stderr_contains(
+                "option -files0-from reading from standard input cannot be combined \
+                 with -ok, -okdir",
+            );
+    }
+}
+
+/// Reading the starting points from a file leaves stdin free for the prompts,
+/// so the combination is allowed.
+#[test]
+fn files0_file_with_ok_is_allowed() {
+    let temp_dir = Builder::new().prefix("find_files0_ok_").tempdir().unwrap();
+    let starting_points = temp_dir.path().join("starting_points");
+    fs::write(&starting_points, b"./test_data/simple\0").unwrap();
+
+    ucmd()
+        .args(&[
+            "-files0-from",
+            &starting_points.display().to_string(),
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        // Declined, so nothing is run and every entry is consumed.
+        .pipe_in(b"n\n" as &[u8])
+        .succeeds()
+        .no_stdout()
+        .stderr_contains("< echo ... ./test_data/simple > ?");
+}
+
 /// -execdir/-okdir chdir into the directory being scanned, so a relative $PATH
 /// entry would resolve there; GNU find refuses to run at all.
 #[cfg(unix)]
