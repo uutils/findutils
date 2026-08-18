@@ -34,7 +34,7 @@ mod user;
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
-use self::exec::{MultiExecMatcher, SingleExecMatcher};
+use self::exec::{check_path_for_relative_entries, MultiExecMatcher, SingleExecMatcher};
 use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
@@ -656,6 +656,9 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let expression = args[i];
+                if expression == "-execdir" {
+                    check_path_for_relative_entries(expression)?;
+                }
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
@@ -696,6 +699,9 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 let expression = args[i];
+                if expression == "-okdir" {
+                    check_path_for_relative_entries(expression)?;
+                }
                 let executable = args[i + 1];
                 let exec_args = &args[i + 2..arg_index];
                 i = arg_index;
