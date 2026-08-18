@@ -1297,6 +1297,40 @@ fn find_ls_unmapped_owner_renders_numeric_id() {
 }
 
 #[test]
+fn find_mindepth_greater_than_maxdepth() {
+    ucmd()
+        .args(&["./test_data/depth", "-mindepth", "2", "-maxdepth", "1"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+fn find_maxdepth_less_than_mindepth_reversed_order() {
+    ucmd()
+        .args(&["./test_data/depth", "-maxdepth", "1", "-mindepth", "2"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+fn find_mindepth_greater_than_maxdepth_depth_first() {
+    ucmd()
+        .args(&[
+            "./test_data/depth",
+            "-mindepth",
+            "2",
+            "-maxdepth",
+            "1",
+            "-depth",
+        ])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
 #[cfg(unix)]
 fn find_slashes() {
     ucmd()
