@@ -158,6 +158,18 @@ fn size_rejects_non_numeric_prefix() {
 }
 
 #[test]
+fn depth_rejects_signed_value() {
+    // A signed depth like "+1" is rejected, matching GNU find.
+    for opt in ["-maxdepth", "-mindepth"] {
+        ucmd()
+            .args(&["./test_data", opt, "+1"])
+            .fails()
+            .stderr_contains("positive decimal integer argument");
+        ucmd().args(&["./test_data", opt, "1"]).succeeds();
+    }
+}
+
+#[test]
 fn multiple_matcher_failure() {
     ucmd()
         .args(&["-type", "fd", "-name", "abbb"])

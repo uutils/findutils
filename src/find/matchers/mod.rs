@@ -307,8 +307,10 @@ fn convert_arg_to_number(
     option_name: &str,
     value_as_string: &str,
 ) -> Result<usize, Box<dyn Error>> {
+    // Only accept plain decimal digits. Rust's `usize::from_str` also accepts a
+    // leading '+', but GNU find rejects a signed value like "+1" here.
     match value_as_string.parse::<usize>() {
-        Ok(val) => Ok(val),
+        Ok(val) if value_as_string.bytes().all(|b| b.is_ascii_digit()) => Ok(val),
         _ => Err(From::from(format!(
             "Expected a positive decimal integer argument to {option_name}, but got \
              `{value_as_string}'"
