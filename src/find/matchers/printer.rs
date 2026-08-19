@@ -129,7 +129,7 @@ mod tests {
         let dev_full = File::open("/dev/full").unwrap();
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
 
-        let matcher = Printer::new(PrintDelimiter::Newline, Some(dev_full));
+        let matcher = Printer::new(PrintDelimiter::Newline, Some(Rc::new(dev_full)));
         let deps = FakeDependencies::new();
 
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
