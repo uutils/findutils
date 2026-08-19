@@ -1614,3 +1614,63 @@ fn find_exits_cleanly_on_broken_pipe() {
         "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
     );
 }
+
+// GNU find emits a warning when a -name/-iname pattern contains a directory
+// separator (it matches basenames only, so the pattern can never match) and
+// when a -path/-wholename pattern ends with '/'. find should warn on stderr
+// but still exit successfully. See issue #783.
+#[test]
+fn name_pattern_with_separator_warns() {
+    ucmd()
+        .args(&["-name", "a/b"])
+        .succeeds()
+        .stderr_contains("'-name' matches against basenames only")
+        .stderr_contains("directory separator ('/')")
+        .stderr_contains("Did you mean '-wholename'?");
+
+    ucmd()
+        .args(&["-iname", "a/b"])
+        .succeeds()
+        .stderr_contains("'-iname' matches against basenames only");
+}
+
+#[test]
+fn path_pattern_ending_with_separator_warns() {
+    ucmd()
+        .args(&["-path", "a/"])
+        .succeeds()
+        .stderr_contains("-path a/ will not match anything because it ends with /.");
+
+    ucmd()
+        .args(&["-wholename", "a/"])
+        .succeeds()
+        .stderr_contains("-wholename a/ will not match anything because it ends with /.");
+
+    ucmd()
+        .args(&["-ipath", "a/"])
+        .succeeds()
+        .stderr_contains("-ipath a/ will not match anything because it ends with /.");
+}
+
+#[test]
+fn name_pattern_without_separator_does_not_warn() {
+    ucmd().args(&["-name", "a.txt"]).succeeds().no_stderr();
+    ucmd().args(&["-path", "a.txt"]).succeeds().no_stderr();
+    ucmd().args(&["-wholename", "a.txt"]).succeeds().no_stderr();
+}
+
+// A pattern made up only of '/' (e.g. `-name /` or `-path /`) is a legitimate
+// way to match the root entry, so it must NOT trigger the separator warning
+// (GNU itself gets this wrong — bug #62227). Covers the existing `find_slashes`
+// behavior.
+#[test]
+fn all_slash_pattern_does_not_warn() {
+    ucmd()
+        .args(&["///", "-maxdepth", "0", "-name", "/"])
+        .succeeds()
+        .no_stderr();
+    ucmd()
+        .args(&["/", "-maxdepth", "0", "-path", "/"])
+        .succeeds()
+        .no_stderr();
+}
