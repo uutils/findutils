@@ -65,7 +65,6 @@ use ls::Ls;
 use std::{
     error::Error,
     fs::{File, Metadata},
-    io::Read,
     path::{Path, PathBuf},
     rc::Rc,
     str::FromStr,
