@@ -1605,8 +1605,10 @@ mod tests {
             &b"aaa \nbbb\n"[..],
             &b"aaa \nbbb \n \t \n"[..],
         ] {
-            let mut reader =
-                WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(input)]));
+            let mut reader = WhitespaceDelimitedArgumentReader::new(
+                ChunkReader::new(vec![Chunk::Data(input)]),
+                usize::MAX,
+            );
             assert_eq!(reader.next().unwrap().unwrap().arg, "aaa", "{input:?}");
             assert_eq!(reader.next().unwrap().unwrap().arg, "bbb", "{input:?}");
             assert_eq!(reader.next().unwrap(), None, "{input:?}");
@@ -1614,21 +1616,28 @@ mod tests {
 
         // Blanks are only a soft terminator, so the newline that follows them
         // does not end the logical line (this matters for -L).
-        let mut reader =
-            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b"aaa \n")]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"aaa \n")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("aaa"));
         assert_eq!(reader.next().unwrap(), None);
 
-        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"aaa  "),
-            Chunk::Error(io::ErrorKind::Interrupted),
-            Chunk::Data(b" \t "),
-        ]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![
+                Chunk::Data(b"aaa  "),
+                Chunk::Error(io::ErrorKind::Interrupted),
+                Chunk::Data(b" \t "),
+            ]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("aaa"));
         assert_eq!(reader.next().unwrap(), None);
 
-        let mut reader =
-            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b" \n\t\n")]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b" \n\t\n")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap(), None);
     }
 
@@ -1636,10 +1645,10 @@ mod tests {
     fn test_whitespace_delimited_reader_quoted_empty_arguments() {
         // Quotes start an argument even when they contribute no bytes, so an
         // empty quoted string is a real (empty) argument.
-        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"'' x \"\"\n"),
-            Chunk::Data(b"y ''\n"),
-        ]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"'' x \"\"\n"), Chunk::Data(b"y ''\n")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft(""));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("x"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
@@ -1648,8 +1657,10 @@ mod tests {
         assert_eq!(reader.next().unwrap(), None);
 
         // ...but an unterminated one at end of input is dropped, as GNU does.
-        let mut reader =
-            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b"x ''")]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"x ''")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("x"));
         assert_eq!(reader.next().unwrap(), None);
     }
