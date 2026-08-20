@@ -1241,6 +1241,36 @@ fn find_fprinter() {
 }
 
 #[test]
+fn find_output_actions_share_same_file() {
+    let temp_dir = Builder::new()
+        .prefix("find_shared_output_")
+        .tempdir()
+        .unwrap();
+    let search_path = temp_dir.path().join("search");
+    fs::create_dir(&search_path).unwrap();
+    let out_file = temp_dir.path().join("output");
+    let search_path_str = search_path.to_str().unwrap();
+    let out_file_str = out_file.to_str().unwrap();
+
+    ucmd()
+        .args(&[
+            search_path_str,
+            "-maxdepth",
+            "0",
+            "-fprintf",
+            out_file_str,
+            "%p\n",
+            "-fprint0",
+            out_file_str,
+        ])
+        .succeeds()
+        .no_output();
+
+    let expected = format!("{search_path_str}\n{search_path_str}\0").into_bytes();
+    assert_eq!(fs::read(out_file).unwrap(), expected);
+}
+
+#[test]
 fn find_follow() {
     ucmd()
         .args(&["test_data/links/link-f", "-follow"])
