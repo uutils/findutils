@@ -59,7 +59,7 @@ use self::time::{
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
 use ::regex::Regex;
-use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
 use std::{
@@ -372,6 +372,13 @@ fn convert_arg_to_comparable_value_and_suffix(
 /// When (time) is not provided, it will be automatically filled in as 00:00:00
 /// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
 fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
+    if let Ok(datetime) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S") {
+        return Some(datetime.and_utc().timestamp_millis());
+    }
+    if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+        return Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp_millis());
+    }
+
     let regex_pattern =
         r"^(?P<month_day>\w{3} \d{2})?(?:, (?P<year>\d{4}))?(?: (?P<time>\d{2}:\d{2}:\d{2}))?$";
     let re = Regex::new(regex_pattern);
@@ -1824,6 +1831,16 @@ mod tests {
 
         // A year of non-ASCII decimal digits must be rejected, not panic.
         assert_eq!(parse_date_str_to_timestamps("jan 01, ٠٠٠٠"), None);
+
+        // ISO 8601 date and date-time, as accepted by GNU find.
+        assert_eq!(
+            parse_date_str_to_timestamps("2025-01-01"),
+            Some(1_735_689_600_000)
+        );
+        assert_eq!(
+            parse_date_str_to_timestamps("2025-01-01 00:00:01"),
+            Some(1_735_689_601_000)
+        );
     }
 
     #[test]

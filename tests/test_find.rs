@@ -1046,7 +1046,12 @@ fn find_newer_xy() {
         "-newerct",
         "-newermt",
     ];
-    let times = ["jan 01, 2000", "jan 01, 2000 00:00:00"];
+    let times = [
+        "jan 01, 2000",
+        "jan 01, 2000 00:00:00",
+        "2000-01-01",
+        "2000-01-01 00:00:00",
+    ];
 
     for arg in args {
         for time in times {
