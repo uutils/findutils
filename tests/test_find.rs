@@ -792,6 +792,21 @@ fn find_perm() {
 
 #[cfg(unix)]
 #[test]
+fn find_perm_plus_octal_is_rejected() {
+    // GNU find rejects the deprecated `-perm +MODE` octal form; only symbolic
+    // modes may follow a leading `+`.
+    ucmd()
+        .args(&["-perm", "+644"])
+        .fails()
+        .stderr_contains("invalid mode '+644'");
+    ucmd()
+        .args(&["-perm", "+0"])
+        .fails()
+        .stderr_contains("invalid mode '+0'");
+}
+
+#[cfg(unix)]
+#[test]
 fn find_inum() {
     use std::os::unix::fs::MetadataExt;
 
