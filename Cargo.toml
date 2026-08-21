@@ -124,7 +124,6 @@ implicit_hasher = "allow"
 doc_link_with_quotes = "allow"
 format_push_string = "allow"
 flat_map_option = "allow"
-from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
 # Disable for now, we have a few occurrences
 # panic = "warn"
