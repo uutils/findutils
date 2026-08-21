@@ -181,6 +181,8 @@ fn multiple_matcher_failure() {
         .args(&["-type", "f,", "-name", "abbb"])
         .fails()
         .stderr_contains("list is ending on: ','")
+        // GNU prints a single "find: " prefix; the message must not double it.
+        .stderr_does_not_contain("find: find:")
         .no_stdout();
 
     ucmd()
@@ -212,6 +214,7 @@ fn multiple_matcher_failure() {
         .args(&["-xtype", "f,", "-name", "abbb"])
         .fails()
         .stderr_contains("list is ending on: ','")
+        .stderr_does_not_contain("find: find:")
         .no_stdout();
 
     ucmd()
