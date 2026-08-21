@@ -53,6 +53,13 @@ mod parsing {
     }
 
     pub fn parse_mode(pattern: &str, for_dir: bool) -> Result<u32, Box<dyn Error>> {
+        // GNU rejects the old `-perm +MODE` octal form; a leading + needs a symbolic mode.
+        if let Some(rest) = pattern.strip_prefix('+') {
+            if rest.contains(|c: char| c.is_ascii_digit()) {
+                return Err(From::from(format!("invalid mode '+{rest}'")));
+            }
+        }
+
         let mode = if pattern.contains(|c: char| c.is_ascii_digit()) {
             parse_numeric(0, pattern, for_dir)?
         } else {
