@@ -70,6 +70,8 @@ impl FromStr for RegexType {
             "posix-extended" => Ok(Self::PosixExtended),
             // ed and sed are the same as posix-basic
             "ed" | "sed" => Ok(Self::PosixBasic),
+            // egrep and posix-egrep are the same as posix-extended
+            "egrep" | "posix-egrep" => Ok(Self::PosixExtended),
             _ => Err(ParseRegexTypeError(s.to_owned())),
         }
     }
@@ -221,5 +223,18 @@ mod tests {
         .unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+    }
+
+    #[test]
+    fn egrep_aliases_map_to_posix_extended() {
+        // GNU accepts egrep and posix-egrep as names for the extended syntax.
+        assert_eq!(
+            "egrep".parse::<RegexType>().unwrap(),
+            RegexType::PosixExtended
+        );
+        assert_eq!(
+            "posix-egrep".parse::<RegexType>().unwrap(),
+            RegexType::PosixExtended
+        );
     }
 }
