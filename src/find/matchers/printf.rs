@@ -21,6 +21,45 @@ use std::os::unix::prelude::MetadataExt;
 #[cfg(unix)]
 const STANDARD_BLOCK_SIZE: u64 = 512;
 
+/// Formats `value` the way C's `printf("%g", value)` would.
+///
+/// GNU find prints `%S` with `%g`, so a ratio of exactly 2048 comes out as
+/// `2048` rather than `2048.0`, and 512*8/6 as `682.667` rather than `682.7`.
+#[cfg(unix)]
+fn format_g(value: f64) -> String {
+    /// The default precision of `%g`, in significant digits.
+    const PRECISION: i32 = 6;
+
+    fn trim(s: &str) -> &str {
+        match s.split_once('.') {
+            Some(_) => s.trim_end_matches('0').trim_end_matches('.'),
+            None => s,
+        }
+    }
+
+    if !value.is_finite() || value == 0.0 {
+        return format!("{value}");
+    }
+
+    // Round to PRECISION significant digits first, so that a value such as
+    // 999999.9 picks the exponent of its rounded form (1e6) like %g does.
+    let exponent = format!("{:.*e}", (PRECISION - 1) as usize, value)
+        .split_once('e')
+        .and_then(|(_, exp)| exp.parse::<i32>().ok())
+        .unwrap_or(0);
+
+    if (-4..PRECISION).contains(&exponent) {
+        let decimals = (PRECISION - 1 - exponent).max(0) as usize;
+        trim(&format!("{value:.decimals$}")).to_string()
+    } else {
+        let formatted = format!("{:.*e}", (PRECISION - 1) as usize, value);
+        let (mantissa, exp) = formatted.split_once('e').unwrap_or((&formatted, "0"));
+        let exp: i32 = exp.parse().unwrap_or(0);
+        let sign = if exp < 0 { '-' } else { '+' };
+        format!("{}e{}{:02}", trim(mantissa), sign, exp.abs())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Justify {
     Left,
@@ -524,21 +563,17 @@ fn format_directive<'entry>(
         FormatDirective::Size => meta()?.len().to_string().into(),
 
         #[cfg(not(unix))]
-        FormatDirective::Sparseness => "1.0".into(),
+        FormatDirective::Sparseness => "1".into(),
         #[cfg(unix)]
         FormatDirective::Sparseness => {
             let meta = meta()?;
 
             if meta.len() > 0 {
-                format!(
-                    "{:.1}",
-                    // GNU find hardcodes a block size of 512 bytes, regardless
-                    // of the true filesystem block size.
-                    (meta.blocks() * STANDARD_BLOCK_SIZE) as f64 / (meta.len() as f64)
-                )
-                .into()
+                // GNU find hardcodes a block size of 512 bytes, regardless
+                // of the true filesystem block size.
+                format_g((meta.blocks() * STANDARD_BLOCK_SIZE) as f64 / (meta.len() as f64)).into()
             } else {
-                "1.0".into()
+                "1".into()
             }
         }
 
@@ -687,6 +722,28 @@ mod tests {
     use tempfile::Builder;
 
     use super::*;
+
+    /// Expected values come from C's `printf("%g", value)` (glibc, LC_ALL=C).
+    #[cfg(unix)]
+    #[test]
+    fn format_g_matches_c_printf() {
+        for (value, expected) in [
+            (0.0, "0"),
+            (1.0, "1"),
+            (12.0, "12"),
+            (2048.0, "2048"),
+            (0.125, "0.125"),
+            (0.5, "0.5"),
+            (512.0 * 8.0 / 3.0, "1365.33"),
+            (512.0 * 8.0 / 6.0, "682.667"),
+            (0.0001, "0.0001"),
+            (0.00001, "1e-05"),
+            (999_999.9_f64, "1e+06"),
+            (1_234_567.0_f64, "1.23457e+06"),
+        ] {
+            assert_eq!(format_g(value), expected, "%g of {value}");
+        }
+    }
     use crate::find::matchers::tests::get_dir_entry_for;
     use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
