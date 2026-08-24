@@ -1662,8 +1662,11 @@ fn name_pattern_without_separator_does_not_warn() {
 // A pattern made up only of '/' (e.g. `-name /` or `-path /`) is a legitimate
 // way to match the root entry, so it must NOT trigger the separator warning
 // (GNU itself gets this wrong — bug #62227). Covers the existing `find_slashes`
-// behavior.
+// behavior. Unix-only: `///` and `/` as starting points are root paths on Unix;
+// on Windows `///` is not a valid path (os error 161), so the case is exercised
+// only on Unix, matching the `find_slashes` test above.
 #[test]
+#[cfg(unix)]
 fn all_slash_pattern_does_not_warn() {
     ucmd()
         .args(&["///", "-maxdepth", "0", "-name", "/"])
