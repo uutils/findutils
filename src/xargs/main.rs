@@ -5,7 +5,21 @@
 // https://opensource.org/licenses/MIT.
 
 fn main() {
-    let args = std::env::args().collect::<Vec<String>>();
+    // `std::env::args` panics on a non-UTF-8 argument, so read the arguments
+    // with `args_os` and report the first invalid one instead of aborting.
+    let args = match std::env::args_os()
+        .map(std::ffi::OsString::into_string)
+        .collect::<Result<Vec<String>, _>>()
+    {
+        Ok(args) => args,
+        Err(invalid) => {
+            eprintln!(
+                "xargs: invalid (non-UTF-8) argument: {}",
+                invalid.to_string_lossy()
+            );
+            std::process::exit(1);
+        }
+    };
     std::process::exit(findutils::xargs::xargs_main(
         &args
             .iter()

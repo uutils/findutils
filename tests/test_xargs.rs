@@ -601,3 +601,17 @@ fn xargs_arg_file_missing_strips_errno() {
         .stderr_contains(MISSING)
         .stderr_str_check(|s| !s.contains("(os error"));
 }
+
+#[cfg(unix)]
+#[test]
+fn xargs_non_utf8_argument_is_rejected_gracefully() {
+    // A non-UTF-8 argument must produce a clean error, not a panic in
+    // std::env::args.
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    ucmd()
+        .arg(OsString::from_vec(vec![b'-', b'I', 0xff]))
+        .fails_with_code(1)
+        .stderr_contains("non-UTF-8")
+        .no_stdout();
+}
