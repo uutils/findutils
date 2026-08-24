@@ -323,3 +323,41 @@ fn test_locate_one_byte_db() {
         .assert()
         .code(1);
 }
+
+#[cfg(unix)]
+#[test]
+fn test_locate_non_utf8_argument() {
+    // A non-UTF-8 argument must produce a clean error, not a panic in
+    // std::env::args.
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .arg(OsString::from_vec(vec![0xff]))
+        .assert()
+        .code(1);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("non-UTF-8"),
+        "expected an error naming the invalid argument, got: {stderr:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_updatedb_non_utf8_argument() {
+    // A non-UTF-8 argument must produce a clean error, not a panic in
+    // std::env::args.
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let assert = Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .arg(OsString::from_vec(vec![0xff]))
+        .assert()
+        .code(1);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("non-UTF-8"),
+        "expected an error naming the invalid argument, got: {stderr:?}"
+    );
+}
