@@ -276,10 +276,24 @@ fn process_dir(
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
 ) -> i32 {
+    // walkdir clamps min_depth down to max_depth, which would turn an
+    // impossible range such as `-mindepth 3 -maxdepth 1` into `-mindepth 1
+    // -maxdepth 1` and wrongly match. GNU find matches nothing in that case,
+    // but still reports errors for the starting point, so walk the root only
+    // and discard whatever it yields.
+    let impossible_depth_range = config.min_depth > config.max_depth;
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
-        .max_depth(config.max_depth)
-        .min_depth(config.min_depth)
+        .max_depth(if impossible_depth_range {
+            0
+        } else {
+            config.max_depth
+        })
+        .min_depth(if impossible_depth_range {
+            0
+        } else {
+            config.min_depth
+        })
         .same_file_system(config.same_file_system)
         .follow_links(config.follow == Follow::Always)
         .follow_root_links(config.follow != Follow::Never);
@@ -301,6 +315,7 @@ fn process_dir(
                 ret = 1;
                 writeln!(&mut stderr(), "Error: {err}").unwrap();
             }
+            Ok(_) if impossible_depth_range => {}
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
 
@@ -860,6 +875,21 @@ mod tests {
                  ./test_data/depth/1/2/f2\n"
             )
         );
+    }
+
+    #[test]
+    fn find_mindepth_greater_than_maxdepth() {
+        // An impossible depth range matches nothing, as in GNU find.
+        let path = fix_up_slashes("./test_data/depth");
+        for depth_first in [&[][..], &["-depth"][..]] {
+            let deps = FakeDependencies::new();
+            let mut args = vec!["find", &path, "-sorted", "-mindepth", "3", "-maxdepth", "1"];
+            args.extend_from_slice(depth_first);
+            let rc = find_main(&args, &deps);
+
+            assert_eq!(rc, 0);
+            assert_eq!(deps.get_output_as_string(), "");
+        }
     }
 
     #[test]
