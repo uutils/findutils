@@ -810,6 +810,16 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_multibyte_char_after_directive() {
+        assert_eq!(
+            FormatString::parse("%€").unwrap().components,
+            vec![FormatComponent::Literal("€".to_owned())]
+        );
+        assert!(FormatString::parse("\\€").is_err());
+        assert!(FormatString::parse("%A€").is_err());
+    }
+
+    #[test]
     fn test_parse_formatting() {
         fn unaligned_directive(directive: FormatDirective) -> FormatComponent {
             FormatComponent::Directive {
