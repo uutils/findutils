@@ -456,6 +456,68 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
     Ok(file)
 }
 
+/// A "global option" (GNU find's term) applies to the whole command instead
+/// of a specific test, so unlike a test it takes effect no matter where in
+/// the expression it appears; `-maxdepth` after `-type f`, for instance,
+/// still limits the depth of every path find visits, not just descendants of
+/// paths matching `-type f`. GNU find warns when one appears after a test, as
+/// implemented by `warn_if_global_option_follows_test` below.
+fn is_global_option(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-d" | "-depth"
+            | "-files0-from"
+            | "-help"
+            | "--help"
+            | "-maxdepth"
+            | "-mindepth"
+            | "-mount"
+            | "-xdev"
+            | "-noleaf"
+            | "-sorted"
+            | "-version"
+            | "--version"
+    )
+}
+
+fn is_testing_criterion(argument: &str) -> bool {
+    !is_global_option(argument)
+        && !matches!(
+            argument,
+            "-daystart"
+                | "-follow"
+                | "-regextype"
+                | "-warn"
+                | "-nowarn"
+                | "-not"
+                | "!"
+                | "-and"
+                | "-a"
+                | "-or"
+                | "-o"
+                | ","
+                | "("
+                | ")"
+        )
+}
+
+fn is_warnable_global_option(argument: &str) -> bool {
+    is_global_option(argument) && !matches!(argument, "-help" | "--help" | "-version" | "--version")
+}
+
+fn warn_if_global_option_follows_test(argument: &str, config: &Config) {
+    if config.warnings_enabled && is_warnable_global_option(argument) {
+        if let Some(previous) = &config.last_non_option {
+            eprintln!(
+                "find: warning: you have specified the global option {argument} after the argument \
+                 {previous}, but global options are not positional, i.e., {argument} \
+                 affects tests specified before it as well as those specified after it.  Please \
+                 specify global options before other arguments."
+            );
+        }
+    }
+}
+
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -477,7 +539,9 @@ fn build_matcher_tree(
     let mut i = arg_index;
     let mut invert_next_matcher = false;
     while i < args.len() {
-        let possible_submatcher = match args[i] {
+        let argument = args[i];
+        warn_if_global_option_follows_test(argument, config);
+        let possible_submatcher = match argument {
             "-print" => Some(Printer::new(PrintDelimiter::Newline, None).into_box()),
             "-print0" => Some(Printer::new(PrintDelimiter::Null, None).into_box()),
             "-printf" => {
@@ -924,17 +988,14 @@ fn build_matcher_tree(
                 Some(TrueMatcher.into_box())
             }
             "-d" | "-depth" => {
-                // TODO add warning if it appears after actual testing criterion
                 config.depth_first = true;
                 Some(TrueMatcher.into_box())
             }
             "-mount" | "-xdev" => {
-                // TODO add warning if it appears after actual testing criterion
                 config.same_file_system = true;
                 Some(TrueMatcher.into_box())
             }
             "-sorted" => {
-                // TODO add warning if it appears after actual testing criterion
                 config.sorted_output = true;
                 Some(TrueMatcher.into_box())
             }
@@ -961,6 +1022,14 @@ fn build_matcher_tree(
             "-version" | "--version" => {
                 config.version_requested = true;
                 None
+            }
+            "-warn" => {
+                config.warnings_enabled = true;
+                Some(TrueMatcher.into_box())
+            }
+            "-nowarn" => {
+                config.warnings_enabled = false;
+                Some(TrueMatcher.into_box())
             }
             "-files0-from" => {
                 if i >= args.len() - 1 {
@@ -1022,6 +1091,9 @@ fn build_matcher_tree(
             } else {
                 top_level_matcher.new_and_condition(submatcher);
             }
+        }
+        if is_testing_criterion(argument) {
+            config.last_non_option = Some(argument.to_string());
         }
     }
     if expecting_bracket {
