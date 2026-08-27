@@ -1634,3 +1634,23 @@ fn find_exits_cleanly_on_broken_pipe() {
         "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
     );
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn files0_from_special_file_read_error() {
+    for path in &["/dev/vhost-net", "/dev/vhost-vsock"] {
+        if !Path::new(path).exists() {
+            continue;
+        }
+
+        let file_list_failure = ucmd().arg("-files0-from").arg(path).fails();
+
+        let error_output = file_list_failure.no_stdout().stderr_str();
+        assert!(
+            error_output.contains("read error")
+                || (error_output.contains("cannot open")
+                    && error_output.contains("Permission denied")),
+            "unexpected stderr for {path}: {error_output}"
+        );
+    }
+}
