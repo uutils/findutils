@@ -235,9 +235,22 @@ impl MaxCharsCommandSizeLimiter {
     /// kernel additionally charges the argv/envp pointers (since Linux commit
     /// 98da7d08850f) against the limit, which are not part of the character
     /// count. An explicit -s can still go beyond this, up to the system limit.
-    fn new_default(env: &HashMap<OsString, OsString>) -> Self {
+    /// The effective per-command-line character budget that the size limiters
+    /// enforce: the smaller of the user-specified (or default) `-s` value and
+    /// the system `ARG_MAX`-derived limit (which is always added). Used to
+    /// derive a bound on a single accumulated argument so the reader cannot
+    /// grow it without limit on an unterminated input such as `/dev/full`.
+    fn effective_max_chars(
+        options_max_chars: Option<usize>,
+        env: &HashMap<OsString, OsString>,
+    ) -> usize {
         const DEFAULT_MAX_CHARS: usize = 128 * 1024;
-        Self::new(Self::new_system(env).max_chars.min(DEFAULT_MAX_CHARS))
+        let system = Self::new_system(env).max_chars;
+        if let Some(user) = options_max_chars {
+            user.min(system)
+        } else {
+            DEFAULT_MAX_CHARS.min(system)
+        }
     }
 
     #[cfg(not(any(unix, windows)))]
@@ -549,22 +562,34 @@ impl CommandBuilder<'_> {
 }
 
 trait ArgumentReader {
-    fn next(&mut self) -> io::Result<Option<Argument>>;
+    fn next(&mut self) -> Result<Option<Argument>, XargsError>;
 }
+
+/// A single accumulated argument may not grow without bound: an input that
+/// never produces a delimiter (e.g. reading from `/dev/full`, which yields an
+/// infinite stream of NUL bytes) would otherwise make the reader accumulate
+/// forever until the process is OOM-killed. We therefore cap how many bytes a
+/// single argument may accumulate before declaring it too large, mirroring
+/// GNU xargs' "argument line too long" error. The cap is generously sized (a
+/// multiple of the configured command-line character budget) so that no
+/// argument the size limiters would accept can ever be rejected here.
+const ARG_SIZE_OVERFLOW_MULTIPLIER: usize = 4;
 
 struct WhitespaceDelimitedArgumentReader<R: Read> {
     rd: R,
     pending: Vec<u8>,
+    max_arg_size: usize,
 }
 
 impl<R> WhitespaceDelimitedArgumentReader<R>
 where
     R: Read,
 {
-    fn new(rd: R) -> Self {
+    fn new(rd: R, max_arg_size: usize) -> Self {
         Self {
             rd,
             pending: vec![],
+            max_arg_size,
         }
     }
 }
@@ -573,7 +598,7 @@ impl<R> ArgumentReader for WhitespaceDelimitedArgumentReader<R>
 where
     R: Read,
 {
-    fn next(&mut self) -> io::Result<Option<Argument>> {
+    fn next(&mut self) -> Result<Option<Argument>, XargsError> {
         enum Escape {
             Slash,
             Quote(u8),
@@ -600,16 +625,16 @@ where
                     match self.rd.read(&mut pending[..]) {
                         Ok(bytes_read) => break bytes_read,
                         Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                        Err(e) => return Err(e),
+                        Err(e) => return Err(XargsError::from(e)),
                     }
                 };
 
                 if bytes_read == 0 {
                     if let Some(Escape::Quote(q)) = &escape {
-                        return Err(io::Error::new(
+                        return Err(XargsError::from(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!("Unterminated quote: {q}"),
-                        ));
+                        )));
                     }
                     // Anything we skipped over was a delimiter, not an
                     // argument, so there is nothing left to emit.
@@ -652,6 +677,14 @@ where
             }
 
             i += 1;
+
+            // Guard against an input that never produces a delimiter (such as
+            // `/dev/full`, which supplies an endless stream of NUL bytes): if
+            // a single argument grows past the configured size budget, error
+            // out instead of accumulating until the process is OOM-killed.
+            if result.len() > self.max_arg_size {
+                return Err(XargsError::ArgumentTooLarge);
+            }
         }
 
         if i < pending.len() {
@@ -672,16 +705,18 @@ where
 struct ByteDelimitedArgumentReader<R: Read> {
     rd: BufReader<R>,
     delimiter: u8,
+    max_arg_size: usize,
 }
 
 impl<R> ByteDelimitedArgumentReader<R>
 where
     R: Read,
 {
-    fn new(rd: R, delimiter: u8) -> Self {
+    fn new(rd: R, delimiter: u8, max_arg_size: usize) -> Self {
         Self {
             rd: BufReader::new(rd),
             delimiter,
+            max_arg_size,
         }
     }
 }
@@ -690,10 +725,45 @@ impl<R> ArgumentReader for ByteDelimitedArgumentReader<R>
 where
     R: Read,
 {
-    fn next(&mut self) -> io::Result<Option<Argument>> {
+    fn next(&mut self) -> Result<Option<Argument>, XargsError> {
         Ok(loop {
             let mut buf = vec![];
-            let bytes_read = self.rd.read_until(self.delimiter, &mut buf)?;
+            // Bounded replacement for `BufReader::read_until`: the library
+            // helper would loop forever (and grow `buf` without bound) on an
+            // input that never yields the delimiter, such as `/dev/full`
+            // (endless NUL bytes) with a non-NUL delimiter. Drive the buffered
+            // reader by hand so we can cap how large a single argument may
+            // grow before declaring it too large.
+            loop {
+                // `fill_buf` surfaces `Interrupted` to the caller (unlike
+                // `read_until`, which retried internally); retry here so a
+                // transient `Interrupted` read does not abort the argument.
+                let available = loop {
+                    match self.rd.fill_buf() {
+                        Ok(b) => break b,
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                        Err(e) => return Err(XargsError::from(e)),
+                    }
+                };
+                if available.is_empty() {
+                    break;
+                }
+                let pos = available.iter().position(|&b| b == self.delimiter);
+                let take = match pos {
+                    Some(i) => i + 1,
+                    None => available.len(),
+                };
+                buf.extend_from_slice(&available[..take]);
+                self.rd.consume(take);
+                if buf.len() > self.max_arg_size {
+                    return Err(XargsError::ArgumentTooLarge);
+                }
+                if pos.is_some() {
+                    break;
+                }
+            }
+
+            let bytes_read = buf.len();
             if bytes_read > 0 {
                 let need_to_trim_delimiter = buf[buf.len() - 1] == self.delimiter;
                 let bytes = if need_to_trim_delimiter {
@@ -734,7 +804,7 @@ impl EofArgumentReader {
 }
 
 impl ArgumentReader for EofArgumentReader {
-    fn next(&mut self) -> io::Result<Option<Argument>> {
+    fn next(&mut self) -> Result<Option<Argument>, XargsError> {
         Ok(if self.eof_found {
             None
         } else {
@@ -761,7 +831,7 @@ enum XargsError {
 impl Display for XargsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ArgumentTooLarge => write!(f, "Argument too large"),
+            Self::ArgumentTooLarge => write!(f, "argument line too long"),
             Self::CommandExecution(e) => write!(f, "{e}"),
             Self::Io(e) => write!(f, "{e}"),
             Self::Untyped(s) => write!(f, "{s}"),
@@ -1185,11 +1255,9 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     if let Some(max_lines) = options.max_lines {
         limiters.add(MaxLinesCommandSizeLimiter::new(max_lines));
     }
-    if let Some(max_chars) = options.max_chars {
-        limiters.add(MaxCharsCommandSizeLimiter::new(max_chars));
-    } else {
-        limiters.add(MaxCharsCommandSizeLimiter::new_default(&env));
-    }
+    let effective_max_chars =
+        MaxCharsCommandSizeLimiter::effective_max_chars(options.max_chars, &env);
+    limiters.add(MaxCharsCommandSizeLimiter::new(effective_max_chars));
     limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
 
     let mut builder_options =
@@ -1209,10 +1277,26 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         Box::new(io::stdin())
     };
 
+    // Cap how large a single accumulated argument may grow before the reader
+    // errors out. An input that never produces a delimiter (such as
+    // `/dev/full`, which yields an endless stream of NUL bytes) would
+    // otherwise make the reader accumulate without bound until the process is
+    // OOM-killed. Size the cap from the same command-line budget the size
+    // limiters enforce, generously multiplied so that no argument the limiters
+    // would accept can ever be rejected by the reader.
+    let max_arg_size = effective_max_chars * ARG_SIZE_OVERFLOW_MULTIPLIER;
+
     let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
-        Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
+        Box::new(ByteDelimitedArgumentReader::new(
+            args_file,
+            delimiter,
+            max_arg_size,
+        ))
     } else {
-        Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
+        Box::new(WhitespaceDelimitedArgumentReader::new(
+            args_file,
+            max_arg_size,
+        ))
     };
 
     if let Some(eof_delimiter) = options.eof_delimiter {
@@ -1376,7 +1460,9 @@ mod tests {
     fn test_default_chars_limiter_caps_system_limit() {
         let env = HashMap::new();
         let system = MaxCharsCommandSizeLimiter::new_system(&env);
-        let default = MaxCharsCommandSizeLimiter::new_default(&env);
+        let default = MaxCharsCommandSizeLimiter::new(
+            MaxCharsCommandSizeLimiter::effective_max_chars(None, &env),
+        );
         // The default never exceeds 128 KiB nor what the system allows.
         assert!(default.max_chars <= 128 * 1024);
         assert!(default.max_chars <= system.max_chars);
@@ -1485,16 +1571,19 @@ mod tests {
 
     #[test]
     fn test_whitespace_delimited_reader() {
-        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"abc "),
-            Chunk::Data(b" def"),
-            Chunk::Data(b"\nghi\t\tj"),
-            Chunk::Data(b"kl\n"),
-            Chunk::Data(b"mn"),
-            Chunk::Error(io::ErrorKind::Interrupted),
-            Chunk::Data(b"\\\t\\ o 'ab"),
-            Chunk::Data(b" \"' \"xy' z\""),
-        ]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![
+                Chunk::Data(b"abc "),
+                Chunk::Data(b" def"),
+                Chunk::Data(b"\nghi\t\tj"),
+                Chunk::Data(b"kl\n"),
+                Chunk::Data(b"mn"),
+                Chunk::Error(io::ErrorKind::Interrupted),
+                Chunk::Data(b"\\\t\\ o 'ab"),
+                Chunk::Data(b" \"' \"xy' z\""),
+            ]),
+            usize::MAX,
+        );
 
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("def"));
@@ -1516,8 +1605,10 @@ mod tests {
             &b"aaa \nbbb\n"[..],
             &b"aaa \nbbb \n \t \n"[..],
         ] {
-            let mut reader =
-                WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(input)]));
+            let mut reader = WhitespaceDelimitedArgumentReader::new(
+                ChunkReader::new(vec![Chunk::Data(input)]),
+                usize::MAX,
+            );
             assert_eq!(reader.next().unwrap().unwrap().arg, "aaa", "{input:?}");
             assert_eq!(reader.next().unwrap().unwrap().arg, "bbb", "{input:?}");
             assert_eq!(reader.next().unwrap(), None, "{input:?}");
@@ -1525,21 +1616,28 @@ mod tests {
 
         // Blanks are only a soft terminator, so the newline that follows them
         // does not end the logical line (this matters for -L).
-        let mut reader =
-            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b"aaa \n")]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"aaa \n")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("aaa"));
         assert_eq!(reader.next().unwrap(), None);
 
-        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"aaa  "),
-            Chunk::Error(io::ErrorKind::Interrupted),
-            Chunk::Data(b" \t "),
-        ]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![
+                Chunk::Data(b"aaa  "),
+                Chunk::Error(io::ErrorKind::Interrupted),
+                Chunk::Data(b" \t "),
+            ]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("aaa"));
         assert_eq!(reader.next().unwrap(), None);
 
-        let mut reader =
-            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b" \n\t\n")]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b" \n\t\n")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap(), None);
     }
 
@@ -1547,10 +1645,10 @@ mod tests {
     fn test_whitespace_delimited_reader_quoted_empty_arguments() {
         // Quotes start an argument even when they contribute no bytes, so an
         // empty quoted string is a real (empty) argument.
-        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"'' x \"\"\n"),
-            Chunk::Data(b"y ''\n"),
-        ]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"'' x \"\"\n"), Chunk::Data(b"y ''\n")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft(""));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("x"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
@@ -1559,8 +1657,10 @@ mod tests {
         assert_eq!(reader.next().unwrap(), None);
 
         // ...but an unterminated one at end of input is dropped, as GNU does.
-        let mut reader =
-            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b"x ''")]));
+        let mut reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"x ''")]),
+            usize::MAX,
+        );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("x"));
         assert_eq!(reader.next().unwrap(), None);
     }
@@ -1569,17 +1669,19 @@ mod tests {
     fn test_eof_argument_reader() {
         let filter = String::from("def");
 
-        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
-            b"abc def ghi",
-        )]));
+        let reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"abc def ghi")]),
+            usize::MAX,
+        );
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap(), None);
         assert_eq!(wrapper.next().unwrap(), None);
 
-        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
-            b"abc define undef undefined ghi",
-        )]));
+        let reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"abc define undef undefined ghi")]),
+            usize::MAX,
+        );
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("define"));
@@ -1588,22 +1690,25 @@ mod tests {
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
         assert_eq!(wrapper.next().unwrap(), None);
 
-        let reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
-            Chunk::Data(b"abc "),
-            Chunk::Error(io::ErrorKind::Interrupted),
-            Chunk::Data(b"deF "),
-            Chunk::Error(io::ErrorKind::BrokenPipe),
-            Chunk::Data(b"ghi "),
-            Chunk::Data(b"def "),
-            Chunk::Error(io::ErrorKind::BrokenPipe),
-        ]));
+        let reader = WhitespaceDelimitedArgumentReader::new(
+            ChunkReader::new(vec![
+                Chunk::Data(b"abc "),
+                Chunk::Error(io::ErrorKind::Interrupted),
+                Chunk::Data(b"deF "),
+                Chunk::Error(io::ErrorKind::BrokenPipe),
+                Chunk::Data(b"ghi "),
+                Chunk::Data(b"def "),
+                Chunk::Error(io::ErrorKind::BrokenPipe),
+            ]),
+            usize::MAX,
+        );
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
-        assert_eq!(
-            wrapper.next().err().unwrap().kind(),
-            io::ErrorKind::BrokenPipe
-        );
+        match wrapper.next().err().unwrap() {
+            XargsError::Io(e) => assert_eq!(e.kind(), io::ErrorKind::BrokenPipe),
+            other => panic!("expected Io(BrokenPipe), got {other:?}"),
+        }
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
         assert_eq!(wrapper.next().unwrap(), None);
         assert_eq!(wrapper.next().unwrap(), None);
@@ -1620,6 +1725,7 @@ mod tests {
                 Chunk::Data(b"!ij"),
             ]),
             b'!',
+            usize::MAX,
         );
 
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("abc"));
@@ -1628,6 +1734,36 @@ mod tests {
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("gh"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("ij"));
         assert_eq!(reader.next().unwrap(), None);
+    }
+
+    /// An input that never produces a delimiter (such as `/dev/full`, which
+    /// yields an endless stream of NUL bytes, or any finite stream that simply
+    /// lacks the delimiter byte) must not make the reader accumulate a single
+    /// argument without bound until the process is OOM-killed. Once the
+    /// accumulated argument exceeds the configured size budget, the reader
+    /// reports `ArgumentTooLarge` instead of looping forever.
+    #[test]
+    fn test_whitespace_reader_caps_unbounded_argument() {
+        let reader = WhitespaceDelimitedArgumentReader::new(
+            // A long run of non-whitespace bytes with no terminator at all.
+            ChunkReader::new(vec![Chunk::Data(b"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")]),
+            8,
+        );
+        let mut reader = reader;
+        assert!(matches!(reader.next(), Err(XargsError::ArgumentTooLarge),));
+    }
+
+    #[test]
+    fn test_byte_reader_caps_unbounded_argument() {
+        // The delimiter never appears, so the reader would otherwise read the
+        // whole (terminator-less) stream into one argument.
+        let reader = ByteDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"yyyyyyyyyyyyyyyyyyyyyyyy")]),
+            b'!',
+            8,
+        );
+        let mut reader = reader;
+        assert!(matches!(reader.next(), Err(XargsError::ArgumentTooLarge),));
     }
 
     #[test]
