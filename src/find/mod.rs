@@ -276,6 +276,13 @@ fn process_dir(
     matcher: &dyn matchers::Matcher,
     quit: &mut bool,
 ) -> i32 {
+    // No depth can be both >= min_depth and <= max_depth when min_depth exceeds
+    // max_depth, so nothing matches — the same as GNU find. `WalkDir` would
+    // otherwise still yield the max-depth entries, so short-circuit here.
+    if config.min_depth > config.max_depth {
+        return 0;
+    }
+
     let mut walkdir = WalkDir::new(dir)
         .contents_first(config.depth_first)
         .max_depth(config.max_depth)
@@ -736,6 +743,29 @@ mod tests {
                  ./test_data/depth/f0\n"
             )
         );
+    }
+
+    #[test]
+    fn find_mindepth_greater_than_maxdepth() {
+        // -mindepth greater than -maxdepth can never be satisfied, so find
+        // outputs nothing, matching GNU find (issue #778).
+        let deps = FakeDependencies::new();
+
+        let rc = find_main(
+            &[
+                "find",
+                &fix_up_slashes("./test_data/depth"),
+                "-sorted",
+                "-mindepth",
+                "2",
+                "-maxdepth",
+                "1",
+            ],
+            &deps,
+        );
+
+        assert_eq!(rc, 0);
+        assert_eq!(deps.get_output_as_string(), "");
     }
 
     #[test]
