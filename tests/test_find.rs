@@ -170,6 +170,16 @@ fn depth_rejects_signed_value() {
 }
 
 #[test]
+fn mindepth_exceeds_maxdepth_outputs_nothing() {
+    // When -mindepth is greater than -maxdepth no entry can match, so find
+    // prints nothing and exits successfully, matching GNU find.
+    ucmd()
+        .args(&["./test_data/simple", "-mindepth", "2", "-maxdepth", "1"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn multiple_matcher_failure() {
     ucmd()
         .args(&["-type", "fd", "-name", "abbb"])
