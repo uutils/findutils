@@ -286,7 +286,7 @@ pub fn build_top_level_matcher(
     args: &[&str],
     config: &mut Config,
 ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-    let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, false))?;
+    let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, None))?;
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
@@ -476,11 +476,15 @@ fn missing_operand_error(args: &[&str], index: usize) -> String {
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
 /// called recursively) and the resulting matcher.
+///
+/// `open_bracket` is the index of the '(' this call is parsing the contents of,
+/// or `None` at the top level. It doubles as the "a ')' is expected" flag and
+/// lets an unclosed bracket be pointed at in the error.
 fn build_matcher_tree(
     args: &[&str],
     config: &mut Config,
     arg_index: usize,
-    mut expecting_bracket: bool,
+    mut open_bracket: Option<usize>,
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
     let mut top_level_matcher = ListMatcherBuilder::new();
 
@@ -883,12 +887,13 @@ fn build_matcher_tree(
                 None
             }
             "(" => {
-                let (new_arg_index, sub_matcher) = build_matcher_tree(args, config, i + 1, true)?;
+                let (new_arg_index, sub_matcher) =
+                    build_matcher_tree(args, config, i + 1, Some(i))?;
                 i = new_arg_index;
                 Some(sub_matcher)
             }
             ")" => {
-                if !expecting_bracket {
+                if open_bracket.is_none() {
                     return Err(From::from("you have too many ')'"));
                 }
 
@@ -1014,7 +1019,7 @@ fn build_matcher_tree(
         i += 1;
         if config.help_requested || config.version_requested {
             // Ignore anything, even invalid expressions, after -help/-version
-            expecting_bracket = false;
+            open_bracket = None;
             break;
         }
         if let Some(submatcher) = possible_submatcher {
@@ -1026,7 +1031,7 @@ fn build_matcher_tree(
             }
         }
     }
-    if expecting_bracket {
+    if open_bracket.is_some() {
         return Err(From::from(
             "invalid expression; I was expecting to find a ')' somewhere but \
              did not see one.",
