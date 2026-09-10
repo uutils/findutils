@@ -383,8 +383,23 @@ impl FileAgeRangeMatcher {
             }
         };
         let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
-        let age_in_minutes = age_in_seconds / 60 + if is_negative { -1 } else { 0 };
-        Ok(self.minutes.imatches(age_in_minutes))
+
+        // GNU find treats `-amin n` as "the age falls in the n-th minute", i.e.
+        // an age of d seconds matches exactly n when (n-1)*60 <= d < n*60. So a
+        // file accessed a few seconds ago matches `-amin 1`, not `-amin 0`.
+        // `-amin -n` and `-amin +n` compare the age against n*60 seconds
+        // directly, which is not the same off-by-one as the exact case.
+        Ok(match self.minutes {
+            ComparableValue::EqualTo(n) => {
+                age_in_seconds >= 0 && (age_in_seconds as u64) / 60 + 1 == n
+            }
+            ComparableValue::LessThan(n) => {
+                age_in_seconds < 0 || (age_in_seconds as u64) < n.saturating_mul(60)
+            }
+            ComparableValue::MoreThan(n) => {
+                age_in_seconds >= 0 && (age_in_seconds as u64) >= n.saturating_mul(60)
+            }
+        })
     }
 
     pub fn new(file_time_type: FileTimeType, minutes: ComparableValue, today_start: bool) -> Self {
@@ -824,6 +839,46 @@ mod tests {
                 inode_changed_matcher.matches(&file_info, &mut deps.new_matcher_io()),
                 "file inode changed time should after 'std_time'"
             );
+        }
+    }
+
+    #[test]
+    fn file_age_range_matcher_minute_boundaries() {
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        File::create(temp_dir.path().join("aFile")).expect("create temp file");
+        let file = get_dir_entry_for(&temp_dir_path, "aFile");
+        let file_time = FileTimeType::Modified
+            .get_file_time(file.metadata().unwrap())
+            .unwrap();
+
+        // Checked against GNU findutils 4.11: at an age of `age` seconds,
+        // `-mmin n` matches exactly for n == `bucket`, `-mmin -n` matches for
+        // every n >= `bucket`, and `-mmin +n` for every n < `bucket`.
+        for &(age, bucket) in &[(0, 1), (59, 1), (60, 2), (119, 2), (120, 3), (179, 3)] {
+            let start_time = file_time + Duration::from_secs(age);
+            for n in 0..5 {
+                let matches = |value| {
+                    FileAgeRangeMatcher::new(FileTimeType::Modified, value, false)
+                        .matches_impl(&file, start_time)
+                        .unwrap()
+                };
+                assert_eq!(
+                    matches(ComparableValue::EqualTo(n)),
+                    n == bucket,
+                    "-mmin {n} at an age of {age}s"
+                );
+                assert_eq!(
+                    matches(ComparableValue::LessThan(n)),
+                    n >= bucket,
+                    "-mmin -{n} at an age of {age}s"
+                );
+                assert_eq!(
+                    matches(ComparableValue::MoreThan(n)),
+                    n < bucket,
+                    "-mmin +{n} at an age of {age}s"
+                );
+            }
         }
     }
 
