@@ -4,13 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use onig::{Regex, RegexOptions, Syntax};
+use fancy_regex::Regex;
 
-/// Parse a string as a POSIX Basic Regular Expression.
-fn parse_bre(expr: &str, options: RegexOptions) -> Result<Regex, onig::Error> {
-    let bre = Syntax::posix_basic();
-    Regex::with_options(expr, bre.options() | options, bre)
-}
+use super::regex_transpile;
 
 /// Push a literal character onto a regex, escaping it if necessary.
 fn regex_push_literal(regex: &mut String, ch: char) {
@@ -107,7 +103,7 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
         next = chars.next();
     }
 
-    if parse_bre(&expr, RegexOptions::REGEX_OPTION_NONE).is_ok() {
+    if regex_transpile::is_valid_bre(&expr) {
         Some((expr, chars.as_str()))
     } else {
         None
@@ -158,20 +154,22 @@ pub struct Pattern {
 impl Pattern {
     /// Parse an fnmatch()-style glob.
     pub fn new(pattern: &str, caseless: bool) -> Self {
-        let options = if caseless {
-            RegexOptions::REGEX_OPTION_IGNORECASE
-        } else {
-            RegexOptions::REGEX_OPTION_NONE
-        };
-
         // As long as glob_to_regex() is correct, this should never fail
-        let regex = glob_to_regex(pattern).map(|r| parse_bre(&r, options).unwrap());
+        let regex = glob_to_regex(pattern).map(|r| {
+            // GNU find's -path, -name, -lname etc. do full-string matching,
+            // so anchor the regex to prevent partial matches.
+            let anchored = format!("^{r}$");
+            regex_transpile::compile(&anchored, super::regex::RegexType::PosixBasic, caseless)
+                .unwrap()
+        });
         Self { regex }
     }
 
     /// Test if this pattern matches a string.
     pub fn matches(&self, string: &str) -> bool {
-        self.regex.as_ref().is_some_and(|r| r.is_match(string))
+        self.regex
+            .as_ref()
+            .is_some_and(|r| r.is_match(string).unwrap_or(false))
     }
 }
 

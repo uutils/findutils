@@ -23,6 +23,7 @@ mod printf;
 mod prune;
 mod quit;
 mod regex;
+pub mod regex_transpile;
 mod samefile;
 mod size;
 #[cfg(unix)]

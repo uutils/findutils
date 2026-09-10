@@ -6,7 +6,7 @@
 
 use std::{error::Error, fmt, str::FromStr};
 
-use onig::{Regex, RegexOptions, Syntax};
+use super::regex_transpile;
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -76,7 +76,7 @@ impl FromStr for RegexType {
 }
 
 pub struct RegexMatcher {
-    regex: Regex,
+    regex: fancy_regex::Regex,
 }
 
 impl RegexMatcher {
@@ -85,23 +85,19 @@ impl RegexMatcher {
         pattern: &str,
         ignore_case: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        let syntax = match regex_type {
-            RegexType::Emacs => Syntax::emacs(),
-            RegexType::Grep => Syntax::grep(),
-            RegexType::PosixBasic => Syntax::posix_basic(),
-            RegexType::PosixExtended => Syntax::posix_extended(),
+        // GNU find's -regex does full-path matching, so anchor the pattern.
+        let anchored = if pattern.starts_with('^') && pattern.ends_with('$') {
+            pattern.to_owned()
+        } else if pattern.starts_with('^') {
+            format!("{pattern}$")
+        } else if pattern.ends_with('$') {
+            format!("^{pattern}")
+        } else {
+            format!("^{pattern}$")
         };
-
-        let regex = Regex::with_options(
-            pattern,
-            if ignore_case {
-                RegexOptions::REGEX_OPTION_IGNORECASE
-            } else {
-                RegexOptions::REGEX_OPTION_NONE
-            },
-            syntax,
-        )?;
-        Ok(Self { regex })
+        Ok(Self {
+            regex: regex_transpile::compile(&anchored, regex_type, ignore_case)?,
+        })
     }
 }
 
@@ -109,6 +105,7 @@ impl Matcher for RegexMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         self.regex
             .is_match(file_info.path().to_string_lossy().as_ref())
+            .unwrap_or(false)
     }
 }
 
