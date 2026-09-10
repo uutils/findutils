@@ -631,6 +631,55 @@ fn regex_types() {
         .succeeds()
         .no_stderr()
         .stdout_contains("teeest");
+
+    for name in ["a", "ab", "aba", "a|b", "a^b$c"] {
+        File::create(temp_dir.path().join(name)).unwrap();
+    }
+
+    // Full-path anchoring with alternation (issue #861 comment), -iregex,
+    // each -regextype (emacs, posix-extended, grep, posix-basic), and backreferences.
+    ucmd()
+        .current_dir(temp_dir.path())
+        .args(&["a", "ab", "-regex", r"a\|z"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a\n");
+
+    ucmd()
+        .current_dir(temp_dir.path())
+        .args(&["a", "ab", "-regextype", "posix-extended", "-iregex", "A|AB"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a\nab\n");
+
+    ucmd()
+        .current_dir(temp_dir.path())
+        .args(&["a", "ab", "a|b", "-regextype", "emacs", "-regex", "a+|b"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a|b\n");
+
+    ucmd()
+        .current_dir(temp_dir.path())
+        .args(&[
+            "a",
+            "ab",
+            "aba",
+            "-regextype",
+            "grep",
+            "-regex",
+            r"\(a\)b\1",
+        ])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("aba\n");
+
+    ucmd()
+        .current_dir(temp_dir.path())
+        .args(&["a^b$c", "-regextype", "posix-basic", "-regex", "a^b$c"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a^b$c\n");
 }
 
 #[rstest::rstest]
