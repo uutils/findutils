@@ -35,7 +35,7 @@ assert_cmd = "2"
 ctor = "1.0"
 filetime = "0.2"
 nix = { version = "0.31", features = ["fs"] }
-rstest = "0.26.1"
+rstest = "0.27.0"
 tempfile = "3"
 uutests = "0.11.0"
 
