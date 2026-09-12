@@ -11,9 +11,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust:
+          - 1.88.0
+          - stable
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v2
         if: matrix.os == 'windows-latest'
@@ -32,9 +38,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust:
+          - 1.88.0
+          - stable
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
       # For bindgen: https://github.com/rust-lang/rust-bindgen/issues/1797
       - uses: KyleMayes/install-llvm-action@v2
         if: matrix.os == 'windows-latest'
@@ -58,10 +70,20 @@ jobs:
           cargo fmt --all -- --check
 
   clippy:
-    name: cargo clippy -- -D warnings
-    runs-on: ubuntu-latest
+    name: cargo clippy
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust:
+          - 1.88.0
+          - stable
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy
       - run: |
           cargo clippy --all-targets -- -D warnings
 
