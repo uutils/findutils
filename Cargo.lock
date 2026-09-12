@@ -547,6 +547,7 @@ dependencies = [
  "itertools 0.15.0",
  "nix 0.31.3",
  "onig",
+ "rayon",
  "regex",
  "rstest",
  "tempfile",
