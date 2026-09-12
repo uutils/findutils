@@ -9,6 +9,7 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::SystemTime;
 
 use chrono::{format::StrftimeItems, DateTime, Local};
@@ -593,11 +594,14 @@ fn format_directive<'entry>(
 /// find's printf syntax.
 pub struct Printf {
     format: FormatString,
-    output_file: Option<(File, PathBuf)>,
+    output_file: Option<(Rc<File>, PathBuf)>,
 }
 
 impl Printf {
-    pub fn new(format: &str, output_file: Option<(File, PathBuf)>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        format: &str,
+        output_file: Option<(Rc<File>, PathBuf)>,
+    ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             format: FormatString::parse(format)?,
             output_file,
@@ -661,7 +665,7 @@ impl Printf {
 impl Matcher for Printf {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let result = if let Some((file, _)) = &self.output_file {
-            self.print(file_info, file)
+            self.print(file_info, &**file)
         } else {
             self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut())
         };
