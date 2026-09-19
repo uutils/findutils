@@ -552,8 +552,32 @@ trait ArgumentReader {
     fn next(&mut self) -> io::Result<Option<Argument>>;
 }
 
+struct NonFatalPipeReader<R: Read> {
+    inner: R,
+}
+
+impl<R: Read> NonFatalPipeReader<R> {
+    fn new(inner: R) -> Self {
+        Self { inner }
+    }
+}
+
+impl<R: Read> Read for NonFatalPipeReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        loop {
+            match self.inner.read(buf) {
+                Ok(n) => return Ok(n),
+                Err(e)
+                    if e.kind() == io::ErrorKind::Interrupted
+                        || e.kind() == io::ErrorKind::BrokenPipe => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+}
+
 struct WhitespaceDelimitedArgumentReader<R: Read> {
-    rd: R,
+    rd: NonFatalPipeReader<R>,
     pending: Vec<u8>,
 }
 
@@ -563,7 +587,7 @@ where
 {
     fn new(rd: R) -> Self {
         Self {
-            rd,
+            rd: NonFatalPipeReader::new(rd),
             pending: vec![],
         }
     }
@@ -594,7 +618,7 @@ where
         let mut i = 0;
         loop {
             if i == pending.len() {
-                pending.resize(4096, 0);
+                pending.resize(8192, 0);
                 // Already hit the end of our buffer, so read in some more data.
                 let bytes_read = loop {
                     match self.rd.read(&mut pending[..]) {
@@ -676,7 +700,7 @@ where
 }
 
 struct ByteDelimitedArgumentReader<R: Read> {
-    rd: BufReader<R>,
+    rd: BufReader<NonFatalPipeReader<R>>,
     delimiter: u8,
 }
 
@@ -686,7 +710,7 @@ where
 {
     fn new(rd: R, delimiter: u8) -> Self {
         Self {
-            rd: BufReader::new(rd),
+            rd: BufReader::new(NonFatalPipeReader::new(rd)),
             delimiter,
         }
     }
@@ -1598,17 +1622,17 @@ mod tests {
             Chunk::Data(b"abc "),
             Chunk::Error(io::ErrorKind::Interrupted),
             Chunk::Data(b"deF "),
-            Chunk::Error(io::ErrorKind::BrokenPipe),
+            Chunk::Error(io::ErrorKind::PermissionDenied),
             Chunk::Data(b"ghi "),
             Chunk::Data(b"def "),
-            Chunk::Error(io::ErrorKind::BrokenPipe),
+            Chunk::Error(io::ErrorKind::PermissionDenied),
         ]));
         let mut wrapper = EofArgumentReader::new(Box::new(reader), &filter);
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("abc"));
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("deF"));
         assert_eq!(
             wrapper.next().err().unwrap().kind(),
-            io::ErrorKind::BrokenPipe
+            io::ErrorKind::PermissionDenied
         );
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
         assert_eq!(wrapper.next().unwrap(), None);
@@ -1633,6 +1657,33 @@ mod tests {
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("ef"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("gh"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("ij"));
+        assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_whitespace_delimited_reader_broken_pipe() {
+        let mut reader = WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![
+            Chunk::Data(b"abc "),
+            Chunk::Error(io::ErrorKind::BrokenPipe),
+            Chunk::Data(b"def "),
+        ]));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("abc"));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("def"));
+        assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_byte_delimited_reader_broken_pipe() {
+        let mut reader = ByteDelimitedArgumentReader::new(
+            ChunkReader::new(vec![
+                Chunk::Data(b"abc\0"),
+                Chunk::Error(io::ErrorKind::BrokenPipe),
+                Chunk::Data(b"def\0"),
+            ]),
+            b'\0',
+        );
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("abc"));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("def"));
         assert_eq!(reader.next().unwrap(), None);
     }
 
