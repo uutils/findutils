@@ -196,6 +196,7 @@ fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
 struct MaxCharsCommandSizeLimiter {
     current_size: usize,
     max_chars: usize,
+    argument_overhead: usize,
 }
 
 impl MaxCharsCommandSizeLimiter {
@@ -203,6 +204,7 @@ impl MaxCharsCommandSizeLimiter {
         Self {
             current_size: 0,
             max_chars,
+            argument_overhead: 0,
         }
     }
 
@@ -226,15 +228,19 @@ impl MaxCharsCommandSizeLimiter {
             .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
             .sum();
 
-        Self::new(arg_max.saturating_sub(ARG_HEADROOM + env_size))
+        let pointer_size = std::mem::size_of::<*const uucore::libc::c_char>();
+        // Account for each envp pointer and the terminating argv/envp pointers.
+        let env_overhead = (env.len() + 2) * pointer_size;
+        Self {
+            current_size: 0,
+            max_chars: arg_max.saturating_sub(ARG_HEADROOM + env_size + env_overhead),
+            argument_overhead: pointer_size,
+        }
     }
 
-    /// The limiter used when no explicit -s was given. Like GNU xargs, use at
-    /// most 128 KiB per command line by default: sizing command lines all the
-    /// way up to ARG_MAX would make execvp() fail with E2BIG, because the
-    /// kernel additionally charges the argv/envp pointers (since Linux commit
-    /// 98da7d08850f) against the limit, which are not part of the character
-    /// count. An explicit -s can still go beyond this, up to the system limit.
+    /// The character-count limit used when no explicit -s was given. Like GNU
+    /// xargs, use at most 128 KiB by default. An explicit -s can go beyond this;
+    /// the separate system limiter accounts for argument pointer overhead.
     fn new_default(env: &HashMap<OsString, OsString>) -> Self {
         const DEFAULT_MAX_CHARS: usize = 128 * 1024;
         Self::new(Self::new_system(env).max_chars.min(DEFAULT_MAX_CHARS))
@@ -255,7 +261,7 @@ impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
         arg: Argument,
         cursor: LimiterCursor<'_>,
     ) -> Result<Argument, ExhaustedCommandSpace> {
-        let chars = count_osstr_chars_for_exec(&arg.arg);
+        let chars = count_osstr_chars_for_exec(&arg.arg) + self.argument_overhead;
         if self.current_size + chars <= self.max_chars {
             let arg = cursor.try_next(arg)?;
             self.current_size += chars;
@@ -1353,7 +1359,7 @@ mod tests {
 
     #[test]
     fn test_chars_limiter() {
-        // Room for exactly "abc" and "a", including terminators and pointers.
+        // Room for exactly "abc" and "a", including terminators.
         let max_chars = count_osstr_chars_for_exec(OsStr::new("abc"))
             + count_osstr_chars_for_exec(OsStr::new("a"));
         let mut limiter = MaxCharsCommandSizeLimiter::new(max_chars);
@@ -1364,6 +1370,28 @@ mod tests {
             .try_arg(make_arg_hard("abcd"), empty_cursor())
             .is_err());
         assert!(limiter.try_arg(make_arg_hard("a"), empty_cursor()).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_system_limiter_counts_empty_argument_pointers() {
+        let mut limiter = MaxCharsCommandSizeLimiter::new_system(&HashMap::new());
+        let size = 1 + std::mem::size_of::<*const uucore::libc::c_char>();
+        limiter.max_chars = size;
+        assert!(limiter.try_arg(make_arg_hard(""), empty_cursor()).is_ok());
+        assert!(limiter.try_arg(make_arg_hard(""), empty_cursor()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_system_limiter_counts_environment_pointers() {
+        let empty = MaxCharsCommandSizeLimiter::new_system(&HashMap::new());
+        let env = HashMap::from([(OsString::from("KEY"), OsString::from("value"))]);
+        let with_env = MaxCharsCommandSizeLimiter::new_system(&env);
+        assert_eq!(
+            empty.max_chars - with_env.max_chars,
+            "KEY=value".len() + 1 + std::mem::size_of::<*const uucore::libc::c_char>()
+        );
     }
 
     #[cfg(windows)]
