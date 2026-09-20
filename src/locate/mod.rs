@@ -21,7 +21,14 @@ use uucore::error::{ClapErrorWrapper, UClapError, UError, UResult};
 
 use crate::{find::matchers::RegexType, updatedb::DbFormat};
 
+#[cfg(not(windows))]
+pub const DEFAULT_DB_PATH: &str = "/usr/local/var/locatedb";
+
+#[cfg(windows)]
+pub const DEFAULT_DB_PATH: &str = r"C:\ProgramData\locatedb";
+
 #[derive(Debug)]
+
 pub struct Config {
     all: bool,
     basename: bool,
@@ -203,13 +210,8 @@ impl TryFrom<ArgMatches> for ParsedInfo {
             basename: value.get_flag("basename"),
             db: value
                 .get_one::<String>("database")
-                .map(String::as_str)
-                // `database` has a default value, so this is only reached if clap
-                // somehow omits it; fall back to an empty (non-openable) path.
-                .unwrap_or_default()
-                .split(':')
-                .map(PathBuf::from)
-                .collect(),
+                .map_or_else(Vec::new, |s| std::env::split_paths(s).collect()),
+
             mode: value
                 .get_many::<Id>("mode")
                 .unwrap_or_default()
@@ -297,7 +299,7 @@ fn uu_app() -> Command {
                 .short('d')
                 .long("database")
                 .env("LOCATE_PATH")
-                .default_value("/usr/local/var/locatedb")
+                .default_value(DEFAULT_DB_PATH)
                 .action(ArgAction::Set),
         )
         .arg(
