@@ -263,7 +263,7 @@ fn xargs_explicit_size_can_exceed_default_cap() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn xargs_explicit_size_accounts_for_argument_pointers() {
     let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) } as usize;
     // The strings fit, but their argv pointers push the command over ARG_MAX.

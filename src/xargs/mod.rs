@@ -192,6 +192,9 @@ fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
     s.as_encoded_bytes().len() + 1
 }
 
+#[cfg(unix)]
+const POINTER_SIZE: usize = std::mem::size_of::<*const uucore::libc::c_char>();
+
 #[derive(Clone)]
 struct MaxCharsCommandSizeLimiter {
     current_size: usize,
@@ -209,32 +212,31 @@ impl MaxCharsCommandSizeLimiter {
     }
 
     #[cfg(windows)]
-    fn new_system(_env: &HashMap<OsString, OsString>) -> MaxCharsCommandSizeLimiter {
+    fn new_system(
+        _env: &HashMap<OsString, OsString>,
+        max_chars: usize,
+    ) -> MaxCharsCommandSizeLimiter {
         // Taken from the CreateProcess docs. -2 to account for how
         // std::process unconditionally surrounds the program name with quotes.
-        const MAX_CMDLINE: usize = 32767 - 2;
-        MaxCharsCommandSizeLimiter::new(MAX_CMDLINE)
+        MaxCharsCommandSizeLimiter::new(max_chars)
     }
 
     #[cfg(unix)]
-    fn new_system(env: &HashMap<OsString, OsString>) -> Self {
+    fn new_system(env: &HashMap<OsString, OsString>, arg_max: usize) -> Self {
         // POSIX requires that we leave 2048 bytes of space so that the child processes
         // can have room to set their own environment variables.
         const ARG_HEADROOM: usize = 2048;
-        let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) } as usize;
-
         let env_size: usize = env
             .iter()
             .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
             .sum();
 
-        let pointer_size = std::mem::size_of::<*const uucore::libc::c_char>();
         // Account for each envp pointer and the terminating argv/envp pointers.
-        let env_overhead = (env.len() + 2) * pointer_size;
+        let env_overhead = (env.len() + 2) * POINTER_SIZE;
         Self {
             current_size: 0,
             max_chars: arg_max.saturating_sub(ARG_HEADROOM + env_size + env_overhead),
-            argument_overhead: pointer_size,
+            argument_overhead: POINTER_SIZE,
         }
     }
 
@@ -243,16 +245,34 @@ impl MaxCharsCommandSizeLimiter {
     /// the separate system limiter accounts for argument pointer overhead.
     fn new_default(env: &HashMap<OsString, OsString>) -> Self {
         const DEFAULT_MAX_CHARS: usize = 128 * 1024;
-        Self::new(Self::new_system(env).max_chars.min(DEFAULT_MAX_CHARS))
+        Self::new(
+            Self::new_system(env, system_arg_max())
+                .max_chars
+                .min(DEFAULT_MAX_CHARS),
+        )
     }
 
     #[cfg(not(any(unix, windows)))]
-    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
-        // No portable way to query the system limit; fall back to the POSIX
-        // minimum guaranteed value for _POSIX_ARG_MAX.
-        const POSIX_ARG_MAX: usize = 4096;
-        Self::new(POSIX_ARG_MAX)
+    fn new_system(_env: &HashMap<OsString, OsString>, max_chars: usize) -> Self {
+        Self::new(max_chars)
     }
+}
+
+#[cfg(unix)]
+fn system_arg_max() -> usize {
+    (unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) }) as usize
+}
+
+#[cfg(windows)]
+fn system_arg_max() -> usize {
+    32767 - 2
+}
+
+#[cfg(not(any(unix, windows)))]
+fn system_arg_max() -> usize {
+    // No portable way to query the system limit; fall back to the POSIX
+    // minimum guaranteed value for _POSIX_ARG_MAX.
+    4096
 }
 
 impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
@@ -1202,7 +1222,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     } else {
         limiters.add(MaxCharsCommandSizeLimiter::new_default(&env));
     }
-    limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
+    limiters.add(MaxCharsCommandSizeLimiter::new_system(
+        &env,
+        system_arg_max(),
+    ));
 
     let mut builder_options =
         CommandBuilderOptions::new(action, env, limiters, options.replace.clone()).map_err(
@@ -1375,9 +1398,12 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_system_limiter_counts_empty_argument_pointers() {
-        let mut limiter = MaxCharsCommandSizeLimiter::new_system(&HashMap::new());
-        let size = 1 + std::mem::size_of::<*const uucore::libc::c_char>();
-        limiter.max_chars = size;
+        const ARG_HEADROOM: usize = 2048;
+        let size = 1 + POINTER_SIZE;
+        let mut limiter = MaxCharsCommandSizeLimiter::new_system(
+            &HashMap::new(),
+            ARG_HEADROOM + 2 * POINTER_SIZE + size,
+        );
         assert!(limiter.try_arg(make_arg_hard(""), empty_cursor()).is_ok());
         assert!(limiter.try_arg(make_arg_hard(""), empty_cursor()).is_err());
     }
@@ -1385,12 +1411,12 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_system_limiter_counts_environment_pointers() {
-        let empty = MaxCharsCommandSizeLimiter::new_system(&HashMap::new());
+        let empty = MaxCharsCommandSizeLimiter::new_system(&HashMap::new(), system_arg_max());
         let env = HashMap::from([(OsString::from("KEY"), OsString::from("value"))]);
-        let with_env = MaxCharsCommandSizeLimiter::new_system(&env);
+        let with_env = MaxCharsCommandSizeLimiter::new_system(&env, system_arg_max());
         assert_eq!(
             empty.max_chars - with_env.max_chars,
-            "KEY=value".len() + 1 + std::mem::size_of::<*const uucore::libc::c_char>()
+            "KEY=value".len() + 1 + POINTER_SIZE
         );
     }
 
@@ -1409,7 +1435,7 @@ mod tests {
     #[test]
     fn test_default_chars_limiter_caps_system_limit() {
         let env = HashMap::new();
-        let system = MaxCharsCommandSizeLimiter::new_system(&env);
+        let system = MaxCharsCommandSizeLimiter::new_system(&env, system_arg_max());
         let default = MaxCharsCommandSizeLimiter::new_default(&env);
         // The default never exceeds 128 KiB nor what the system allows.
         assert!(default.max_chars <= 128 * 1024);
