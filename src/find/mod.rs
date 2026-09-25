@@ -8,7 +8,9 @@ pub mod matchers;
 
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::error::Error;
+use std::fs::File;
 #[cfg(unix)]
 use std::io::IsTerminal;
 use std::io::{self, stderr, stdout, BufRead, BufReader, Write};
@@ -32,6 +34,11 @@ pub struct Config {
     /// Whether the expression uses -ok or -okdir, which prompt on stderr and
     /// read the answer from stdin when there is no terminal.
     interactive_exec: bool,
+    /// Files opened by output predicates (-fprint, -fprintf, -fprint0, -fls),
+    /// keyed by the path given on the command line. Reusing one handle per
+    /// path means specifying the same output file more than once appends
+    /// rather than overwriting (see issue #439).
+    output_files: HashMap<String, Rc<File>>,
 }
 
 impl Default for Config {
@@ -52,6 +59,7 @@ impl Default for Config {
             follow: Follow::Never,
             files0_argument: None, // This option exclusively for -files0-from argument.
             interactive_exec: false,
+            output_files: HashMap::new(),
         }
     }
 }
