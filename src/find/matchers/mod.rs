@@ -65,6 +65,7 @@ use ls::Ls;
 use std::{
     error::Error,
     fs::{File, Metadata},
+    io::{stderr, Write},
     path::{Path, PathBuf},
     str::FromStr,
     time::SystemTime,
@@ -543,6 +544,20 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
+                // GNU find warns when a -name/-iname pattern contains a directory
+                // separator: -name matches basenames only, so such a pattern can
+                // never match and the user likely meant -wholename. See issue #783.
+                // A pattern made up only of '/' (e.g. `-name /`) is left alone: `/`
+                // is a valid basename for the root entry, so warning would be a
+                // false alarm (GNU itself miscategorises this — bug #62227).
+                if args[i].contains('/') && args[i].chars().any(|c| c != '/') {
+                    writeln!(
+                        &mut stderr(),
+                        "find: warning: '{}' matches against basenames only, but the given pattern contains a directory separator ('/'), thus the expression will evaluate to false all the time.  Did you mean '-wholename'?",
+                        args[i - 1]
+                    )
+                    .unwrap();
+                }
                 Some(NameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-path" | "-ipath" | "-wholename" | "-iwholename" => {
@@ -550,6 +565,19 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
+                // GNU find warns when a -path/-wholename pattern ends with '/':
+                // a trailing separator can never match a real path. See issue #783.
+                // As with -name, a pattern of only '/' is exempt: `-path /` can
+                // legitimately match the root entry.
+                if args[i].ends_with('/') && args[i].chars().any(|c| c != '/') {
+                    writeln!(
+                        &mut stderr(),
+                        "find: warning: {} {} will not match anything because it ends with /.",
+                        args[i - 1],
+                        args[i]
+                    )
+                    .unwrap();
+                }
                 Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-readable" => Some(AccessMatcher::Readable.into_box()),
