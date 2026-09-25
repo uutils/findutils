@@ -59,7 +59,6 @@ use self::time::{
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
 use ::regex::Regex;
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
 use std::{
@@ -372,11 +371,19 @@ fn convert_arg_to_comparable_value_and_suffix(
 /// When (time) is not provided, it will be automatically filled in as 00:00:00
 /// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
 fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
-    if let Ok(datetime) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S") {
-        return Some(datetime.and_utc().timestamp_millis());
+    let to_utc_millis = |dt: jiff::civil::DateTime| {
+        Some(
+            jiff::tz::TimeZone::UTC
+                .to_timestamp(dt)
+                .ok()?
+                .as_millisecond(),
+        )
+    };
+    if let Ok(datetime) = jiff::civil::DateTime::strptime("%Y-%m-%d %H:%M:%S", date_str) {
+        return to_utc_millis(datetime);
     }
-    if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-        return Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp_millis());
+    if let Ok(date) = jiff::civil::Date::strptime("%Y-%m-%d", date_str) {
+        return to_utc_millis(date.to_datetime(jiff::civil::Time::midnight()));
     }
 
     let regex_pattern =
@@ -384,23 +391,22 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
     let re = Regex::new(regex_pattern);
 
     if let Some(captures) = re.ok()?.captures(date_str) {
-        let now = Utc::now();
-        let month_day = captures
-            .get(1)
-            .map_or(format!("{} {}", now.format("%b"), now.format("%d")), |m| {
-                m.as_str().to_string()
-            });
+        let now = jiff::Timestamp::now().to_zoned(jiff::tz::TimeZone::UTC);
+        let month_day = captures.get(1).map_or(
+            format!("{} {}", now.strftime("%b"), now.strftime("%d")),
+            |m| m.as_str().to_string(),
+        );
         // If no year input.
         let year = match captures.get(2) {
             Some(m) => m.as_str().parse().ok()?,
-            None => now.year(),
+            None => now.year() as i32,
         };
         // If the user does not enter a specific time, it will be filled with 0
         let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
         let date_time_str = format!("{month_day}, {year} {time_str}");
-        let datetime = NaiveDateTime::parse_from_str(&date_time_str, "%b %d, %Y %H:%M:%S").ok()?;
-        let utc_datetime = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
-        Some(utc_datetime.timestamp_millis())
+        let datetime =
+            jiff::civil::DateTime::strptime("%b %d, %Y %H:%M:%S", &date_time_str).ok()?;
+        to_utc_millis(datetime)
     } else {
         None
     }
@@ -1821,12 +1827,14 @@ mod tests {
 
         // pass if return current time.
         let none_date_timestamps = parse_date_str_to_timestamps("");
-        let now_but_zero_hour_min_sec = Utc::now()
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
+        let now_but_zero_hour_min_sec = jiff::Timestamp::now()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .date()
+            .to_datetime(jiff::civil::Time::midnight())
+            .to_zoned(jiff::tz::TimeZone::UTC)
             .unwrap()
-            .and_utc()
-            .timestamp_millis();
+            .timestamp()
+            .as_millisecond();
         assert_eq!(none_date_timestamps, Some(now_but_zero_hour_min_sec));
 
         // A year of non-ASCII decimal digits must be rejected, not panic.
