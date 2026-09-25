@@ -361,3 +361,35 @@ fn test_updatedb_non_utf8_argument() {
         "expected an error naming the invalid argument, got: {stderr:?}"
     );
 }
+
+#[test]
+fn test_default_database_paths() {
+    assert_eq!(
+        findutils::locate::DEFAULT_DB_PATH,
+        findutils::updatedb::DEFAULT_DB_PATH
+    );
+    #[cfg(not(windows))]
+    assert_eq!(
+        findutils::locate::DEFAULT_DB_PATH,
+        "/usr/local/var/locatedb"
+    );
+    #[cfg(windows)]
+    assert_eq!(
+        findutils::locate::DEFAULT_DB_PATH,
+        r"C:\ProgramData\locatedb"
+    );
+}
+
+#[test]
+fn test_locate_split_database_paths() {
+    let joined_paths =
+        std::env::join_paths(["test_data/db/test_data_db", "test_data/db/invalid_db"]).unwrap();
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args([
+            "abbbc",
+            &format!("--database={}", joined_paths.to_string_lossy()),
+        ])
+        .assert()
+        .failure();
+}
