@@ -12,7 +12,6 @@ use std::{
     str::FromStr,
 };
 
-use chrono::{DateTime, Local, TimeDelta};
 use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
 use itertools::Itertools;
 use onig::{Regex, RegexOptions, Syntax};
@@ -132,8 +131,14 @@ impl Statistics {
     fn print<W: Write>(&self, out: &mut W, dbreader: &DbReader) -> io::Result<()> {
         if let Ok(metadata) = fs::metadata(&dbreader.path) {
             if let Ok(time) = metadata.modified() {
-                let time: DateTime<Local> = time.into();
-                writeln!(out, "Database was last modified at {}", time)?;
+                if let Ok(ts) = jiff::Timestamp::try_from(time) {
+                    let time = ts.to_zoned(jiff::tz::TimeZone::system());
+                    writeln!(
+                        out,
+                        "Database was last modified at {}",
+                        time.strftime("%Y-%m-%d %H:%M:%S.%9f %:z")
+                    )?;
+                }
             }
             writeln!(out, "Locate database size: {} bytes", metadata.len())?;
         }
@@ -576,12 +581,15 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
 }
 
 /// Whether a database of the given `age` is older than `max_age` days.
-/// A `max_age` too large for `i64`/`chrono` to represent can never be exceeded.
-fn is_db_too_old(age: TimeDelta, max_age: usize) -> bool {
-    match i64::try_from(max_age).ok().and_then(TimeDelta::try_days) {
-        Some(limit) => age > limit,
-        None => false,
-    }
+/// A `max_age` too large for `i64` to represent can never be exceeded.
+fn is_db_too_old(age: jiff::SignedDuration, max_age: usize) -> bool {
+    let Some(limit_secs) = i64::try_from(max_age)
+        .ok()
+        .and_then(|d| d.checked_mul(60 * 60 * 24))
+    else {
+        return false;
+    };
+    age.as_secs() > limit_secs
 }
 
 fn do_locate(args: &[&str]) -> LocateResult<()> {
@@ -616,17 +624,18 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 // if we can get the mtime of the file, check it against the current time
                 if let Ok(metadata) = fs::metadata(&dbreader.path) {
                     if let Ok(time) = metadata.modified() {
-                        let modified: DateTime<Local> = time.into();
-                        let now = Local::now();
-                        let delta = now - modified;
-                        if is_db_too_old(delta, config.max_age) {
-                            eprintln!(
-                                "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
-                                args[0],
-                                dbreader.path.to_string_lossy(),
-                                config.max_age,
-                                delta.num_seconds() as f64 / (60 * 60 * 24) as f64
-                            );
+                        if let Ok(modified) = jiff::Timestamp::try_from(time) {
+                            let now = jiff::Timestamp::now();
+                            let delta = now.duration_since(modified);
+                            if is_db_too_old(delta, config.max_age) {
+                                eprintln!(
+                                    "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
+                                    args[0],
+                                    dbreader.path.to_string_lossy(),
+                                    config.max_age,
+                                    delta.as_secs() as f64 / (60.0 * 60.0 * 24.0)
+                                );
+                            }
                         }
                     }
                 }
@@ -703,8 +712,6 @@ mod tests {
     use std::io::{self, Write};
     use std::path::Path;
 
-    use chrono::TimeDelta;
-
     use super::{is_db_too_old, path_exists, DbReader, Statistics};
 
     /// A writer that always fails, to emulate stdout with no space left
@@ -735,21 +742,83 @@ mod tests {
     }
 
     #[test]
+    fn statistics_print_last_modified_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("db.bin");
+        std::fs::write(&db, b"\0LOCATE02\0\0/foo\0").unwrap();
+
+        let mtime = jiff::civil::date(2000, 1, 15)
+            .at(9, 30, 21, 2_000_000)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .unwrap();
+        filetime::set_file_mtime(
+            &db,
+            filetime::FileTime::from_unix_time(
+                mtime.timestamp().as_second(),
+                mtime.timestamp().subsec_nanosecond() as u32,
+            ),
+        )
+        .unwrap();
+
+        let dbreader = DbReader::new(&db).unwrap();
+
+        let stats = Statistics::new();
+        let mut out = Vec::new();
+        stats.print(&mut out, &dbreader).unwrap();
+        let output = String::from_utf8(out).unwrap();
+
+        let line = output
+            .lines()
+            .find(|line| line.starts_with("Database was last modified at "))
+            .expect("should output last modified date");
+
+        let offset = mtime.offset().seconds();
+        let sign = if offset >= 0 { '+' } else { '-' };
+        let hours = offset.unsigned_abs() / 3600;
+        let mins = (offset.unsigned_abs() % 3600) / 60;
+        let expected = format!(
+            "Database was last modified at 2000-01-15 09:30:21.002000000 {sign}{hours:02}:{mins:02}"
+        );
+        assert_eq!(line, expected);
+    }
+
+    #[test]
     fn db_too_old_compares_ordinary_ages() {
-        let day = TimeDelta::days(1);
+        let day = jiff::SignedDuration::from_hours(24);
         assert!(is_db_too_old(day, 0));
         assert!(!is_db_too_old(day, 8));
     }
 
     #[test]
     fn db_too_old_ignores_max_age_beyond_i64() {
-        assert!(!is_db_too_old(TimeDelta::days(1), usize::MAX));
+        assert!(!is_db_too_old(
+            jiff::SignedDuration::from_hours(24),
+            usize::MAX
+        ));
     }
 
     #[test]
-    #[cfg(target_pointer_width = "64")]
-    fn db_too_old_ignores_max_age_beyond_chrono_range() {
-        assert!(!is_db_too_old(TimeDelta::days(1), 1_000_000_000_000));
+    fn db_too_old_ignores_max_age_overflowing_seconds() {
+        assert!(!is_db_too_old(
+            jiff::SignedDuration::from_hours(24),
+            i64::MAX as usize
+        ));
+    }
+
+    #[test]
+    fn statistics_print_nonexistent_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("db.bin");
+        std::fs::write(&db, b"\0LOCATE02\0\0/foo\0").unwrap();
+        let mut dbreader = DbReader::new(&db).unwrap();
+        dbreader.path = dir.path().join("nonexistent");
+
+        let stats = Statistics::new();
+        let mut out = Vec::new();
+        stats.print(&mut out, &dbreader).unwrap();
+        let output = String::from_utf8(out).unwrap();
+        assert!(!output.contains("Database was last modified at"));
+        assert!(!output.contains("Locate database size"));
     }
 
     /// Create a symlink at `link` pointing at `target`, cross-platform.
