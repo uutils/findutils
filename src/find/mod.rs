@@ -15,6 +15,7 @@ use std::io::{self, stderr, stdout, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
+use uucore::error;
 use walkdir::WalkDir;
 
 pub struct Config {
@@ -160,6 +161,8 @@ struct ParsedInfo {
 /// <https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html>
 struct Files0Paths {
     reader: Box<dyn BufRead>,
+    /// Kept so that read errors can be reported GNU-style with the offending file name.
+    name: String,
 }
 
 impl Files0Paths {
@@ -168,11 +171,19 @@ impl Files0Paths {
         let reader: Box<dyn BufRead> = if name == "-" {
             Box::new(BufReader::new(io::stdin()))
         } else {
-            let file = std::fs::File::open(name)
-                .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
+            let file = std::fs::File::open(name).map_err(|e| {
+                format!(
+                    "cannot open ‘{}’ for reading: {}",
+                    name,
+                    error::strip_errno(&e)
+                )
+            })?;
             Box::new(BufReader::new(file))
         };
-        Ok(Self { reader })
+        Ok(Self {
+            reader,
+            name: name.to_string(),
+        })
     }
 }
 
@@ -183,7 +194,14 @@ impl Iterator for Files0Paths {
         loop {
             let mut buffer = Vec::new();
             match self.reader.read_until(0, &mut buffer) {
-                Err(e) => return Some(Err(e.into())),
+                Err(e) => {
+                    return Some(Err(format!(
+                        "‘{}’: read error: {}",
+                        self.name,
+                        error::strip_errno(&e)
+                    )
+                    .into()));
+                }
                 Ok(0) => return None,
                 Ok(_) => {}
             }
