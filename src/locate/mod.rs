@@ -15,11 +15,12 @@ use std::{
 use chrono::{DateTime, Local, TimeDelta};
 use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
 use itertools::Itertools;
-use onig::{Regex, RegexOptions, Syntax};
 use thiserror::Error;
 use uucore::error::{ClapErrorWrapper, UClapError, UError, UResult};
 
+use crate::find::matchers::regex_transpile;
 use crate::{find::matchers::RegexType, updatedb::DbFormat};
+use fancy_regex::Regex;
 
 #[derive(Debug)]
 pub struct Config {
@@ -158,14 +159,14 @@ impl Patterns {
     fn any_match(&self, entry: &str) -> bool {
         match self {
             Self::String(v) => v.iter().any(|s| entry.contains(s)),
-            Self::Regex(v) => v.iter().any(|r| r.find(entry).is_some()),
+            Self::Regex(v) => v.iter().any(|r| r.is_match(entry).unwrap_or(false)),
         }
     }
 
     fn all_match(&self, entry: &str) -> bool {
         match self {
             Self::String(v) => v.iter().all(|s| entry.contains(s)),
-            Self::Regex(v) => v.iter().all(|r| r.find(entry).is_some()),
+            Self::Regex(v) => v.iter().all(|r| r.is_match(entry).unwrap_or(false)),
         }
     }
 }
@@ -175,23 +176,12 @@ pub struct ParsedInfo {
     config: Config,
 }
 
-fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Result<Regex, onig::Error> {
-    let syntax = match ty {
-        RegexType::Emacs => Syntax::emacs(),
-        RegexType::Grep => Syntax::grep(),
-        RegexType::PosixBasic => Syntax::posix_basic(),
-        RegexType::PosixExtended => Syntax::posix_extended(),
-    };
-
-    Regex::with_options(
-        pattern,
-        if config.ignore_case {
-            RegexOptions::REGEX_OPTION_IGNORECASE
-        } else {
-            RegexOptions::REGEX_OPTION_NONE
-        },
-        syntax,
-    )
+fn make_regex(
+    ty: RegexType,
+    config: &Config,
+    pattern: &str,
+) -> Result<fancy_regex::Regex, Box<dyn std::error::Error>> {
+    regex_transpile::compile(pattern, ty, config.ignore_case)
 }
 
 impl TryFrom<ArgMatches> for ParsedInfo {

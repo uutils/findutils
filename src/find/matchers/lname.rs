@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+use std::error::Error;
 use std::io::{stderr, Write};
 use std::path::PathBuf;
 
@@ -38,9 +39,9 @@ pub struct LinkNameMatcher {
 }
 
 impl LinkNameMatcher {
-    pub fn new(pattern_string: &str, caseless: bool) -> Self {
-        let pattern = Pattern::new(pattern_string, caseless);
-        Self { pattern }
+    pub fn new(pattern_string: &str, caseless: bool) -> Result<Self, Box<dyn Error>> {
+        let pattern = Pattern::new(pattern_string, caseless)?;
+        Ok(Self { pattern })
     }
 }
 
@@ -90,7 +91,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = LinkNameMatcher::new("ab?bc", false);
+        let matcher = LinkNameMatcher::new("ab?bc", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
@@ -100,7 +101,7 @@ mod tests {
         create_file_link();
 
         let link_f = get_dir_entry_for("test_data/links", "link-f");
-        let matcher = LinkNameMatcher::new("AbB?c", true);
+        let matcher = LinkNameMatcher::new("AbB?c", true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&link_f, &mut deps.new_matcher_io()));
     }
