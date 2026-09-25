@@ -84,6 +84,8 @@ pub enum Follow {
     Roots,
     /// Always follow symlinks (-L).
     Always,
+    /// Follow all links, treating broken links as errors (-printf %Y).
+    Force,
 }
 
 impl Follow {
@@ -93,14 +95,20 @@ impl Follow {
             Self::Never => false,
             Self::Roots => depth == 0,
             Self::Always => true,
+            Self::Force => true,
         }
     }
 
     /// Get metadata for a [WalkEntry].
     pub fn metadata(self, entry: &WalkEntry) -> Result<Metadata, WalkError> {
         if self.follow_at_depth(entry.depth()) == entry.follow() {
-            // Same follow flag, re-use cached metadata
-            entry.metadata().cloned()
+            if self == Self::Force && entry.file_type().is_symlink() {
+                // Broken link, return an error
+                self.metadata_at_depth(entry.path(), entry.depth())
+            } else {
+                // Same follow flag, re-use cached metadata
+                entry.metadata().cloned()
+            }
         } else if !entry.follow() && !entry.file_type().is_symlink() {
             // Not a symlink, re-use cached metadata
             entry.metadata().cloned()
@@ -126,7 +134,11 @@ impl Follow {
         let path = path.as_ref();
 
         if self.follow_at_depth(depth) {
-            match path.metadata().map_err(WalkError::from) {
+            let meta = path.metadata().map_err(WalkError::from);
+            if self == Self::Force {
+                return meta;
+            }
+            match meta {
                 Ok(meta) => return Ok(meta),
                 Err(e) if !e.is_not_found() => return Err(e),
                 _ => {}
