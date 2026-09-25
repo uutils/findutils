@@ -11,8 +11,6 @@ use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use chrono::{format::StrftimeItems, DateTime, Local};
-
 use super::{FileType, Matcher, MatcherIO, WalkEntry, WalkError};
 
 #[cfg(unix)]
@@ -27,10 +25,10 @@ enum Justify {
     Right,
 }
 
+const CTIME_FORMAT: &str = "%a %b %d %H:%M:%S.%9f0 %Y";
+
 #[derive(Debug, PartialEq, Eq)]
 enum TimeFormat {
-    /// Follow ctime(3).
-    Ctime,
     /// Seconds since the epoch, as a float w/ nanosecond part.
     SinceEpoch,
     /// Follow strftime-compatible syntax
@@ -44,22 +42,9 @@ impl TimeFormat {
                 let duration = time.duration_since(SystemTime::UNIX_EPOCH)?;
                 format!("{}.{:09}0", duration.as_secs(), duration.subsec_nanos())
             }
-            Self::Ctime => {
-                const CTIME_FORMAT: &str = "%a %b %d %H:%M:%S.%f0 %Y";
-
-                DateTime::<Local>::from(time)
-                    .format(CTIME_FORMAT)
-                    .to_string()
-            }
             Self::Strftime(format) => {
-                // Handle a special case
-                // GNU prints a fixed-width fraction: dot, nine nanosecond
-                // digits, plus a trailing literal zero. chrono's `%.f` would
-                // drop the fraction (and the dot) entirely when it is zero.
-                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S.%f0");
-                DateTime::<Local>::from(time)
-                    .format(&custom_format)
-                    .to_string()
+                let zoned = jiff::Timestamp::try_from(time)?.to_zoned(jiff::tz::TimeZone::system());
+                jiff::fmt::strtime::format(format, &zoned)?
             }
         };
 
@@ -252,18 +237,15 @@ impl FormatStringParser<'_> {
     fn parse_time_specifier(&mut self, first: char) -> Result<TimeFormat, Box<dyn Error>> {
         match self.advance_one()? {
             '@' => Ok(TimeFormat::SinceEpoch),
-            'S' => Ok(TimeFormat::Strftime("%S.%f0".to_string())),
+            '+' => Ok(TimeFormat::Strftime("%Y-%m-%d+%H:%M:%S.%9f0".to_string())),
+            'S' => Ok(TimeFormat::Strftime("%S.%9f0".to_string())),
             c => {
-                // We can't store the parsed items inside TimeFormat, because the items
-                // take a reference to the full format string, but we still try to parse
-                // it here so that errors get caught early.
                 let format = format!("%{c}");
-                match StrftimeItems::new(&format).next() {
-                    None | Some(chrono::format::Item::Error) => {
-                        Err(format!("Invalid time specifier: %{first}{c}").into())
-                    }
-                    Some(_item) => Ok(TimeFormat::Strftime(format)),
+                let dummy = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
+                if jiff::fmt::strtime::format(&format, &dummy).is_err() {
+                    return Err(format!("Invalid time specifier: %{first}{c}").into());
                 }
+                Ok(TimeFormat::Strftime(format))
             }
         }
     }
@@ -289,12 +271,12 @@ impl FormatStringParser<'_> {
         }
 
         let directive = match first {
-            'a' => FormatDirective::AccessTime(TimeFormat::Ctime),
+            'a' => FormatDirective::AccessTime(TimeFormat::Strftime(CTIME_FORMAT.to_string())),
             'A' => FormatDirective::AccessTime(self.parse_time_specifier(first)?),
             'b' => FormatDirective::Blocks {
                 large_blocks: false,
             },
-            'c' => FormatDirective::ChangeTime(TimeFormat::Ctime),
+            'c' => FormatDirective::ChangeTime(TimeFormat::Strftime(CTIME_FORMAT.to_string())),
             'C' => FormatDirective::ChangeTime(self.parse_time_specifier(first)?),
             'd' => FormatDirective::Depth,
             'D' => FormatDirective::Device,
@@ -318,7 +300,9 @@ impl FormatStringParser<'_> {
             },
             's' => FormatDirective::Size,
             'S' => FormatDirective::Sparseness,
-            't' => FormatDirective::ModificationTime(TimeFormat::Ctime),
+            't' => {
+                FormatDirective::ModificationTime(TimeFormat::Strftime(CTIME_FORMAT.to_string()))
+            }
             'T' => FormatDirective::ModificationTime(self.parse_time_specifier(first)?),
             'u' => FormatDirective::User { as_name: true },
             'U' => FormatDirective::User { as_name: false },
@@ -702,7 +686,6 @@ mod tests {
     use std::fs::File;
     use std::io::{ErrorKind, Write};
 
-    use chrono::{Duration, TimeZone};
     use tempfile::Builder;
 
     use super::*;
@@ -867,7 +850,9 @@ mod tests {
                 .components,
             vec![
                 FormatComponent::Literal("%".to_owned()),
-                unaligned_directive(FormatDirective::AccessTime(TimeFormat::Ctime)),
+                unaligned_directive(FormatDirective::AccessTime(TimeFormat::Strftime(
+                    CTIME_FORMAT.to_string()
+                ))),
                 unaligned_directive(FormatDirective::AccessTime(TimeFormat::SinceEpoch)),
                 unaligned_directive(FormatDirective::AccessTime(TimeFormat::Strftime(
                     "%k".to_string()
@@ -875,7 +860,9 @@ mod tests {
                 unaligned_directive(FormatDirective::Blocks {
                     large_blocks: false
                 }),
-                unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Ctime)),
+                unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Strftime(
+                    CTIME_FORMAT.to_string()
+                ))),
                 unaligned_directive(FormatDirective::ChangeTime(TimeFormat::SinceEpoch)),
                 unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Strftime(
                     "%H".to_string()
@@ -911,7 +898,9 @@ mod tests {
                 }),
                 unaligned_directive(FormatDirective::Size),
                 unaligned_directive(FormatDirective::Sparseness),
-                unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Ctime)),
+                unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Strftime(
+                    CTIME_FORMAT.to_string()
+                ))),
                 unaligned_directive(FormatDirective::ModificationTime(TimeFormat::SinceEpoch)),
                 unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Strftime(
                     "%d".to_string()
@@ -1194,13 +1183,16 @@ mod tests {
         let file_path = temp_dir.path().join(new_file_name);
         File::create(&file_path).expect("create temp file");
 
-        let mtime = chrono::Local
-            .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
-            .unwrap()
-            + Duration::nanoseconds(2_000_000);
+        let mtime = jiff::civil::date(2000, 1, 15)
+            .at(9, 30, 21, 2_000_000)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .unwrap();
         filetime::set_file_mtime(
             &file_path,
-            filetime::FileTime::from_unix_time(mtime.timestamp(), mtime.timestamp_subsec_nanos()),
+            filetime::FileTime::from_unix_time(
+                mtime.timestamp().as_second(),
+                mtime.timestamp().subsec_nanosecond() as u32,
+            ),
         )
         .expect("set temp file mtime");
 
@@ -1212,7 +1204,7 @@ mod tests {
         assert_eq!(
             format!(
                 "Sat Jan 15 09:30:21.0020000000 2000,{}.0020000000,2000-01-15",
-                mtime.timestamp()
+                mtime.timestamp().as_second()
             ),
             deps.get_output_as_string()
         );
@@ -1232,15 +1224,15 @@ mod tests {
             (0, "2000-01-15+09:30:21.0000000000"),
             (500_000_000, "2000-01-15+09:30:21.5000000000"),
         ] {
-            let mtime = chrono::Local
-                .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
-                .unwrap()
-                + Duration::nanoseconds(nanos);
+            let mtime = jiff::civil::date(2000, 1, 15)
+                .at(9, 30, 21, nanos)
+                .to_zoned(jiff::tz::TimeZone::system())
+                .unwrap();
             filetime::set_file_mtime(
                 &file_path,
                 filetime::FileTime::from_unix_time(
-                    mtime.timestamp(),
-                    mtime.timestamp_subsec_nanos(),
+                    mtime.timestamp().as_second(),
+                    mtime.timestamp().subsec_nanosecond() as u32,
                 ),
             )
             .expect("set temp file mtime");
