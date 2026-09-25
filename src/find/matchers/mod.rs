@@ -63,6 +63,7 @@ use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
 use std::{
+    collections::HashMap,
     error::Error,
     fs::{File, Metadata},
     path::{Path, PathBuf},
@@ -286,7 +287,8 @@ pub fn build_top_level_matcher(
     args: &[&str],
     config: &mut Config,
 ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-    let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, false))?;
+    let mut output_files = HashMap::new();
+    let (_, top_level_matcher) = (build_matcher_tree(args, config, &mut output_files, 0, false))?;
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
@@ -449,11 +451,20 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
-/// Creates a file if it doesn't exist.
-/// If it does exist, it will be overwritten.
-fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
+/// Opens an output file once, truncating any existing contents, and returns a
+/// handle that shares its cursor with the other actions targeting that path.
+fn get_or_create_file(
+    path: &str,
+    output_files: &mut HashMap<PathBuf, File>,
+) -> Result<File, Box<dyn Error>> {
+    if let Some(file) = output_files.get(Path::new(path)) {
+        return Ok(file.try_clone()?);
+    }
+
     let file = File::create(path)?;
-    Ok(file)
+    let action_file = file.try_clone()?;
+    output_files.insert(PathBuf::from(path), file);
+    Ok(action_file)
 }
 
 /// The main "translate command-line args into a matcher" function. Will call
@@ -463,6 +474,7 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
 fn build_matcher_tree(
     args: &[&str],
     config: &mut Config,
+    output_files: &mut HashMap<PathBuf, File>,
     arg_index: usize,
     mut expecting_bracket: bool,
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
@@ -493,7 +505,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(args[i], output_files)?;
                 Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
             }
             "-fprintf" => {
@@ -505,7 +517,7 @@ fn build_matcher_tree(
                 // Args + 1: output file path
                 // Args + 2: format string
                 i += 1;
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(args[i], output_files)?;
                 let output_path = PathBuf::from(args[i]);
                 i += 1;
                 Some(Printf::new(args[i], Some((file, output_path)))?.into_box())
@@ -516,7 +528,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(args[i], output_files)?;
                 Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
             }
             "-ls" => Some(Ls::new(None).into_box()),
@@ -526,7 +538,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
 
-                let file = get_or_create_file(args[i])?;
+                let file = get_or_create_file(args[i], output_files)?;
                 Some(Ls::new(Some(file)).into_box())
             }
             "-true" => Some(TrueMatcher.into_box()),
@@ -879,7 +891,8 @@ fn build_matcher_tree(
                 None
             }
             "(" => {
-                let (new_arg_index, sub_matcher) = build_matcher_tree(args, config, i + 1, true)?;
+                let (new_arg_index, sub_matcher) =
+                    build_matcher_tree(args, config, output_files, i + 1, true)?;
                 i = new_arg_index;
                 Some(sub_matcher)
             }
@@ -1927,22 +1940,24 @@ mod tests {
     fn get_or_create_file_test() {
         use std::fs;
 
+        let mut output_files = HashMap::new();
+
         // remove file if hard link file exist.
         // But you can't delete a file that doesn't exist,
         // so ignore the error returned here.
         let _ = fs::remove_file("test_data/get_or_create_file_test");
 
         // test create file
-        let file = get_or_create_file("test_data/get_or_create_file_test");
+        let file = get_or_create_file("test_data/get_or_create_file_test", &mut output_files);
         assert!(file.is_ok());
 
-        let file = get_or_create_file("test_data/get_or_create_file_test");
+        let file = get_or_create_file("test_data/get_or_create_file_test", &mut output_files);
         assert!(file.is_ok());
 
         // test error when file no permission
         #[cfg(unix)]
         {
-            let result = get_or_create_file("/etc/shadow");
+            let result = get_or_create_file("/etc/shadow", &mut output_files);
             assert!(result.is_err());
         }
 
