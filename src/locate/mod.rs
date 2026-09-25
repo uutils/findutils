@@ -572,13 +572,11 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
         } else {
             patterns.all_match(entry.as_ref())
         }
+    } else if has_metachars {
+        // TODO: parse metacharacters
+        false
     } else {
-        if has_metachars {
-            // TODO: parse metacharacters
-            false
-        } else {
-            patterns.any_match(entry.as_ref())
-        }
+        patterns.any_match(entry.as_ref())
     };
 
     // existence is always checked against the full path, even in `--basename` mode

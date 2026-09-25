@@ -37,7 +37,7 @@ fn ucmd() -> uutests::util::UCommand {
 // use in a regex.
 #[cfg(windows)]
 fn fix_up_regex_slashes(re: &str) -> String {
-    re.replace("/", "\\\\")
+    re.replace('/', "\\\\")
 }
 
 #[cfg(not(windows))]
