@@ -263,6 +263,23 @@ fn xargs_explicit_size_can_exceed_default_cap() {
 }
 
 #[test]
+#[cfg(unix)]
+fn xargs_explicit_size_accounts_for_argument_pointers() {
+    let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) } as usize;
+    // The strings fit, but their argv pointers push the command over ARG_MAX.
+    let arg_count = arg_max / 4;
+    let result = ucmd()
+        .args(&["-s", &arg_max.to_string(), "echo"])
+        .pipe_in("x\n".repeat(arg_count))
+        .succeeds();
+    assert!(result.stdout_str().lines().count() > 1);
+    assert_eq!(
+        arg_count,
+        result.stdout_str().split_ascii_whitespace().count()
+    );
+}
+
+#[test]
 fn xargs_exec() {
     let result = ucmd()
         .args(&[
