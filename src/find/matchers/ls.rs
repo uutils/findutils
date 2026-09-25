@@ -2,8 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
-use chrono::DateTime;
 use std::{
     fs::File,
     io::{stderr, Write},
@@ -44,6 +42,19 @@ pub struct Ls {
 }
 
 impl Ls {
+    fn format_last_modified(metadata: &std::fs::Metadata) -> String {
+        metadata
+            .modified()
+            .ok()
+            .and_then(|t| jiff::Timestamp::try_from(t).ok())
+            .map(|ts| {
+                ts.to_zoned(jiff::tz::TimeZone::system())
+                    .strftime("%b %e %H:%M")
+                    .to_string()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn new(output_file: Option<File>) -> Self {
         Self {
             output_file,
@@ -81,11 +92,7 @@ impl Ls {
         let group =
             uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
         let size = metadata.size();
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let local: DateTime<chrono::Local> = system_time.into();
-            local.format("%b %e %H:%M")
-        };
+        let last_modified = Self::format_last_modified(metadata);
         let mut path = file_info.path().to_string_lossy().into_owned();
         if file_info.file_type().is_symlink() {
             if let Ok(target) = std::fs::read_link(file_info.path()) {
@@ -162,11 +169,7 @@ impl Ls {
         let hard_links = 0;
         let user = 0;
         let group = 0;
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let local: DateTime<chrono::Local> = system_time.into();
-            local.format("%b %e %H:%M")
-        };
+        let last_modified = Self::format_last_modified(metadata);
         let path = file_info.path().to_string_lossy();
 
         match writeln!(

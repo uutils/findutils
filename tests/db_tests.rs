@@ -144,6 +144,20 @@ fn test_locate_large_max_database_age() {
 }
 
 #[test]
+fn test_locate_warning_database_too_old() {
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["test_data", "--max-database-age=0", DB_FLAG])
+        .assert()
+        .success();
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: database ‘test_data/db/test_data_db’ is more than 0 days old")
+    );
+}
+
+#[test]
 fn test_locate_print_help() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
