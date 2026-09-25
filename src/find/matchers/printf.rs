@@ -813,9 +813,12 @@ mod tests {
     fn test_parse_multibyte_char_after_directive() {
         assert_eq!(
             FormatString::parse("%€").unwrap().components,
-            vec![FormatComponent::Literal("€".to_owned())]
+            vec![FormatComponent::Literal("%€".to_owned())]
         );
-        assert!(FormatString::parse("\\€").is_err());
+        assert_eq!(
+            FormatString::parse("\\€").unwrap().components,
+            vec![FormatComponent::Literal("\\€".to_owned())]
+        );
         assert!(FormatString::parse("%A€").is_err());
     }
 

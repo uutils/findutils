@@ -797,11 +797,13 @@ fn find_printf_multibyte_char_after_directive() {
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%€\\n"])
         .succeeds()
-        .stdout_only("€\n");
+        .stderr_contains("find: warning: unrecognized format directive '%€'")
+        .stdout_is("%€\n");
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\€\\n"])
-        .fails()
-        .stderr_contains("find: Invalid escape sequence");
+        .succeeds()
+        .stderr_contains("find: warning: unrecognized escape '\\€'")
+        .stdout_is("\\€\n");
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%A€"])
         .fails()
