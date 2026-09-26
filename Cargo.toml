@@ -82,11 +82,8 @@ name = "testing-commandline"
 path = "src/testing/commandline/main.rs"
 
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
-
-[profile.release-fast]
-inherits = "release"
 panic = "abort"
 
 # The profile that 'dist' (cargo-dist) builds release artifacts with.
