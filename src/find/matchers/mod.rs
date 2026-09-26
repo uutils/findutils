@@ -70,6 +70,7 @@ use std::{
     time::SystemTime,
 };
 
+use super::error::ParseError;
 use super::{Config, Dependencies};
 
 pub use entry::{FileType, WalkEntry, WalkError};
@@ -456,19 +457,35 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
     Ok(file)
 }
 
+/// Turns one of the `logical_matchers` "binary operator with nothing before it"
+/// errors into a diagnostic pointing at the operator.
+fn binary_operator_error(err: &dyn Error, arg_index: usize) -> ParseError {
+    ParseError::new(err.to_string())
+        .at(arg_index)
+        .with_label("no expression before this operator")
+}
+
 /// The error for a predicate at `args[index]` that is missing its argument.
-fn missing_argument_error(args: &[&str], index: usize) -> String {
-    format!("missing argument to `{}'", args[index])
+fn missing_argument_error(args: &[&str], index: usize) -> ParseError {
+    ParseError::new(format!("missing argument to `{}'", args[index]))
+        .at(index)
+        .with_label("this predicate needs an argument")
 }
 
 /// The error for an operator at `args[index]` that has nothing to apply to,
 /// either because the expression ends there or because a ')' closes it.
-fn missing_operand_error(args: &[&str], index: usize) -> String {
+fn missing_operand_error(args: &[&str], index: usize) -> ParseError {
     let operator = args[index];
     if args.get(index + 1) == Some(&")") {
-        format!("expected an expression between '{operator}' and ')'")
+        ParseError::new(format!(
+            "expected an expression between '{operator}' and ')'"
+        ))
+        .at(index)
+        .with_label("nothing between this operator and the ')'")
     } else {
-        format!("expected an expression after '{operator}'")
+        ParseError::new(format!("expected an expression after '{operator}'"))
+            .at(index)
+            .with_label("nothing follows this operator")
     }
 }
 
@@ -869,21 +886,27 @@ fn build_matcher_tree(
                 if !are_more_expressions(args, i) {
                     return Err(missing_operand_error(args, i).into());
                 }
-                top_level_matcher.check_new_and_condition(args[i])?;
+                top_level_matcher
+                    .check_new_and_condition(args[i])
+                    .map_err(|e| binary_operator_error(e.as_ref(), i))?;
                 None
             }
             "-or" | "-o" => {
                 if !are_more_expressions(args, i) {
                     return Err(missing_operand_error(args, i).into());
                 }
-                top_level_matcher.new_or_condition(args[i])?;
+                top_level_matcher
+                    .new_or_condition(args[i])
+                    .map_err(|e| binary_operator_error(e.as_ref(), i))?;
                 None
             }
             "," => {
                 if !are_more_expressions(args, i) {
                     return Err(missing_operand_error(args, i).into());
                 }
-                top_level_matcher.new_list_condition()?;
+                top_level_matcher
+                    .new_list_condition()
+                    .map_err(|e| binary_operator_error(e.as_ref(), i))?;
                 None
             }
             "(" => {
@@ -893,15 +916,21 @@ fn build_matcher_tree(
                 Some(sub_matcher)
             }
             ")" => {
-                if open_bracket.is_none() {
-                    return Err(From::from("you have too many ')'"));
-                }
+                let Some(open_bracket_index) = open_bracket else {
+                    return Err(ParseError::new("you have too many ')'")
+                        .at(i)
+                        .with_label("no matching '(' before this")
+                        .into());
+                };
 
                 let bracket = args[i - 1];
                 if bracket == "(" {
-                    return Err(From::from(
+                    return Err(ParseError::new(
                         "invalid expression; empty parentheses are not allowed.",
-                    ));
+                    )
+                    .at(open_bracket_index)
+                    .with_label("nothing between these parentheses")
+                    .into());
                 }
 
                 return Ok((i, top_level_matcher.build()));
@@ -979,40 +1008,38 @@ fn build_matcher_tree(
             }
 
             _ => {
-                match parse_str_to_newer_args(args[i]) {
-                    Some((x_option, y_option)) => {
-                        if i >= args.len() - 1 {
-                            return Err(missing_argument_error(args, i).into());
-                        }
-                        #[cfg(target_os = "linux")]
-                        if x_option == "B" {
-                            return Err(From::from("This system does not provide a way to find the birth time of a file."));
-                        }
-                        if y_option == "t" {
-                            let time = args[i + 1];
-                            let newer_time_type = NewerOptionType::from_str(x_option.as_str());
-                            // Convert args to unix timestamps. (expressed in numeric types)
-                            let Some(comparable_time) = parse_date_str_to_timestamps(time) else {
-                                return Err(From::from(format!(
-                                    "I cannot figure out how to interpret ‘{}’ as a date or time",
-                                    args[i + 1]
-                                )));
-                            };
-                            i += 1;
-                            Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
-                        } else {
-                            let file_path = args[i + 1];
-                            i += 1;
-                            Some(
-                                NewerOptionMatcher::new(&x_option, &y_option, file_path)?
-                                    .into_box(),
-                            )
-                        }
-                    }
-                    // Match GNU find wording for unknown predicates.
-                    None => {
-                        return Err(From::from(format!("unknown predicate `{}'", args[i])));
-                    }
+                // Match GNU find wording for unknown predicates.
+                let Some((x_option, y_option)) = parse_str_to_newer_args(args[i]) else {
+                    return Err(ParseError::new(format!("unknown predicate `{}'", args[i]))
+                        .at(i)
+                        .with_label("not a known predicate")
+                        .into());
+                };
+                if i >= args.len() - 1 {
+                    return Err(missing_argument_error(args, i).into());
+                }
+                #[cfg(target_os = "linux")]
+                if x_option == "B" {
+                    return Err(From::from(
+                        "This system does not provide a way to find the birth time of a file.",
+                    ));
+                }
+                if y_option == "t" {
+                    let time = args[i + 1];
+                    let newer_time_type = NewerOptionType::from_str(x_option.as_str());
+                    // Convert args to unix timestamps. (expressed in numeric types)
+                    let Some(comparable_time) = parse_date_str_to_timestamps(time) else {
+                        return Err(From::from(format!(
+                            "I cannot figure out how to interpret ‘{}’ as a date or time",
+                            args[i + 1]
+                        )));
+                    };
+                    i += 1;
+                    Some(NewerTimeMatcher::new(newer_time_type, comparable_time).into_box())
+                } else {
+                    let file_path = args[i + 1];
+                    i += 1;
+                    Some(NewerOptionMatcher::new(&x_option, &y_option, file_path)?.into_box())
                 }
             }
         };
@@ -1031,11 +1058,14 @@ fn build_matcher_tree(
             }
         }
     }
-    if open_bracket.is_some() {
-        return Err(From::from(
+    if let Some(open_bracket_index) = open_bracket {
+        return Err(ParseError::new(
             "invalid expression; I was expecting to find a ')' somewhere but \
              did not see one.",
-        ));
+        )
+        .at(open_bracket_index)
+        .with_label("this parenthesis is never closed")
+        .into());
     }
     Ok((i, top_level_matcher.build()))
 }
@@ -1935,6 +1965,37 @@ mod tests {
             Ok(_) => panic!("unknown predicates must be rejected"),
             Err(err) => assert_eq!(err.to_string(), "unknown predicate `-notarealpredicate'"),
         }
+    }
+
+    /// Parses `args`, expecting a failure, and returns the index of the
+    /// argument the resulting diagnostic points at.
+    fn failing_arg_index(args: &[&str]) -> Option<usize> {
+        let mut config = Config::default();
+        let err = build_top_level_matcher(args, &mut config)
+            .err()
+            .expect("expression should have been rejected");
+        err.downcast_ref::<ParseError>()
+            .expect("expression errors should carry an argument index")
+            .arg_index()
+    }
+
+    #[test]
+    fn expression_errors_point_at_the_offending_argument() {
+        // The predicate that is missing its argument, not the end of the list.
+        assert_eq!(failing_arg_index(&["-true", "-a", "-name"]), Some(2));
+        // The mistyped predicate.
+        assert_eq!(failing_arg_index(&["-true", "-o", "-nmae", "x"]), Some(2));
+        // The operator with nothing after it.
+        assert_eq!(failing_arg_index(&["-true", "-o"]), Some(1));
+        // The operator with nothing before it.
+        assert_eq!(failing_arg_index(&["-o", "-true"]), Some(0));
+        assert_eq!(failing_arg_index(&[",", "-true"]), Some(0));
+        // The '(' that is never closed, rather than the end of the list.
+        assert_eq!(failing_arg_index(&["-true", "(", "-false"]), Some(1));
+        // The '(' of the empty pair, rather than its ')'.
+        assert_eq!(failing_arg_index(&["-true", "(", ")"]), Some(1));
+        // The ')' that has no opener.
+        assert_eq!(failing_arg_index(&["-true", ")"]), Some(1));
     }
 
     #[test]

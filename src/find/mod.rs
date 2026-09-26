@@ -4,8 +4,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+pub mod error;
 pub mod matchers;
 
+use error::ParseError;
 use matchers::{Follow, WalkEntry};
 use std::cell::RefCell;
 use std::error::Error;
@@ -239,7 +241,11 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     if i == paths_start {
         paths.push(".".to_string());
     }
-    let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)?;
+    // The matcher builder only sees the expression part of the command line, so
+    // any argument index it reports has to be moved back to where that part
+    // started.
+    let matcher = matchers::build_top_level_matcher(&args[i..], &mut config)
+        .map_err(|e| ParseError::shift(e, i))?;
     let mut files0_paths = None;
     if let Some(name) = &config.files0_argument {
         if paths.len() == 1 && paths[0] == "." {
