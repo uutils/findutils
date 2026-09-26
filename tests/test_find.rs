@@ -434,7 +434,7 @@ fn files0_basic() {
     ucmd()
         .arg("-files0-from")
         .fails()
-        .stderr_contains("missing argument to -files0-from")
+        .stderr_contains("missing argument to `-files0-from'")
         .no_stdout();
 }
 
@@ -1369,12 +1369,12 @@ fn find_fprintf_missing_arguments() {
     ucmd()
         .args(&["-fprintf"])
         .fails()
-        .stderr_contains("missing argument to -fprintf");
+        .stderr_contains("missing argument to `-fprintf'");
 
     ucmd()
         .args(&["-fprintf", "/tmp/find_fprintf_out"])
         .fails()
-        .stderr_contains("missing argument to -fprintf");
+        .stderr_contains("missing argument to `-fprintf'");
 }
 
 #[test]
@@ -1593,7 +1593,7 @@ fn find_ok_missing_semicolon() {
         .args(&["test_data/simple", "-ok", "echo", "{}"])
         .pipe_in("")
         .fails()
-        .stderr_contains("missing argument to -ok")
+        .stderr_contains("missing argument to `-ok'")
         .no_stdout();
 }
 
