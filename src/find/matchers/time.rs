@@ -5,7 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::error::Error;
-use std::fs::{self, Metadata};
+use std::fs::Metadata;
 use std::io::{stderr, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -31,52 +31,6 @@ fn get_time(matcher_io: &mut MatcherIO, today_start: bool) -> SystemTime {
         UNIX_EPOCH + Duration::from_secs(local_midnight_seconds as u64)
     } else {
         matcher_io.now()
-    }
-}
-
-/// This matcher checks whether a file is newer than the file the matcher is initialized with.
-pub struct NewerMatcher {
-    given_modification_time: SystemTime,
-}
-
-impl NewerMatcher {
-    pub fn new(path_to_file: &str, follow: Follow) -> Result<Self, Box<dyn Error>> {
-        let metadata = follow.root_metadata(path_to_file)?;
-        Ok(Self {
-            given_modification_time: metadata.modified()?,
-        })
-    }
-
-    /// Implementation of matches that returns a result, allowing use to use try!
-    /// to deal with the errors.
-    fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
-        let this_time = file_info.metadata()?.modified()?;
-        // duration_since returns an Ok duration if this_time <= given_modification_time
-        // and returns an Err (with a duration) otherwise. So if this_time >
-        // given_modification_time (in which case we want to return true) then
-        // duration_since will return an error.
-        Ok(self
-            .given_modification_time
-            .duration_since(this_time)
-            .is_err())
-    }
-}
-
-impl Matcher for NewerMatcher {
-    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        match self.matches_impl(file_info) {
-            Err(e) => {
-                writeln!(
-                    &mut stderr(),
-                    "Error getting modification time for {}: {}",
-                    file_info.path().to_string_lossy(),
-                    e
-                )
-                .unwrap();
-                false
-            }
-            Ok(t) => t,
-        }
     }
 }
 
@@ -115,38 +69,31 @@ impl NewerOptionType {
     }
 }
 
-/// This matcher checks whether the file is newer than the file time of any combination of
-/// two comparison types from the target file's `NewerOptionType`.
+/// Compare a candidate's X time with a reference file's Y time.
 pub struct NewerOptionMatcher {
     x_option: NewerOptionType,
-    y_option: NewerOptionType,
-    given_modification_time: SystemTime,
+    reference_time: SystemTime,
 }
 
 impl NewerOptionMatcher {
-    pub fn new(x_option: &str, y_option: &str, path_to_file: &str) -> Result<Self, Box<dyn Error>> {
-        let metadata = fs::metadata(path_to_file)?;
+    pub fn new(
+        x_option: &str,
+        y_option: &str,
+        path_to_file: &str,
+        follow: Follow,
+    ) -> Result<Self, Box<dyn Error>> {
+        let metadata = follow.root_metadata(path_to_file)?;
         let x_option = NewerOptionType::from_str(x_option);
         let y_option = NewerOptionType::from_str(y_option);
         Ok(Self {
             x_option,
-            y_option,
-            given_modification_time: metadata.modified()?,
+            reference_time: y_option.get_file_time(&metadata)?,
         })
     }
 
     fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
         let x_option_time = self.x_option.get_file_time(file_info.metadata()?)?;
-        let y_option_time = self.y_option.get_file_time(file_info.metadata()?)?;
-
-        Ok(self
-            .given_modification_time
-            .duration_since(x_option_time)
-            .is_err()
-            && self
-                .given_modification_time
-                .duration_since(y_option_time)
-                .is_err())
+        Ok(x_option_time > self.reference_time)
     }
 }
 
@@ -156,9 +103,8 @@ impl Matcher for NewerOptionMatcher {
             Err(e) => {
                 writeln!(
                     &mut stderr(),
-                    "Error getting {:?} and {:?} time for {}: {}",
+                    "Error getting {:?} time for {}: {}",
                     self.x_option,
-                    self.y_option,
                     file_info.path().to_string_lossy(),
                     e
                 )
@@ -423,13 +369,16 @@ mod tests {
 
         let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
 
-        let matcher_for_new = NewerMatcher::new(
+        let matcher_for_new = NewerOptionMatcher::new(
+            "m",
+            "m",
             &temp_dir.path().join(new_file_name).to_string_lossy(),
             Follow::Never,
         )
         .unwrap();
         let matcher_for_old =
-            NewerMatcher::new(&old_file.path().to_string_lossy(), Follow::Never).unwrap();
+            NewerOptionMatcher::new("m", "m", &old_file.path().to_string_lossy(), Follow::Never)
+                .unwrap();
         let deps = FakeDependencies::new();
 
         assert!(
@@ -716,36 +665,49 @@ mod tests {
 
     #[test]
     fn newer_option_matcher() {
-        let options = [
-            "a",
-            #[cfg(not(target_os = "linux"))]
-            "B",
+        let temp_dir = Builder::new().prefix("newer_option_").tempdir().unwrap();
+        let reference = temp_dir.path().join("reference");
+        let candidate = temp_dir.path().join("candidate");
+        File::create(&reference).unwrap();
+        File::create(&candidate).unwrap();
+        // Change and birth times cannot be set, so they stay at the current
+        // time, which is later than all of these.
+        let base = 946_684_800;
+        filetime::set_file_times(
+            &reference,
+            filetime::FileTime::from_unix_time(base + 100, 0),
+            filetime::FileTime::from_unix_time(base + 300, 0),
+        )
+        .unwrap();
+        filetime::set_file_times(
+            &candidate,
+            filetime::FileTime::from_unix_time(base + 400, 0),
+            filetime::FileTime::from_unix_time(base + 200, 0),
+        )
+        .unwrap();
+        let candidate_entry = get_dir_entry_for(&temp_dir.path().to_string_lossy(), "candidate");
+        let reference = reference.to_string_lossy();
+
+        for (x_option, y_option, expected) in [
+            ("a", "a", true),
+            ("a", "m", true),
+            ("m", "a", true),
+            ("m", "m", false),
             #[cfg(unix)]
-            "c",
-            "m",
-        ];
-
-        for x_option in options {
-            for y_option in options {
-                let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
-                let temp_dir_path = temp_dir.path().to_string_lossy();
-                let new_file_name = "newFile";
-                // this has just been created, so should be newer
-                File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
-                let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
-                // this file should already exist
-                let old_file = get_dir_entry_for("test_data", "simple");
-                let deps = FakeDependencies::new();
-                let matcher =
-                    NewerOptionMatcher::new(x_option, y_option, &old_file.path().to_string_lossy());
-
-                assert!(
-                    matcher
-                        .unwrap()
-                        .matches(&new_file, &mut deps.new_matcher_io()),
-                    "new_file should be newer than old_dir"
-                );
-            }
+            ("a", "c", false),
+            #[cfg(unix)]
+            ("c", "m", true),
+            #[cfg(not(target_os = "linux"))]
+            ("a", "B", false),
+        ] {
+            let deps = FakeDependencies::new();
+            let matcher =
+                NewerOptionMatcher::new(x_option, y_option, &reference, Follow::Never).unwrap();
+            assert_eq!(
+                matcher.matches(&candidate_entry, &mut deps.new_matcher_io()),
+                expected,
+                "-newer{x_option}{y_option}"
+            );
         }
     }
 

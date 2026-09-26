@@ -53,8 +53,8 @@ use self::size::SizeMatcher;
 #[cfg(unix)]
 use self::stat::{InodeMatcher, LinksMatcher};
 use self::time::{
-    FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
-    NewerOptionType, NewerTimeMatcher,
+    FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerOptionMatcher, NewerOptionType,
+    NewerTimeMatcher,
 };
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
@@ -800,7 +800,7 @@ fn build_matcher_tree(
                     return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
-                Some(NewerMatcher::new(args[i], config.follow)?.into_box())
+                Some(NewerOptionMatcher::new("m", "m", args[i], config.follow)?.into_box())
             }
             Predicate::Time(file_time_type) => {
                 if i >= args.len() - 1 {
@@ -1177,6 +1177,13 @@ fn build_matcher_tree(
                         "This system does not provide a way to find the birth time of a file.",
                     ));
                 }
+                #[cfg(not(unix))]
+                if y_option == "c" {
+                    return Err(From::from(format!(
+                        "{}: change times are not available on this platform",
+                        args[i]
+                    )));
+                }
                 if y_option == "t" {
                     let time = args[i + 1];
                     let newer_time_type = NewerOptionType::from_str(x_option.as_str());
@@ -1192,7 +1199,10 @@ fn build_matcher_tree(
                 } else {
                     let file_path = args[i + 1];
                     i += 1;
-                    Some(NewerOptionMatcher::new(&x_option, &y_option, file_path)?.into_box())
+                    Some(
+                        NewerOptionMatcher::new(&x_option, &y_option, file_path, config.follow)?
+                            .into_box(),
+                    )
                 }
             }
         };
@@ -2108,6 +2118,19 @@ mod tests {
         match build_top_level_matcher(&["-neweraBcmty"], &mut config) {
             Ok(_) => panic!("invalid -newerXY suffix must be rejected"),
             Err(err) => assert_eq!(err.to_string(), "unknown predicate `-neweraBcmty'"),
+        }
+    }
+
+    #[test]
+    #[cfg(not(unix))]
+    fn build_top_level_matcher_rejects_newer_change_time_not_unix() {
+        let mut config = Config::default();
+        match build_top_level_matcher(&["-newermc", "test_data/simple"], &mut config) {
+            Ok(_) => panic!("-newermc needs a change time, which non-unix systems don't have"),
+            Err(err) => assert_eq!(
+                err.to_string(),
+                "-newermc: change times are not available on this platform"
+            ),
         }
     }
 
