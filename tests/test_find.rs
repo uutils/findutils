@@ -769,6 +769,35 @@ fn find_printf_unrecognized_escape_prints_literally() {
 }
 
 #[test]
+fn find_printf_trailing_backslash() {
+    let expected_warning = b"find: warning: escape `\\' followed by nothing at all\n";
+    ucmd()
+        .args(&["test_data/simple", "-maxdepth", "0", "-printf", "x\\"])
+        .succeeds()
+        .stdout_is_bytes(b"x\\")
+        .stderr_is_bytes(expected_warning);
+
+    let temp_dir = Builder::new()
+        .prefix("find_fprintf_backslash_")
+        .tempdir()
+        .unwrap();
+    let file = temp_dir.path().join("out");
+    ucmd()
+        .args(&[
+            "test_data/simple",
+            "-maxdepth",
+            "0",
+            "-fprintf",
+            file.to_str().unwrap(),
+            "x\\",
+        ])
+        .succeeds()
+        .stdout_is_bytes(b"")
+        .stderr_is_bytes(expected_warning);
+    assert_eq!(fs::read(file).unwrap(), b"x\\");
+}
+
+#[test]
 fn find_printf_width_too_large() {
     ucmd()
         .args(&[

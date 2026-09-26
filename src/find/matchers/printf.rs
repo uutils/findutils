@@ -169,6 +169,14 @@ impl FormatStringParser<'_> {
         const OCTAL_LEN: usize = 3;
         const OCTAL_RADIX: u32 = 8;
 
+        if self.string.is_empty() {
+            eprintln!(
+                "{}: warning: escape `\\' followed by nothing at all",
+                crate::find::program_name()
+            );
+            return Ok(FormatComponent::Literal("\\".to_owned()));
+        }
+
         // Try parsing an octal sequence first.
         let first = self.front()?;
         if first.is_digit(OCTAL_RADIX) {
@@ -792,7 +800,17 @@ mod tests {
             FormatString::parse("\\X").unwrap().components,
             vec![FormatComponent::Literal("\\X".to_owned())]
         );
-        assert!(FormatString::parse("\\").is_err());
+        assert_eq!(
+            FormatString::parse("\\").unwrap().components,
+            vec![FormatComponent::Literal("\\".to_owned())]
+        );
+        assert_eq!(
+            FormatString::parse("abc\\").unwrap().components,
+            vec![
+                FormatComponent::Literal("abc".to_owned()),
+                FormatComponent::Literal("\\".to_owned()),
+            ]
+        );
     }
 
     #[test]
