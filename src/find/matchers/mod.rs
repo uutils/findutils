@@ -456,6 +456,22 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
     Ok(file)
 }
 
+/// The error for a predicate at `args[index]` that is missing its argument.
+fn missing_argument_error(args: &[&str], index: usize) -> String {
+    format!("missing argument to `{}'", args[index])
+}
+
+/// The error for an operator at `args[index]` that has nothing to apply to,
+/// either because the expression ends there or because a ')' closes it.
+fn missing_operand_error(args: &[&str], index: usize) -> String {
+    let operator = args[index];
+    if args.get(index + 1) == Some(&")") {
+        format!("expected an expression between '{operator}' and ')'")
+    } else {
+        format!("expected an expression after '{operator}'")
+    }
+}
+
 /// The main "translate command-line args into a matcher" function. Will call
 /// itself recursively if it encounters an opening bracket. A successful return
 /// consists of a tuple containing the new index into the args array to use (if
@@ -482,14 +498,14 @@ fn build_matcher_tree(
             "-print0" => Some(Printer::new(PrintDelimiter::Null, None).into_box()),
             "-printf" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(Printf::new(args[i], None)?.into_box())
             }
             "-fprint" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
 
@@ -498,7 +514,7 @@ fn build_matcher_tree(
             }
             "-fprintf" => {
                 if i + 2 >= args.len() {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
 
                 // Action: -fprintf file format
@@ -512,7 +528,7 @@ fn build_matcher_tree(
             }
             "-fprint0" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
 
@@ -522,7 +538,7 @@ fn build_matcher_tree(
             "-ls" => Some(Ls::new(None).into_box()),
             "-fls" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
 
@@ -533,21 +549,21 @@ fn build_matcher_tree(
             "-false" => Some(FalseMatcher.into_box()),
             "-lname" | "-ilname" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-name" | "-iname" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(NameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-path" | "-ipath" | "-wholename" | "-iwholename" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
@@ -555,7 +571,7 @@ fn build_matcher_tree(
             "-readable" => Some(AccessMatcher::Readable.into_box()),
             "-regextype" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 regex_type = regex::RegexType::from_str(args[i])?;
@@ -563,35 +579,35 @@ fn build_matcher_tree(
             }
             "-regex" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(RegexMatcher::new(regex_type, args[i], false)?.into_box())
             }
             "-iregex" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(RegexMatcher::new(regex_type, args[i], true)?.into_box())
             }
             "-type" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(TypeMatcher::new(args[i])?.into_box())
             }
             "-xtype" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(XtypeMatcher::new(args[i])?.into_box())
             }
             "-fstype" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(FileSystemMatcher::new(args[i].to_string()).into_box())
@@ -603,14 +619,14 @@ fn build_matcher_tree(
             }
             "-newer" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(NewerMatcher::new(args[i], config.follow)?.into_box())
             }
             "-mtime" | "-atime" | "-ctime" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let file_time_type = match args[i] {
                     "-atime" => FileTimeType::Accessed,
@@ -626,7 +642,7 @@ fn build_matcher_tree(
             }
             "-amin" | "-cmin" | "-mmin" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let file_time_type = match args[i] {
                     "-amin" => FileTimeType::Accessed,
@@ -643,7 +659,7 @@ fn build_matcher_tree(
             }
             "-size" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let (size, unit) =
                     convert_arg_to_comparable_value_and_suffix(args[i], args[i + 1])?;
@@ -667,7 +683,7 @@ fn build_matcher_tree(
                 if arg_index < i + required_arg || arg_index == args.len() {
                     // at the minimum we need the executable and the ';'
                     // or the executable and the '{} +'
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let expression = args[i];
                 if expression == "-execdir" {
@@ -710,7 +726,7 @@ fn build_matcher_tree(
                 }
                 if arg_index < i + 2 || arg_index == args.len() {
                     // Need at least the executable and the terminating ';'.
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let expression = args[i];
                 if expression == "-okdir" {
@@ -732,7 +748,7 @@ fn build_matcher_tree(
             #[cfg(unix)]
             "-inum" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let inum = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
@@ -747,7 +763,7 @@ fn build_matcher_tree(
             #[cfg(unix)]
             "-links" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let inum = convert_arg_to_comparable_value(args[i], args[i + 1])?;
                 i += 1;
@@ -759,7 +775,7 @@ fn build_matcher_tree(
             }
             "-samefile" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 let path = args[i];
@@ -769,7 +785,7 @@ fn build_matcher_tree(
             }
             "-user" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
 
                 let user = args[i + 1];
@@ -789,7 +805,7 @@ fn build_matcher_tree(
             "-nouser" => Some(NoUserMatcher {}.into_box()),
             "-uid" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 // check if the argument is a number
                 let uid = convert_arg_to_comparable_value(args[i], args[i + 1])?;
@@ -798,7 +814,7 @@ fn build_matcher_tree(
             }
             "-group" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
 
                 let group = args[i + 1];
@@ -820,7 +836,7 @@ fn build_matcher_tree(
             "-nogroup" => Some(NoGroupMatcher {}.into_box()),
             "-gid" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 // check if the argument is a number
                 let gid = convert_arg_to_comparable_value(args[i], args[i + 1])?;
@@ -830,7 +846,7 @@ fn build_matcher_tree(
             "-executable" => Some(AccessMatcher::Executable.into_box()),
             "-perm" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
                 Some(PermMatcher::new(args[i])?.into_box())
@@ -840,40 +856,28 @@ fn build_matcher_tree(
             "-writable" => Some(AccessMatcher::Writable.into_box()),
             "-not" | "!" => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!(
-                        "expected an expression after {}",
-                        args[i]
-                    )));
+                    return Err(missing_operand_error(args, i).into());
                 }
                 invert_next_matcher = !invert_next_matcher;
                 None
             }
             "-and" | "-a" => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!(
-                        "expected an expression after {}",
-                        args[i]
-                    )));
+                    return Err(missing_operand_error(args, i).into());
                 }
-                top_level_matcher.check_new_and_condition()?;
+                top_level_matcher.check_new_and_condition(args[i])?;
                 None
             }
             "-or" | "-o" => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!(
-                        "expected an expression after {}",
-                        args[i]
-                    )));
+                    return Err(missing_operand_error(args, i).into());
                 }
                 top_level_matcher.new_or_condition(args[i])?;
                 None
             }
             "," => {
                 if !are_more_expressions(args, i) {
-                    return Err(From::from(format!(
-                        "expected an expression after {}",
-                        args[i]
-                    )));
+                    return Err(missing_operand_error(args, i).into());
                 }
                 top_level_matcher.new_list_condition()?;
                 None
@@ -885,9 +889,7 @@ fn build_matcher_tree(
             }
             ")" => {
                 if !expecting_bracket {
-                    return Err(From::from(
-                        "invalid expression: expected expression before closing parentheses ')'.",
-                    ));
+                    return Err(From::from("you have too many ')'"));
                 }
 
                 let bracket = args[i - 1];
@@ -940,7 +942,7 @@ fn build_matcher_tree(
             }
             "-maxdepth" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 config.max_depth = convert_arg_to_number(args[i], args[i + 1])?;
                 i += 1;
@@ -948,7 +950,7 @@ fn build_matcher_tree(
             }
             "-mindepth" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 config.min_depth = convert_arg_to_number(args[i], args[i + 1])?;
                 i += 1;
@@ -964,7 +966,7 @@ fn build_matcher_tree(
             }
             "-files0-from" => {
                 if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                    return Err(missing_argument_error(args, i).into());
                 }
                 let _ = config.files0_argument.insert(args[i + 1].to_string());
                 i += 1;
@@ -975,7 +977,7 @@ fn build_matcher_tree(
                 match parse_str_to_newer_args(args[i]) {
                     Some((x_option, y_option)) => {
                         if i >= args.len() - 1 {
-                            return Err(From::from(format!("missing argument to {}", args[i])));
+                            return Err(missing_argument_error(args, i).into());
                         }
                         #[cfg(target_os = "linux")]
                         if x_option == "B" {
@@ -1158,8 +1160,7 @@ mod tests {
             let mut config = Config::default();
 
             if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
-                assert!(e.to_string().contains("missing argument to"));
-                assert!(e.to_string().contains(arg));
+                assert_eq!(e.to_string(), format!("missing argument to `{arg}'"));
             } else {
                 panic!("parsing argument lists that end in -not should fail");
             }
@@ -1194,12 +1195,21 @@ mod tests {
 
     #[test]
     fn build_top_level_matcher_and_without_expr1() {
-        let mut config = Config::default();
+        // The operator is named as it was spelled, not normalised to `-a`.
+        for arg in ["-and", "-a"] {
+            let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-a", "-true"], &mut config) {
-            assert!(e.to_string().contains("you have used a binary operator"));
-        } else {
-            panic!("parsing argument list that begins with -a should fail");
+            if let Err(e) = build_top_level_matcher(&[arg, "-true"], &mut config) {
+                assert_eq!(
+                    e.to_string(),
+                    format!(
+                        "invalid expression; you have used a binary operator \
+                         '{arg}' with nothing before it."
+                    )
+                );
+            } else {
+                panic!("parsing argument list that begins with {arg} should fail");
+            }
         }
     }
 
@@ -1354,11 +1364,34 @@ mod tests {
             &["-type", "f", "(", "-name", "*.txt", ")", ")"],
             &mut config,
         ) {
-            assert!(e
-                .to_string()
-                .contains("expected expression before closing parentheses ')'"));
+            assert_eq!(e.to_string(), "you have too many ')'");
         } else {
             panic!("parsing argument list with too many closing brackets should fail");
+        }
+    }
+
+    #[test]
+    fn build_top_level_matcher_operator_without_operand() {
+        // An operator left dangling at the end names only itself; one cut off
+        // by a ')' names both, since the ')' is what ended the expression.
+        let cases: [(&[&str], &str); 4] = [
+            (&["-false", ","], "expected an expression after ','"),
+            (&["-not"], "expected an expression after '-not'"),
+            (
+                &["(", "-empty", "-or", ")"],
+                "expected an expression between '-or' and ')'",
+            ),
+            (
+                &["(", "!", ")", "-print"],
+                "expected an expression between '!' and ')'",
+            ),
+        ];
+        for (args, expected) in cases {
+            let mut config = Config::default();
+            match build_top_level_matcher(args, &mut config) {
+                Err(e) => assert_eq!(e.to_string(), expected),
+                Ok(_) => panic!("{args:?} should fail to parse"),
+            }
         }
     }
 
