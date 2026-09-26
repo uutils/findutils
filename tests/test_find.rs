@@ -1151,6 +1151,163 @@ fn find_newer_xy() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_newer_uses_reference_time_selected_by_y() {
+    use std::os::unix::fs::MetadataExt;
+
+    let dir = Builder::new()
+        .prefix("find_newer_reference_")
+        .tempdir()
+        .unwrap();
+    let candidate = dir.path().join("candidate");
+    let reference = dir.path().join("reference");
+    File::create(&candidate).unwrap();
+    File::create(&reference).unwrap();
+
+    let candidate_time = filetime::FileTime::from_unix_time(946_684_802, 0);
+    let reference_time = filetime::FileTime::from_unix_time(946_684_801, 0);
+    filetime::set_file_times(&candidate, candidate_time, candidate_time).unwrap();
+    filetime::set_file_times(&reference, reference_time, reference_time).unwrap();
+
+    for (option, should_print) in [
+        ("-newer", true),
+        ("-anewer", true),
+        ("-cnewer", true),
+        ("-newerac", false),
+        ("-newermc", false),
+    ] {
+        assert_newer_result(&candidate, option, &reference, should_print);
+    }
+
+    let reference_metadata = reference.metadata().unwrap();
+    let after_reference_change = filetime::FileTime::from_unix_time(
+        reference_metadata.ctime() + 10,
+        reference_metadata.ctime_nsec() as u32,
+    );
+    filetime::set_file_times(&candidate, after_reference_change, after_reference_change).unwrap();
+    assert_newer_result(&candidate, "-newermc", &reference, true);
+
+    // Changing mtime does not make the candidate's ctime old.
+    let old_mtime = filetime::FileTime::from_unix_time(631_152_000, 0);
+    filetime::set_file_times(&candidate, old_mtime, old_mtime).unwrap();
+    for option in ["-cnewer", "-newercm"] {
+        assert_newer_result(&candidate, option, &reference, true);
+    }
+}
+
+fn assert_newer_result(candidate: &Path, option: &str, reference: &Path, should_print: bool) {
+    let printed = format!("{}\n", candidate.display());
+    ucmd()
+        .arg(candidate)
+        .arg(option)
+        .arg(reference)
+        .arg("-print")
+        .succeeds()
+        .no_stderr()
+        .stdout_only(if should_print { &printed } else { "" });
+}
+
+#[test]
+fn find_newer_distinguishes_access_and_modification_times() {
+    let dir = Builder::new()
+        .prefix("find_newer_distinct_")
+        .tempdir()
+        .unwrap();
+    let candidate = dir.path().join("candidate");
+    let reference = dir.path().join("reference");
+    File::create(&candidate).unwrap();
+    File::create(&reference).unwrap();
+
+    let base = 946_684_800;
+    filetime::set_file_times(
+        &candidate,
+        filetime::FileTime::from_unix_time(base + 200, 0),
+        filetime::FileTime::from_unix_time(base + 300, 0),
+    )
+    .unwrap();
+    filetime::set_file_times(
+        &reference,
+        filetime::FileTime::from_unix_time(base + 350, 0),
+        filetime::FileTime::from_unix_time(base + 100, 0),
+    )
+    .unwrap();
+
+    for (option, should_print) in [
+        ("-neweraa", false),
+        ("-neweram", true),
+        ("-newerma", false),
+        ("-newermm", true),
+    ] {
+        assert_newer_result(&candidate, option, &reference, should_print);
+    }
+
+    filetime::set_file_times(
+        &reference,
+        filetime::FileTime::from_unix_time(base + 250, 0),
+        filetime::FileTime::from_unix_time(base + 200, 0),
+    )
+    .unwrap();
+    for (option, should_print) in [
+        ("-neweram", false), // Equal timestamps do not match.
+        ("-newermm", true),
+    ] {
+        assert_newer_result(&candidate, option, &reference, should_print);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn find_newer_reference_symlink_obeys_follow_mode() {
+    let dir = Builder::new().prefix("find_newer_link_").tempdir().unwrap();
+    let candidate = dir.path().join("candidate");
+    let reference = dir.path().join("reference");
+    let link = dir.path().join("link");
+    File::create(&candidate).unwrap();
+    File::create(&reference).unwrap();
+    let candidate_time = filetime::FileTime::from_unix_time(946_684_802, 0);
+    let reference_time = filetime::FileTime::from_unix_time(946_684_801, 0);
+    let link_time = filetime::FileTime::from_unix_time(946_684_805, 0);
+    filetime::set_file_times(&candidate, candidate_time, candidate_time).unwrap();
+    filetime::set_file_times(&reference, reference_time, reference_time).unwrap();
+    symlink(&reference, &link).unwrap();
+    filetime::set_symlink_file_times(&link, link_time, link_time).unwrap();
+
+    let printed = format!("{}\n", candidate.display());
+    for (mode, should_print) in [("-P", false), ("-H", true), ("-L", true)] {
+        ucmd()
+            .arg(mode)
+            .arg(&candidate)
+            .arg("-newermm")
+            .arg(&link)
+            .arg("-print")
+            .succeeds()
+            .no_stderr()
+            .stdout_only(if should_print { &printed } else { "" });
+    }
+
+    // -follow changes how references in later predicates are read, but it
+    // cannot retroactively change a reference in an earlier predicate.
+    ucmd()
+        .arg(&candidate)
+        .arg("-follow")
+        .arg("-newermm")
+        .arg(&link)
+        .arg("-print")
+        .succeeds()
+        .no_stderr()
+        .stdout_only(&printed);
+    ucmd()
+        .arg(&candidate)
+        .arg("-newermm")
+        .arg(&link)
+        .arg("-follow")
+        .arg("-print")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
 fn find_age_range() {
     let args = ["-amin", "-cmin", "-mmin"];
     let times = ["-60", "-120", "-240", "+60", "+120", "+240"];

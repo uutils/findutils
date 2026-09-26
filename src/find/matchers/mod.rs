@@ -997,8 +997,13 @@ fn build_matcher_tree(
                             let file_path = args[i + 1];
                             i += 1;
                             Some(
-                                NewerOptionMatcher::new(&x_option, &y_option, file_path)?
-                                    .into_box(),
+                                NewerOptionMatcher::new(
+                                    &x_option,
+                                    &y_option,
+                                    file_path,
+                                    config.follow,
+                                )?
+                                .into_box(),
                             )
                         }
                     }
