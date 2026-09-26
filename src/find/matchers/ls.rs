@@ -2,8 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
-use chrono::DateTime;
 use std::{
     fs::File,
     io::{stderr, Write},
@@ -159,8 +157,8 @@ impl Ls {
         let size = metadata.size();
         let last_modified = {
             let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
+            let ts = jiff::Timestamp::try_from(system_time).unwrap();
+            ts.strftime("%b %e %H:%M").to_string()
         };
         let path = file_info.path().to_string_lossy();
 
@@ -232,8 +230,8 @@ impl Ls {
         let group = 0;
         let last_modified = {
             let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
+            let ts = jiff::Timestamp::try_from(system_time).unwrap();
+            ts.strftime("%b %e %H:%M").to_string()
         };
         let path = file_info.path().to_string_lossy();
 

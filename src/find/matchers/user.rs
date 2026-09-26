@@ -93,7 +93,6 @@ mod tests {
     fn test_user_matcher() {
         use crate::find::matchers::{tests::get_dir_entry_for, user::UserMatcher, Matcher};
         use crate::find::tests::FakeDependencies;
-        use chrono::Local;
         use nix::unistd::{Uid, User};
         use std::fs::File;
         use std::os::unix::fs::MetadataExt;
@@ -119,7 +118,7 @@ mod tests {
         );
 
         // Testing a non-existent group name
-        let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
+        let time_string = jiff::Zoned::now().strftime("%Y%m%d%H%M%S").to_string();
         let matcher = UserMatcher::from_user_name(time_string.as_str());
         assert!(
             matcher.is_none(),
