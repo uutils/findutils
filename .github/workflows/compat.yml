@@ -19,20 +19,8 @@ jobs:
         with:
           path: findutils
       - name: Checkout GNU findutils
-        uses: actions/checkout@v7
-        with:
-          repository: gnu-mirror-unofficial/findutils
-          path: findutils.gnu
-          ref: 5768a03ddfb5e18b1682e339d6cdd24ff721c510
-          submodules: false
-
-      - name: Override submodule URL and initialize submodules
-        # Use github instead of upstream git server
         run: |
-          git submodule sync --recursive
-          git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-          git submodule update --init --recursive --depth 1
-        working-directory: findutils.gnu
+          git clone --depth 1 --branch v4.11.0 --recurse-submodules --shallow-submodules https://git.savannah.gnu.org/git/findutils.git findutils.gnu
       - name: Install dependencies
         shell: bash
         run: |
@@ -40,6 +28,7 @@ jobs:
           sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get build-dep findutils
+          sudo apt-get install -y gperf
       - name: Run GNU tests
         shell: bash
         run: |
