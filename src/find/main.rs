@@ -25,7 +25,8 @@ fn main() {
         Ok(args) => args,
         Err(invalid) => {
             eprintln!(
-                "find: invalid (non-UTF-8) argument: {}",
+                "{}: invalid (non-UTF-8) argument: {}",
+                findutils::find::program_name(),
                 invalid.to_string_lossy()
             );
             std::process::exit(1);
