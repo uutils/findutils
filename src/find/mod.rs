@@ -524,7 +524,17 @@ pub fn find_main(args: &[&str], deps: &dyn Dependencies) -> i32 {
     match do_find(&args[1..], deps) {
         Ok(ret) => ret,
         Err(e) => {
-            writeln!(&mut stderr(), "{}: {e}", program_name()).unwrap();
+            // `do_find` was handed argv without the program name.
+            let e = ParseError::shift(e, 1);
+            // Only at a terminal or with `UUTILS_DIAG=always`, so captured
+            // output (the GNU and bfs suites) keeps the single GNU line.
+            let rendered = uucore::diagnostics::enabled()
+                && e.downcast_ref::<ParseError>()
+                    .is_some_and(|parse_error| parse_error.render(args));
+            // The report heads itself with the same line.
+            if !rendered {
+                writeln!(&mut stderr(), "{}: {e}", program_name()).unwrap();
+            }
             1
         }
     }

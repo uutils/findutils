@@ -8,6 +8,8 @@
 
 use std::error::Error;
 
+use uucore::diagnostics::Snapshot;
+
 /// A command-line expression error that can point at the argument that caused it.
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
@@ -69,6 +71,25 @@ impl ParseError {
             }
             Err(other) => other,
         }
+    }
+
+    /// Draws the error under the offending argument on stderr, headed by the
+    /// plain message line. Returns `false`, having printed nothing, when the
+    /// error names no argument.
+    pub fn render(&self, argv: &[&str]) -> bool {
+        let Some(arg_index) = self.arg_index else {
+            return false;
+        };
+        // uucore translates the "Help:" label from its own embedded strings;
+        // without a localizer it prints the raw message id instead. Done here
+        // so that only a drawn report pays for it.
+        let _ = uucore::locale::setup_localization("find");
+        Snapshot::with_program(argv).render(
+            arg_index,
+            &self.message,
+            self.label.as_deref(),
+            self.help.as_deref(),
+        )
     }
 }
 
@@ -135,6 +156,13 @@ mod tests {
             .with_label("not a known predicate")
             .with_help("did you mean `-zip'?");
         assert_eq!(error.to_string(), "unknown predicate `-zap'");
+    }
+
+    #[test]
+    fn render_without_an_index_draws_nothing() {
+        // Nothing to point at: the caller has to print the plain line.
+        let error = ParseError::new("something went wrong");
+        assert!(!error.render(&["find", "/srv"]));
     }
 
     #[test]

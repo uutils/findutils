@@ -24,6 +24,13 @@ use common::test_helpers::fix_up_slashes;
 
 mod common;
 
+/// How `find` names itself in errors.
+const PROGRAM: &str = "find";
+
+/// How uucore heads an expression report: argv[0]'s base name, which keeps the
+/// `.exe` on Windows.
+const REPORT_PROGRAM: &str = if cfg!(windows) { "find.exe" } else { "find" };
+
 /// Returns a UCommand for `find` with the working directory set to the
 /// repository root, so that tests using relative `test_data/` paths work.
 fn ucmd() -> uutests::util::UCommand {
@@ -177,6 +184,67 @@ fn mindepth_exceeds_maxdepth_outputs_nothing() {
         .args(&["./test_data/simple", "-mindepth", "2", "-maxdepth", "1"])
         .succeeds()
         .no_stdout();
+}
+
+#[test]
+fn expression_diagnostics_stay_out_of_the_way_of_scripts() {
+    // A test harness captures stderr, so it is never a terminal and the error
+    // must stay the single GNU-compatible line -- which is what the GNU and
+    // bfs compatibility suites assert on. `never` holds even at a terminal;
+    // any value other than `always` reads as unset rather than as "on".
+    for value in [None, Some(""), Some("never"), Some("NEVER"), Some("1")] {
+        let mut command = ucmd();
+        command.args(&["-true", "-o", "-nmae", "x"]);
+        if let Some(value) = value {
+            command.env("UUTILS_DIAG", value);
+        }
+        let output = command.fails().no_stdout().stderr_str().to_owned();
+        assert_eq!(
+            output.trim_end(),
+            format!("{PROGRAM}: unknown predicate `-nmae'")
+        );
+    }
+}
+
+#[test]
+fn expression_diagnostics_underline_the_bad_argument() {
+    // Asking for a report has to produce one, including at a redirected
+    // stderr like this test's.
+    for value in ["always", "ALWAYS"] {
+        let output = ucmd()
+            .args(&["-true", "-o", "-nmae", "x"])
+            .env("UUTILS_DIAG", value)
+            .fails()
+            .no_stdout()
+            .stderr_str()
+            .to_owned();
+
+        // The plain message still leads, so nothing that matched before stops
+        // matching.
+        assert!(output.starts_with(&format!("{REPORT_PROGRAM}: unknown predicate `-nmae'\n")));
+        assert!(output.contains("-true -o -nmae x"));
+        assert!(output.contains("not a known predicate"));
+        assert!(output.contains("did you mean `-name'?"));
+        // Piped output must not be coloured.
+        assert!(!output.contains('\u{1b}'));
+    }
+}
+
+#[test]
+fn expression_diagnostics_do_not_guess_at_two_letter_arguments() {
+    // `-H` is a real option, valid only before the paths; put it after them and
+    // it reaches the expression parser. Every two-character predicate is one
+    // edit away from it, so any suggestion here would be arbitrary.
+    let output = ucmd()
+        .args(&[".", "-H"])
+        .env("UUTILS_DIAG", "always")
+        .fails()
+        .no_stdout()
+        .stderr_str()
+        .to_owned();
+
+    assert!(output.starts_with(&format!("{REPORT_PROGRAM}: unknown predicate `-H'\n")));
+    assert!(!output.contains("did you mean"));
 }
 
 #[test]
@@ -779,7 +847,7 @@ fn find_printf_width_too_large() {
             "%70000s\\n",
         ])
         .fails()
-        .stderr_contains("find: Format width too large");
+        .stderr_contains(format!("{PROGRAM}: Format width too large"));
     ucmd()
         .args(&[
             "./test_data/simple",
@@ -789,7 +857,7 @@ fn find_printf_width_too_large() {
             "%99999999999999999999s\\n",
         ])
         .fails()
-        .stderr_contains("find: Invalid format width");
+        .stderr_contains(format!("{PROGRAM}: Invalid format width"));
 }
 
 #[test]
@@ -807,7 +875,7 @@ fn find_printf_multibyte_char_after_directive() {
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%A€"])
         .fails()
-        .stderr_contains("find: Invalid time specifier");
+        .stderr_contains(format!("{PROGRAM}: Invalid time specifier"));
 }
 
 #[cfg(unix)]
@@ -1107,18 +1175,21 @@ fn find_newer_xy() {
                 .no_stderr();
         }
 
-        ucmd().args(&[".", arg, "invalid"]).fails().stderr_only(
-            "find: I cannot figure out how to interpret ‘invalid’ as a date or time\n",
-        );
+        ucmd()
+            .args(&[".", arg, "invalid"])
+            .fails()
+            .stderr_only(format!(
+                "{PROGRAM}: I cannot figure out how to interpret ‘invalid’ as a date or time\n"
+            ));
     }
 
     #[cfg(target_os = "linux")]
     ucmd()
         .args(&[".", "-newerBt", "jan 01, 2000"])
         .fails()
-        .stderr_only(
-            "find: This system does not provide a way to find the birth time of a file.\n",
-        );
+        .stderr_only(format!(
+            "{PROGRAM}: This system does not provide a way to find the birth time of a file.\n"
+        ));
 }
 
 #[test]
@@ -1140,9 +1211,9 @@ fn find_age_range() {
             ucmd()
                 .args(&["test_data/simple", arg, time_string])
                 .fails()
-                .stderr_contains(
-                    "find: Expected a decimal integer (with optional + or - prefix) argument to",
-                )
+                .stderr_contains(format!(
+                    "{PROGRAM}: Expected a decimal integer (with optional + or - prefix) argument to"
+                ))
                 .no_stdout();
         }
     }
