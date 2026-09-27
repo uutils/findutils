@@ -24,10 +24,16 @@ faccess = "0.2.4"
 nix = { version = "0.31", features = ["fs", "user"] }
 onig = { version = "6.5", default-features = false }
 regex = "1.12"
-uucore = { version = "0.10.0", features = ["entries", "fs", "fsext", "mode"] }
+uucore = { version = "0.12.0", features = ["entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
 itertools = "0.15.0"
 thiserror = "2.0.12"
+
+# uucore depends on rustix without its `std` feature, which leaves
+# `uucore::fs` unable to build for WASI. Turn it on through feature
+# unification until uucore does it itself.
+[target.'cfg(target_os = "wasi")'.dependencies]
+rustix = { version = "1.1.4", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
