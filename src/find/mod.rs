@@ -194,7 +194,7 @@ impl Iterator for Files0Paths {
             }
             if buffer.is_empty() {
                 // Skip it so as to avoid a file not found error.
-                eprintln!("find: invalid zero-length file name");
+                eprintln!("{}: invalid zero-length file name", program_name());
                 continue;
             }
             return Some(String::from_utf8(buffer).map_err(Into::into));
@@ -492,6 +492,23 @@ fn print_version(deps: &dyn Dependencies) -> Result<(), io::Error> {
     )
 }
 
+/// The name `find` was invoked as, for prefixing its messages: the base name
+/// of argv[0], without the `.exe` that Windows executables carry.
+pub fn program_name() -> &'static str {
+    let name = uucore::util_name();
+    let path = std::path::Path::new(name);
+    if cfg!(windows)
+        && path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+    {
+        if let Some(stem) = path.file_stem().and_then(std::ffi::OsStr::to_str) {
+            return stem;
+        }
+    }
+    name
+}
+
 /// Does all the work for find.
 ///
 /// All main has to do is pass in the command-line args and exit the process
@@ -501,7 +518,7 @@ pub fn find_main(args: &[&str], deps: &dyn Dependencies) -> i32 {
     match do_find(&args[1..], deps) {
         Ok(ret) => ret,
         Err(e) => {
-            writeln!(&mut stderr(), "find: {e}").unwrap();
+            writeln!(&mut stderr(), "{}: {e}", program_name()).unwrap();
             1
         }
     }
