@@ -40,7 +40,7 @@ impl ComparisonType {
 
 #[cfg(unix)]
 mod parsing {
-    use super::{parse_numeric, parse_symbolic, ComparisonType, Error};
+    use super::{parse_numeric, parse_symbolic, ComparisonType};
 
     pub fn split_comparison_type(pattern: &str) -> (ComparisonType, &str) {
         let mut chars = pattern.chars();
@@ -52,24 +52,20 @@ mod parsing {
         }
     }
 
-    pub fn parse_mode(pattern: &str, for_dir: bool) -> Result<u32, Box<dyn Error>> {
+    pub fn parse_mode(pattern: &str, for_dir: bool) -> Option<u32> {
         // GNU rejects the old `-perm +MODE` octal form; a leading + needs a symbolic mode.
-        if let Some(rest) = pattern.strip_prefix('+') {
-            if rest.contains(|c: char| c.is_ascii_digit()) {
-                return Err(From::from(format!("invalid mode '+{rest}'")));
-            }
-        }
-
-        let mode = if pattern.contains(|c: char| c.is_ascii_digit()) {
-            parse_numeric(0, pattern, for_dir)?
+        let plus_octal = pattern
+            .strip_prefix('+')
+            .is_some_and(|rest| rest.contains(|c: char| c.is_ascii_digit()));
+        if plus_octal {
+            None
+        } else if pattern.contains(|c: char| c.is_ascii_digit()) {
+            parse_numeric(0, pattern, for_dir).ok()
         } else {
-            let mut mode = 0;
-            for chunk in pattern.split(',') {
-                mode = parse_symbolic(mode, chunk, 0, for_dir)?;
-            }
-            mode
-        };
-        Ok(mode)
+            pattern.split(',').try_fold(0, |mode, chunk| {
+                parse_symbolic(mode, chunk, 0, for_dir).ok()
+            })
+        }
     }
 }
 
@@ -87,9 +83,11 @@ pub struct PermMatcher {}
 impl PermMatcher {
     #[cfg(unix)]
     pub fn new(pattern: &str) -> Result<Self, Box<dyn Error>> {
-        let (comparison_type, pattern) = parsing::split_comparison_type(pattern);
-        let file_pattern = parsing::parse_mode(pattern, false)?;
-        let dir_pattern = parsing::parse_mode(pattern, false)?;
+        // Like GNU, name the whole argument rather than say what is wrong with it.
+        let invalid_mode = || format!("invalid mode '{pattern}'");
+        let (comparison_type, mode) = parsing::split_comparison_type(pattern);
+        let file_pattern = parsing::parse_mode(mode, false).ok_or_else(invalid_mode)?;
+        let dir_pattern = parsing::parse_mode(mode, false).ok_or_else(invalid_mode)?;
         Ok(Self {
             comparison_type,
             file_pattern,
@@ -234,6 +232,16 @@ mod tests {
         // FIXME: uucore::mode shouldn't accept this
         // PermMatcher::new("u=rwxg=rx,o+r")
         //     .expect_err("missing comma should fail");
+    }
+
+    #[test]
+    fn parsing_failure_names_the_mode() {
+        // Whatever the parser choked on, the message is the same plain English
+        // line: it must not depend on uucore's localizer being set up.
+        for pattern in ["g+q", "a", "-0o9", "/u=z", "+17"] {
+            let error = PermMatcher::new(pattern).expect_err("mode should be rejected");
+            assert_eq!(error.to_string(), format!("invalid mode '{pattern}'"));
+        }
     }
 
     #[test]
