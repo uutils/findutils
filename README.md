@@ -9,6 +9,9 @@
 Rust implementation of [GNU findutils](https://www.gnu.org/software/findutils/): `xargs`, `find`, `locate` and `updatedb`.
 The goal is to be a full drop-in replacement of the original commands.
 
+At a terminal, `find` underlines the argument at fault in expression errors; see
+[Extensions](docs/src/extensions.md#rich-expression-diagnostics).
+
 ## Run the GNU testsuite on rust/findutils:
 
 ```
