@@ -710,6 +710,8 @@ where
 struct ByteDelimitedArgumentReader<R: Read> {
     rd: BufReader<NonFatalPipeReader<R>>,
     delimiter: u8,
+    /// Explicit -0/-d delimiters make empty items arguments; plain -I skips empty lines.
+    keep_empty: bool,
 }
 
 impl<R> ByteDelimitedArgumentReader<R>
@@ -720,6 +722,7 @@ where
         Self {
             rd: BufReader::new(NonFatalPipeReader::new(rd)),
             delimiter,
+            keep_empty: false,
         }
     }
 }
@@ -735,7 +738,7 @@ where
             if bytes_read > 0 {
                 let need_to_trim_delimiter = buf[buf.len() - 1] == self.delimiter;
                 let bytes = if need_to_trim_delimiter {
-                    if buf.len() == 1 {
+                    if buf.len() == 1 && !self.keep_empty {
                         // This was *only* a delimiter, so we didn't actually
                         // read anything interesting. Try again.
                         continue;
@@ -1248,7 +1251,9 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     };
 
     let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
-        Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
+        let mut reader = ByteDelimitedArgumentReader::new(args_file, delimiter);
+        reader.keep_empty = options.null || matches.contains_id(options::DELIMITER);
+        Box::new(reader)
     } else {
         Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
     };
@@ -1645,6 +1650,22 @@ mod tests {
         assert_eq!(wrapper.next().unwrap().unwrap(), make_arg_soft("ghi"));
         assert_eq!(wrapper.next().unwrap(), None);
         assert_eq!(wrapper.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_byte_delimited_reader_keep_empty() {
+        // The final delimiter only ends the last item; it adds no empty one.
+        let mut reader = ByteDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"!ab!!"), Chunk::Data(b"!c!")]),
+            b'!',
+        );
+        reader.keep_empty = true;
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("ab"));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("c"));
+        assert_eq!(reader.next().unwrap(), None);
     }
 
     #[test]
