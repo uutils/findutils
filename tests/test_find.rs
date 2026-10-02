@@ -1385,6 +1385,24 @@ fn find_ls() {
         .no_stderr();
 }
 
+#[test]
+#[cfg(unix)]
+fn find_ls_shows_file_type_and_special_bits() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = Builder::new().prefix("find_ls_modes").tempdir().unwrap();
+    let file = temp_dir.path().join("setuid");
+    File::create(&file).unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o4755)).unwrap();
+    symlink("setuid", temp_dir.path().join("link")).unwrap();
+
+    ucmd()
+        .args(&[temp_dir.path().to_str().unwrap(), "-ls"])
+        .succeeds()
+        .stdout_contains(" -rwsr-xr-x ")
+        .stdout_contains(" lrwx");
+}
+
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
 // a file's owning uid/gid had no passwd/group entry; it must fall back to the
 // numeric id like GNU find. Creating such a file needs privilege to chown to an
