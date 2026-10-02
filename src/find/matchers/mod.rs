@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 mod access;
+mod bre_to_ere;
 mod delete;
 mod empty;
 mod entry;
@@ -23,6 +24,7 @@ mod printf;
 mod prune;
 mod quit;
 mod regex;
+pub mod regex_transpile;
 mod samefile;
 mod size;
 #[cfg(unix)]
@@ -536,21 +538,21 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
+                Some(LinkNameMatcher::new(args[i], args[i - 1].starts_with("-i"))?.into_box())
             }
             "-name" | "-iname" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(NameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
+                Some(NameMatcher::new(args[i], args[i - 1].starts_with("-i"))?.into_box())
             }
             "-path" | "-ipath" | "-wholename" | "-iwholename" => {
                 if i >= args.len() - 1 {
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
+                Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i"))?.into_box())
             }
             "-readable" => Some(AccessMatcher::Readable.into_box()),
             "-regextype" => {

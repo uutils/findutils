@@ -4,6 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+use std::error::Error;
+
 use super::glob::Pattern;
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -14,9 +16,9 @@ pub struct PathMatcher {
 }
 
 impl PathMatcher {
-    pub fn new(pattern_string: &str, caseless: bool) -> Self {
-        let pattern = Pattern::new(pattern_string, caseless);
-        Self { pattern }
+    pub fn new(pattern_string: &str, caseless: bool) -> Result<Self, Box<dyn Error>> {
+        let pattern = Pattern::new(pattern_string, caseless)?;
+        Ok(Self { pattern })
     }
 }
 
@@ -48,7 +50,7 @@ mod tests {
     #[test]
     fn matching_against_whole_path() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = PathMatcher::new(&fix_up_glob_slashes("test_*/*/a*c"), false);
+        let matcher = PathMatcher::new(&fix_up_glob_slashes("test_*/*/a*c"), false).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -56,7 +58,7 @@ mod tests {
     #[test]
     fn not_matching_against_just_name() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = PathMatcher::new("a*c", false);
+        let matcher = PathMatcher::new("a*c", false).unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -64,7 +66,7 @@ mod tests {
     #[test]
     fn not_matching_against_wrong_case() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = PathMatcher::new(&fix_up_glob_slashes("test_*/*/A*C"), false);
+        let matcher = PathMatcher::new(&fix_up_glob_slashes("test_*/*/A*C"), false).unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
@@ -72,7 +74,7 @@ mod tests {
     #[test]
     fn caseless_matching() {
         let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
-        let matcher = PathMatcher::new(&fix_up_glob_slashes("test_*/*/A*C"), true);
+        let matcher = PathMatcher::new(&fix_up_glob_slashes("test_*/*/A*C"), true).unwrap();
         let deps = FakeDependencies::new();
         assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
     }
