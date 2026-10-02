@@ -5,7 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::error::Error;
-use std::fs::{self, Metadata};
+use std::fs::Metadata;
 use std::io::{stderr, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -115,38 +115,31 @@ impl NewerOptionType {
     }
 }
 
-/// This matcher checks whether the file is newer than the file time of any combination of
-/// two comparison types from the target file's `NewerOptionType`.
+/// Compare a candidate's X time with a reference file's Y time.
 pub struct NewerOptionMatcher {
     x_option: NewerOptionType,
-    y_option: NewerOptionType,
-    given_modification_time: SystemTime,
+    reference_time: SystemTime,
 }
 
 impl NewerOptionMatcher {
-    pub fn new(x_option: &str, y_option: &str, path_to_file: &str) -> Result<Self, Box<dyn Error>> {
-        let metadata = fs::metadata(path_to_file)?;
+    pub fn new(
+        x_option: &str,
+        y_option: &str,
+        path_to_file: &str,
+        follow: Follow,
+    ) -> Result<Self, Box<dyn Error>> {
+        let metadata = follow.root_metadata(path_to_file)?;
         let x_option = NewerOptionType::from_str(x_option);
         let y_option = NewerOptionType::from_str(y_option);
         Ok(Self {
             x_option,
-            y_option,
-            given_modification_time: metadata.modified()?,
+            reference_time: y_option.get_file_time(&metadata)?,
         })
     }
 
     fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
         let x_option_time = self.x_option.get_file_time(file_info.metadata()?)?;
-        let y_option_time = self.y_option.get_file_time(file_info.metadata()?)?;
-
-        Ok(self
-            .given_modification_time
-            .duration_since(x_option_time)
-            .is_err()
-            && self
-                .given_modification_time
-                .duration_since(y_option_time)
-                .is_err())
+        Ok(x_option_time > self.reference_time)
     }
 }
 
@@ -156,9 +149,8 @@ impl Matcher for NewerOptionMatcher {
             Err(e) => {
                 writeln!(
                     &mut stderr(),
-                    "Error getting {:?} and {:?} time for {}: {}",
+                    "Error getting {:?} time for {}: {}",
                     self.x_option,
-                    self.y_option,
                     file_info.path().to_string_lossy(),
                     e
                 )
@@ -725,28 +717,124 @@ mod tests {
             "m",
         ];
 
+        let temp_dir = Builder::new().prefix("newer_option_").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let reference = temp_dir.path().join("reference");
+        let candidate = temp_dir.path().join("candidate");
+        File::create(&reference).unwrap();
+        File::create(&candidate).unwrap();
+        let base = 946_684_800;
+        filetime::set_file_times(
+            &reference,
+            filetime::FileTime::from_unix_time(base + 100, 0),
+            filetime::FileTime::from_unix_time(base + 300, 0),
+        )
+        .unwrap();
+        filetime::set_file_times(
+            &candidate,
+            filetime::FileTime::from_unix_time(base + 200, 0),
+            filetime::FileTime::from_unix_time(base + 400, 0),
+        )
+        .unwrap();
+        let candidate_entry = get_dir_entry_for(&temp_dir_path, "candidate");
+        let reference_metadata = reference.metadata().unwrap();
+        let candidate_metadata = candidate_entry.metadata().unwrap();
+
         for x_option in options {
             for y_option in options {
-                let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
-                let temp_dir_path = temp_dir.path().to_string_lossy();
-                let new_file_name = "newFile";
-                // this has just been created, so should be newer
-                File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
-                let new_file = get_dir_entry_for(&temp_dir_path, new_file_name);
-                // this file should already exist
-                let old_file = get_dir_entry_for("test_data", "simple");
+                let x_time = observed_newer_time(candidate_metadata, x_option);
+                let y_time = observed_newer_time(&reference_metadata, y_option);
+                if y_time.is_none() {
+                    assert!(NewerOptionMatcher::new(
+                        x_option,
+                        y_option,
+                        &reference.to_string_lossy(),
+                        Follow::Never,
+                    )
+                    .is_err());
+                }
+                let (Some(x_time), Some(y_time)) = (x_time, y_time) else {
+                    eprintln!("skipping {x_option}/{y_option}: birth time unsupported");
+                    continue;
+                };
+                let expected = if ["a", "m"].contains(&x_option) && ["a", "m"].contains(&y_option) {
+                    // The explicitly set seconds put only a/m in the false case.
+                    x_option != "a" || y_option != "m"
+                } else {
+                    x_time > y_time
+                };
                 let deps = FakeDependencies::new();
-                let matcher =
-                    NewerOptionMatcher::new(x_option, y_option, &old_file.path().to_string_lossy());
-
-                assert!(
+                let matcher = NewerOptionMatcher::new(
+                    x_option,
+                    y_option,
+                    &reference.to_string_lossy(),
+                    Follow::Never,
+                );
+                assert_eq!(
                     matcher
                         .unwrap()
-                        .matches(&new_file, &mut deps.new_matcher_io()),
-                    "new_file should be newer than old_dir"
+                        .matches(&candidate_entry, &mut deps.new_matcher_io()),
+                    expected,
+                    "wrong result for {x_option}/{y_option}"
                 );
             }
         }
+    }
+
+    fn observed_newer_time(metadata: &Metadata, option: &str) -> Option<SystemTime> {
+        match option {
+            "a" => Some(metadata.accessed().expect("access time")),
+            "m" => Some(metadata.modified().expect("modification time")),
+            "c" => Some(metadata.changed().expect("change time")),
+            "B" => match metadata.created() {
+                Ok(time) => Some(time),
+                Err(error) if error.kind() == std::io::ErrorKind::Unsupported => None,
+                Err(error) => panic!("reading birth time failed: {error}"),
+            },
+            _ => panic!("unexpected newer option: {option}"),
+        }
+    }
+
+    #[test]
+    fn newer_option_uses_reference_birth_time_when_available() {
+        let dir = Builder::new().prefix("newer_birth_").tempdir().unwrap();
+        let reference = dir.path().join("reference");
+        let candidate = dir.path().join("candidate");
+        File::create(&reference).unwrap();
+        File::create(&candidate).unwrap();
+
+        let Some(birth) = observed_newer_time(&reference.metadata().unwrap(), "B") else {
+            assert!(
+                NewerOptionMatcher::new("m", "B", &reference.to_string_lossy(), Follow::Never)
+                    .is_err()
+            );
+            eprintln!(
+                "skipping birth-time comparison: this filesystem does not provide creation time"
+            );
+            return;
+        };
+        let between = filetime::FileTime::from_system_time(birth + Duration::from_secs(10));
+        let future = filetime::FileTime::from_system_time(birth + Duration::from_secs(20));
+        filetime::set_file_times(&reference, future, future).unwrap();
+        filetime::set_file_times(&candidate, between, between).unwrap();
+        let metadata = reference.metadata().unwrap();
+        if observed_newer_time(&metadata, "B") != Some(birth)
+            || filetime::FileTime::from_last_modification_time(&metadata) != future
+            || filetime::FileTime::from_last_modification_time(&candidate.metadata().unwrap())
+                != between
+        {
+            eprintln!("skipping birth-time comparison: this filesystem cannot preserve the required timestamps");
+            return;
+        }
+
+        let entry = get_dir_entry_for(&dir.path().to_string_lossy(), "candidate");
+        let deps = FakeDependencies::new();
+        let with_birth =
+            NewerOptionMatcher::new("m", "B", &reference.to_string_lossy(), Follow::Never).unwrap();
+        let with_mtime =
+            NewerOptionMatcher::new("m", "m", &reference.to_string_lossy(), Follow::Never).unwrap();
+        assert!(with_birth.matches(&entry, &mut deps.new_matcher_io()));
+        assert!(!with_mtime.matches(&entry, &mut deps.new_matcher_io()));
     }
 
     #[test]
