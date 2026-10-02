@@ -2,8 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
-use chrono::DateTime;
 use std::{
     fs::File,
     io::{stderr, Write},
@@ -157,11 +155,12 @@ impl Ls {
         let group =
             uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
         let size = metadata.size();
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
-        };
+        let last_modified = metadata
+            .modified()
+            .ok()
+            .and_then(|t| jiff::Timestamp::try_from(t).ok())
+            .map(|ts| ts.strftime("%b %e %H:%M").to_string())
+            .unwrap_or_default();
         let path = file_info.path().to_string_lossy();
 
         match writeln!(
@@ -230,11 +229,12 @@ impl Ls {
         let hard_links = 0;
         let user = 0;
         let group = 0;
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
-        };
+        let last_modified = metadata
+            .modified()
+            .ok()
+            .and_then(|t| jiff::Timestamp::try_from(t).ok())
+            .map(|ts| ts.strftime("%b %e %H:%M").to_string())
+            .unwrap_or_default();
         let path = file_info.path().to_string_lossy();
 
         match writeln!(

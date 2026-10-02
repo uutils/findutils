@@ -18,7 +18,7 @@ pkg-fmt = "zip"
 
 [dependencies]
 argmax = "0.4.0"
-chrono = "0.4.45"
+jiff = "0.2"
 clap = { version = "4.6", features = ["env"] }
 faccess = "0.2.4"
 nix = { version = "0.31", features = ["fs", "user"] }
