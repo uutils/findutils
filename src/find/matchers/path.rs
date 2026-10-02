@@ -37,7 +37,7 @@ mod tests {
     // being in a glob.
     #[cfg(windows)]
     fn fix_up_glob_slashes(re: &str) -> String {
-        re.replace("/", "\\\\")
+        re.replace('/', "\\\\")
     }
 
     #[cfg(not(windows))]
