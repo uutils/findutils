@@ -11,13 +11,16 @@ GNU_SHA256="bfd19cb06cc71f3352d567e90284d8cdac02ac89774bbeadf0b533b0c11432fd"
 # Repository root (where util/ lives), captured before we cd into the GNU tree.
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Download the GNU tree unless one (e.g. a git clone) is already there.
-if test ! -d ../findutils.gnu; then
-    tarball="../findutils-${GNU_VERSION}.tar.xz"
-    curl -fsSL -o "${tarball}" "https://github.com/uutils/thirdparty-artifacts/releases/download/findutils-${GNU_VERSION}/findutils-${GNU_VERSION}.tar.xz"
-    echo "${GNU_SHA256}  ${tarball}" | sha256sum -c
-    mkdir ../findutils.gnu
-    tar -xJf "${tarball}" -C ../findutils.gnu --strip-components=1
+# Fetch upstream test suite if missing
+mkdir -p findutils.gnu
+if test ! -f findutils.gnu/README && ! tar xJf findutils.tar.xz --strip-components=1 -C findutils.gnu 2>/dev/null;then
+    gnu_version=4.11.0
+    b2=d3d881c60efb01eacf14a6bad95513b0186b694d0857a708bb28864fdf949fa99cbb80d2c8bf70e4bac65ebfba852bfa8435bf637fa7716e80e55a8b06ea1313
+    echo "Could not find findutils.gnu/README. Downliading ${gnu_version}"
+    curl -fsSL "https://github.com/uutils/thirdparty-artifacts/releases/download/findutils-${gnu_version}/findutils-${gnu_version}.tar.xz" -o findutils.tar.xz
+    echo "${b2}"  findutils.tar.xz \
+      | b2sum --check
+    tar xJf findutils.tar.xz --strip-components=1 -C findutils.gnu
 fi
 
 # build the rust implementation
@@ -26,9 +29,9 @@ cargo build --profile="${PROFILE}"
 cp target/"${PROFILE}"/find ../findutils.gnu/find.rust
 cp target/"${PROFILE}"/xargs ../findutils.gnu/xargs.rust
 
-# Clone and build upstream repo
 cd ../findutils.gnu
-# A git checkout needs bootstrapping; a release tarball ships configure.
+# Build upstream test suite
+# bootstrap is needed for git src, unnecessary for tarball src
 if test ! -f configure; then
     ./bootstrap
 fi
