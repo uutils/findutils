@@ -8,6 +8,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if test ! -d ../findutils.gnu; then
     echo "Could not find ../findutils.gnu"
     echo "git clone https://git.savannah.gnu.org/git/findutils.git findutils.gnu"
+    echo "or extract content of https://ftp.gnu.org/gnu/findutils/findutils-4.11.0.tar.xz to findutils.gnu"
     exit 1
 fi
 
@@ -19,8 +20,11 @@ cp target/"${PROFILE}"/xargs ../findutils.gnu/xargs.rust
 
 # Clone and build upstream repo
 cd ../findutils.gnu
+# needed for git src, unnecessary for tarball src
 if test ! -f configure; then
     ./bootstrap
+fi
+if test ! -f Makefile; then
     ./configure --quiet
     make -j "$(nproc)"
 fi
