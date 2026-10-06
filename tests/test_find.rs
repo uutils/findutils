@@ -1395,12 +1395,16 @@ fn find_ls_shows_file_type_and_special_bits() {
     File::create(&file).unwrap();
     fs::set_permissions(&file, fs::Permissions::from_mode(0o4755)).unwrap();
     symlink("setuid", temp_dir.path().join("link")).unwrap();
+    let sticky = temp_dir.path().join("sticky");
+    fs::create_dir(&sticky).unwrap();
+    fs::set_permissions(&sticky, fs::Permissions::from_mode(0o1777)).unwrap();
 
     ucmd()
         .args(&[temp_dir.path().to_str().unwrap(), "-ls"])
         .succeeds()
         .stdout_contains(" -rwsr-xr-x ")
-        .stdout_contains(" lrwx");
+        .stdout_contains(" lrwx")
+        .stdout_contains(" drwxrwxrwt ");
 }
 
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
