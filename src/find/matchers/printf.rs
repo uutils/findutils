@@ -7,11 +7,11 @@
 use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use chrono::{format::StrftimeItems, DateTime, Local};
+use chrono::{DateTime, Local, format::StrftimeItems};
 
 use super::{FileType, Matcher, MatcherIO, WalkEntry, WalkError};
 
@@ -707,11 +707,11 @@ mod tests {
 
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
+    use crate::find::tests::fix_up_slashes;
 
     #[cfg(unix)]
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::os::unix::fs::{PermissionsExt, symlink};
 
     #[cfg(windows)]
     use std::os::windows::fs::{symlink_dir, symlink_file};

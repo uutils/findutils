@@ -34,7 +34,7 @@ mod user;
 use self::access::AccessMatcher;
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
-use self::exec::{check_path_for_relative_entries, MultiExecMatcher, SingleExecMatcher};
+use self::exec::{MultiExecMatcher, SingleExecMatcher, check_path_for_relative_entries};
 use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
 use self::logical_matchers::{
@@ -324,14 +324,14 @@ fn convert_arg_to_comparable_value(
     value_as_string: &str,
 ) -> Result<ComparableValue, Box<dyn Error>> {
     let re = Regex::new(r"^([-+]?)[-+]?(\d+)$")?;
-    if let Some(groups) = re.captures(value_as_string) {
-        if let Ok(val) = groups[2].parse::<u64>() {
-            return Ok(match &groups[1] {
-                "+" => ComparableValue::MoreThan(val),
-                "-" => ComparableValue::LessThan(val),
-                _ => ComparableValue::EqualTo(val),
-            });
-        }
+    if let Some(groups) = re.captures(value_as_string)
+        && let Ok(val) = groups[2].parse::<u64>()
+    {
+        return Ok(match &groups[1] {
+            "+" => ComparableValue::MoreThan(val),
+            "-" => ComparableValue::LessThan(val),
+            _ => ComparableValue::EqualTo(val),
+        });
     }
     Err(From::from(format!(
         "Expected a decimal integer (with optional + or - prefix) argument \
@@ -348,17 +348,17 @@ fn convert_arg_to_comparable_value_and_suffix(
     // accepts one more optional '+' (so "++5c" and "-+5c" are valid, but "+-5c"
     // and "--5c" are not), which `\+?` reproduces.
     let re = Regex::new(r"^([-+]?)\+?(\d+)(.*)$")?;
-    if let Some(groups) = re.captures(value_as_string) {
-        if let Ok(val) = groups[2].parse::<u64>() {
-            return Ok((
-                match &groups[1] {
-                    "+" => ComparableValue::MoreThan(val),
-                    "-" => ComparableValue::LessThan(val),
-                    _ => ComparableValue::EqualTo(val),
-                },
-                groups[3].to_string(),
-            ));
-        }
+    if let Some(groups) = re.captures(value_as_string)
+        && let Ok(val) = groups[2].parse::<u64>()
+    {
+        return Ok((
+            match &groups[1] {
+                "+" => ComparableValue::MoreThan(val),
+                "-" => ComparableValue::LessThan(val),
+                _ => ComparableValue::EqualTo(val),
+            },
+            groups[3].to_string(),
+        ));
     }
     Err(From::from(format!(
         "Expected a decimal integer (with optional + or - prefix) and \
@@ -384,26 +384,28 @@ fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
         r"^(?P<month_day>\w{3} \d{2})?(?:, (?P<year>\d{4}))?(?: (?P<time>\d{2}:\d{2}:\d{2}))?$";
     let re = Regex::new(regex_pattern);
 
-    if let Some(captures) = re.ok()?.captures(date_str) {
-        let now = Utc::now();
-        let month_day = captures
-            .get(1)
-            .map_or(format!("{} {}", now.format("%b"), now.format("%d")), |m| {
-                m.as_str().to_string()
-            });
-        // If no year input.
-        let year = match captures.get(2) {
-            Some(m) => m.as_str().parse().ok()?,
-            None => now.year(),
-        };
-        // If the user does not enter a specific time, it will be filled with 0
-        let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
-        let date_time_str = format!("{month_day}, {year} {time_str}");
-        let datetime = NaiveDateTime::parse_from_str(&date_time_str, "%b %d, %Y %H:%M:%S").ok()?;
-        let utc_datetime = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
-        Some(utc_datetime.timestamp_millis())
-    } else {
-        None
+    match re.ok()?.captures(date_str) {
+        Some(captures) => {
+            let now = Utc::now();
+            let month_day = captures
+                .get(1)
+                .map_or(format!("{} {}", now.format("%b"), now.format("%d")), |m| {
+                    m.as_str().to_string()
+                });
+            // If no year input.
+            let year = match captures.get(2) {
+                Some(m) => m.as_str().parse().ok()?,
+                None => now.year(),
+            };
+            // If the user does not enter a specific time, it will be filled with 0
+            let time_str = captures.get(3).map_or("00:00:00", |m| m.as_str());
+            let date_time_str = format!("{month_day}, {year} {time_str}");
+            let datetime =
+                NaiveDateTime::parse_from_str(&date_time_str, "%b %d, %Y %H:%M:%S").ok()?;
+            let utc_datetime = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
+            Some(utc_datetime.timestamp_millis())
+        }
+        _ => None,
     }
 }
 
@@ -1226,8 +1228,8 @@ fn build_matcher_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
+    use crate::find::tests::fix_up_slashes;
 
     /// Helper function for tests to get a [WalkEntry] object. root should
     /// probably be a string starting with `test_data/` (cargo's tests run with
@@ -1309,10 +1311,13 @@ mod tests {
         for arg in &["-not", "!"] {
             let mut config = Config::default();
 
-            if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
-                assert!(e.to_string().contains("expected an expression"));
-            } else {
-                panic!("parsing argument lists that end in -not should fail");
+            match build_top_level_matcher(&[arg], &mut config) {
+                Err(e) => {
+                    assert!(e.to_string().contains("expected an expression"));
+                }
+                _ => {
+                    panic!("parsing argument lists that end in -not should fail");
+                }
             }
         }
     }
@@ -1347,10 +1352,13 @@ mod tests {
         for arg in &["-iname", "-name", "-type"] {
             let mut config = Config::default();
 
-            if let Err(e) = build_top_level_matcher(&[arg], &mut config) {
-                assert_eq!(e.to_string(), format!("missing argument to `{arg}'"));
-            } else {
-                panic!("parsing argument lists that end in -not should fail");
+            match build_top_level_matcher(&[arg], &mut config) {
+                Err(e) => {
+                    assert_eq!(e.to_string(), format!("missing argument to `{arg}'"));
+                }
+                _ => {
+                    panic!("parsing argument lists that end in -not should fail");
+                }
             }
         }
     }
@@ -1360,10 +1368,13 @@ mod tests {
         for arg in &["-or", "-o"] {
             let mut config = Config::default();
 
-            if let Err(e) = build_top_level_matcher(&[arg, "-true"], &mut config) {
-                assert!(e.to_string().contains("you have used a binary operator"));
-            } else {
-                panic!("parsing argument list that begins with -or should fail");
+            match build_top_level_matcher(&[arg, "-true"], &mut config) {
+                Err(e) => {
+                    assert!(e.to_string().contains("you have used a binary operator"));
+                }
+                _ => {
+                    panic!("parsing argument list that begins with -or should fail");
+                }
             }
         }
     }
@@ -1373,10 +1384,13 @@ mod tests {
         for arg in &["-or", "-o"] {
             let mut config = Config::default();
 
-            if let Err(e) = build_top_level_matcher(&["-true", arg], &mut config) {
-                assert!(e.to_string().contains("expected an expression"));
-            } else {
-                panic!("parsing argument list that ends with -or should fail");
+            match build_top_level_matcher(&["-true", arg], &mut config) {
+                Err(e) => {
+                    assert!(e.to_string().contains("expected an expression"));
+                }
+                _ => {
+                    panic!("parsing argument list that ends with -or should fail");
+                }
             }
         }
     }
@@ -1387,16 +1401,19 @@ mod tests {
         for arg in ["-and", "-a"] {
             let mut config = Config::default();
 
-            if let Err(e) = build_top_level_matcher(&[arg, "-true"], &mut config) {
-                assert_eq!(
-                    e.to_string(),
-                    format!(
-                        "invalid expression; you have used a binary operator \
+            match build_top_level_matcher(&[arg, "-true"], &mut config) {
+                Err(e) => {
+                    assert_eq!(
+                        e.to_string(),
+                        format!(
+                            "invalid expression; you have used a binary operator \
                          '{arg}' with nothing before it."
-                    )
-                );
-            } else {
-                panic!("parsing argument list that begins with {arg} should fail");
+                        )
+                    );
+                }
+                _ => {
+                    panic!("parsing argument list that begins with {arg} should fail");
+                }
             }
         }
     }
@@ -1405,10 +1422,13 @@ mod tests {
     fn build_top_level_matcher_and_without_expr2() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-true", "-a"], &mut config) {
-            assert!(e.to_string().contains("expected an expression"));
-        } else {
-            panic!("parsing argument list that ends with -or should fail");
+        match build_top_level_matcher(&["-true", "-a"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("expected an expression"));
+            }
+            _ => {
+                panic!("parsing argument list that ends with -or should fail");
+            }
         }
     }
 
@@ -1509,16 +1529,22 @@ mod tests {
     fn build_top_level_matcher_list_without_expr1() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&[",", "-true"], &mut config) {
-            assert!(e.to_string().contains("you have used a binary operator"));
-        } else {
-            panic!("parsing argument list that begins with , should fail");
+        match build_top_level_matcher(&[",", "-true"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("you have used a binary operator"));
+            }
+            _ => {
+                panic!("parsing argument list that begins with , should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-true", "-o", ",", "-true"], &mut config) {
-            assert!(e.to_string().contains("you have used a binary operator"));
-        } else {
-            panic!("parsing argument list that contains '-o  ,' should fail");
+        match build_top_level_matcher(&["-true", "-o", ",", "-true"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("you have used a binary operator"));
+            }
+            _ => {
+                panic!("parsing argument list that contains '-o  ,' should fail");
+            }
         }
     }
 
@@ -1526,10 +1552,13 @@ mod tests {
     fn build_top_level_matcher_list_without_expr2() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-true", ","], &mut config) {
-            assert!(e.to_string().contains("expected an expression"));
-        } else {
-            panic!("parsing argument list that ends with , should fail");
+        match build_top_level_matcher(&["-true", ","], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("expected an expression"));
+            }
+            _ => {
+                panic!("parsing argument list that ends with , should fail");
+            }
         }
     }
 
@@ -1537,10 +1566,13 @@ mod tests {
     fn build_top_level_matcher_not_enough_brackets() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-true", "("], &mut config) {
-            assert!(e.to_string().contains("I was expecting to find a ')'"));
-        } else {
-            panic!("parsing argument list with not enough closing brackets should fail");
+        match build_top_level_matcher(&["-true", "("], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("I was expecting to find a ')'"));
+            }
+            _ => {
+                panic!("parsing argument list with not enough closing brackets should fail");
+            }
         }
     }
 
@@ -1548,13 +1580,16 @@ mod tests {
     fn build_top_level_matcher_too_many_brackets() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(
+        match build_top_level_matcher(
             &["-type", "f", "(", "-name", "*.txt", ")", ")"],
             &mut config,
         ) {
-            assert_eq!(e.to_string(), "you have too many ')'");
-        } else {
-            panic!("parsing argument list with too many closing brackets should fail");
+            Err(e) => {
+                assert_eq!(e.to_string(), "you have too many ')'");
+            }
+            _ => {
+                panic!("parsing argument list with too many closing brackets should fail");
+            }
         }
     }
 
@@ -1636,10 +1671,13 @@ mod tests {
     fn build_top_level_matcher_expression_empty_parentheses() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-true", "(", ")"], &mut config) {
-            assert!(e.to_string().contains("empty parentheses are not allowed"));
-        } else {
-            panic!("parsing argument list with empty parentheses in an expression should fail");
+        match build_top_level_matcher(&["-true", "(", ")"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("empty parentheses are not allowed"));
+            }
+            _ => {
+                panic!("parsing argument list with empty parentheses in an expression should fail");
+            }
         }
     }
 
@@ -1792,13 +1830,16 @@ mod tests {
     fn build_top_level_matcher_bad_ctime_value() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-ctime", "-123."], &mut config) {
-            assert!(
-                e.to_string().contains("Expected a decimal integer"),
-                "bad description: {e}"
-            );
-        } else {
-            panic!("parsing a bad ctime value should fail");
+        match build_top_level_matcher(&["-ctime", "-123."], &mut config) {
+            Err(e) => {
+                assert!(
+                    e.to_string().contains("Expected a decimal integer"),
+                    "bad description: {e}"
+                );
+            }
+            _ => {
+                panic!("parsing a bad ctime value should fail");
+            }
         }
     }
 
@@ -1806,46 +1847,69 @@ mod tests {
     fn build_top_level_exec_not_enough_args() {
         let mut config = Config::default();
 
-        if let Err(e) = build_top_level_matcher(&["-exec"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing argument list with exec and no executable or semi-colon should fail");
+        match build_top_level_matcher(&["-exec"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!(
+                    "parsing argument list with exec and no executable or semi-colon should fail"
+                );
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-exec", ";"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing argument list with exec and no executable should fail");
+        match build_top_level_matcher(&["-exec", ";"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing argument list with exec and no executable should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-exec", "foo"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing argument list with exec and no executable should fail");
+        match build_top_level_matcher(&["-exec", "foo"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing argument list with exec and no executable should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-exec", "+"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing argument list with exec and no executable should fail");
+        match build_top_level_matcher(&["-exec", "+"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing argument list with exec and no executable should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-exec", "foo", "+"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing argument list with exec and no brackets should fail");
+        match build_top_level_matcher(&["-exec", "foo", "+"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing argument list with exec and no brackets should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-exec", "{}", "+"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing argument list with exec and no executable should fail");
+        match build_top_level_matcher(&["-exec", "{}", "+"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing argument list with exec and no executable should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing argument list with exec and + not following {{}} should fail");
+        match build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing argument list with exec and + not following {{}} should fail");
+            }
         }
     }
 
@@ -1867,22 +1931,31 @@ mod tests {
     fn build_top_level_ok_not_enough_args() {
         // -ok follows the same validation rules as -exec for missing arguments.
         let mut config = Config::default();
-        if let Err(e) = build_top_level_matcher(&["-ok"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing -ok with no executable or semicolon should fail");
+        match build_top_level_matcher(&["-ok"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing -ok with no executable or semicolon should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-ok", ";"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing -ok with no executable should fail");
+        match build_top_level_matcher(&["-ok", ";"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing -ok with no executable should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-ok", "foo"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("parsing -ok without terminating ';' should fail");
+        match build_top_level_matcher(&["-ok", "foo"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("parsing -ok without terminating ';' should fail");
+            }
         }
     }
 
@@ -1927,12 +2000,13 @@ mod tests {
     #[test]
     fn build_top_level_multi_exec_too_many_holders() {
         let mut config = Config::default();
-        if let Err(e) =
-            build_top_level_matcher(&["-exec", "foo", "{}", "foo", "{}", "+", ";"], &mut config)
-        {
-            assert!(e.to_string().contains("Only one instance of {}"));
-        } else {
-            panic!("parsing argument list with more than one {{}} for + should fail");
+        match build_top_level_matcher(&["-exec", "foo", "{}", "foo", "{}", "+", ";"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("Only one instance of {}"));
+            }
+            _ => {
+                panic!("parsing argument list with more than one {{}} for + should fail");
+            }
         }
     }
 
@@ -1960,16 +2034,22 @@ mod tests {
     #[cfg(unix)]
     fn build_top_level_matcher_perm_bad() {
         let mut config = Config::default();
-        if let Err(e) = build_top_level_matcher(&["-perm", "foo"], &mut config) {
-            assert_eq!(e.to_string(), "invalid mode 'foo'");
-        } else {
-            panic!("-perm with bad mode pattern should fail");
+        match build_top_level_matcher(&["-perm", "foo"], &mut config) {
+            Err(e) => {
+                assert_eq!(e.to_string(), "invalid mode 'foo'");
+            }
+            _ => {
+                panic!("-perm with bad mode pattern should fail");
+            }
         }
 
-        if let Err(e) = build_top_level_matcher(&["-perm"], &mut config) {
-            assert!(e.to_string().contains("missing argument"));
-        } else {
-            panic!("-perm with no mode pattern should fail");
+        match build_top_level_matcher(&["-perm"], &mut config) {
+            Err(e) => {
+                assert!(e.to_string().contains("missing argument"));
+            }
+            _ => {
+                panic!("-perm with no mode pattern should fail");
+            }
         }
     }
 
@@ -2036,9 +2116,11 @@ mod tests {
 
         let not_include_time_date_timestamps =
             parse_date_str_to_timestamps("jan 01, 2025").unwrap();
-        assert!(not_include_time_date_timestamps
-            .to_string()
-            .contains("1735689600000"));
+        assert!(
+            not_include_time_date_timestamps
+                .to_string()
+                .contains("1735689600000")
+        );
 
         // pass if return current time.
         let none_date_timestamps = parse_date_str_to_timestamps("");
