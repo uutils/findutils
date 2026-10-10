@@ -14,7 +14,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
+use clap::{Arg, ArgAction, crate_version, error::ErrorKind};
 use uucore::error::strip_errno;
 
 mod options {
@@ -927,43 +927,46 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
 }
 
 fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
-    let (max_args, max_lines, replace) =
-        match (options.max_args, options.max_lines, &options.replace) {
-            // These 3 options are mutually exclusive.
-            // But `max_args=1` and `replace` do not actually conflict, so no warning.
-            (None | Some(1), None, Some(_)) => {
-                // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
-                // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
-                // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
-                (Some(1), None, options.replace)
-            }
-            (Some(_), None, None) | (None, Some(_), None) | (None, None, None) => {
-                (options.max_args, options.max_lines, None)
-            }
-            _ => {
-                eprintln!(
+    let (max_args, max_lines, replace) = match (
+        options.max_args,
+        options.max_lines,
+        &options.replace,
+    ) {
+        // These 3 options are mutually exclusive.
+        // But `max_args=1` and `replace` do not actually conflict, so no warning.
+        (None | Some(1), None, Some(_)) => {
+            // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
+            // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
+            // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
+            (Some(1), None, options.replace)
+        }
+        (Some(_), None, None) | (None, Some(_), None) | (None, None, None) => {
+            (options.max_args, options.max_lines, None)
+        }
+        _ => {
+            eprintln!(
                 "WARNING: -L, -n and -I/-i are mutually exclusive, but more than one were given; \
                 only the last option will be used"
             );
-                let lines_index = matches
-                    .indices_of(options::MAX_LINES)
-                    .and_then(|mut v| v.next_back());
-                let args_index = matches
-                    .indices_of(options::MAX_ARGS)
-                    .and_then(|mut v| v.next_back());
-                let replace_index = [options::REPLACE, options::REPLACE_I]
-                    .iter()
-                    .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
-                    .max();
-                if lines_index > args_index && lines_index > replace_index {
-                    (None, options.max_lines, None)
-                } else if args_index > lines_index && args_index > replace_index {
-                    (options.max_args, None, None)
-                } else {
-                    (Some(1), None, options.replace)
-                }
+            let lines_index = matches
+                .indices_of(options::MAX_LINES)
+                .and_then(|mut v| v.next_back());
+            let args_index = matches
+                .indices_of(options::MAX_ARGS)
+                .and_then(|mut v| v.next_back());
+            let replace_index = [options::REPLACE, options::REPLACE_I]
+                .iter()
+                .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
+                .max();
+            if lines_index > args_index && lines_index > replace_index {
+                (None, options.max_lines, None)
+            } else if args_index > lines_index && args_index > replace_index {
+                (options.max_args, None, None)
+            } else {
+                (Some(1), None, options.replace)
             }
-        };
+        }
+    };
 
     let delimiter = match (options.delimiter, options.null) {
         (Some(delimiter), true) => {
@@ -1389,12 +1392,16 @@ mod tests {
         let max_chars = count_osstr_chars_for_exec(OsStr::new("abc"))
             + count_osstr_chars_for_exec(OsStr::new("a"));
         let mut limiter = MaxCharsCommandSizeLimiter::new(max_chars);
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_hard("abcd"), empty_cursor())
-            .is_err());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abcd"), empty_cursor())
+                .is_err()
+        );
         assert!(limiter.try_arg(make_arg_hard("a"), empty_cursor()).is_ok());
     }
 
@@ -1402,12 +1409,16 @@ mod tests {
     #[test]
     fn test_chars_limiter_windows() {
         let mut limiter = MaxCharsCommandSizeLimiter::new(6);
-        assert!(limiter
-            .try_arg(make_arg_hard("abcde"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_hard("ab de"), empty_cursor())
-            .is_err());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abcde"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("ab de"), empty_cursor())
+                .is_err()
+        );
     }
 
     #[test]
@@ -1429,13 +1440,17 @@ mod tests {
 
         let mut limiter =
             MaxCharsCommandSizeLimiter::new(count_osstr_chars_for_exec(OsStr::new("abc")));
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), reject_cursor)
-            .is_err());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), reject_cursor)
+                .is_err()
+        );
         // Ensure the limiter didn't update before trying the cursor.
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
     }
 
     #[test]
@@ -1443,19 +1458,27 @@ mod tests {
         let mut limiter = MaxArgsCommandSizeLimiter::new(2);
         // Should not count initial arguments.
         for _ in 1..3 {
-            assert!(limiter
-                .try_arg(make_arg_init("abc"), empty_cursor())
-                .is_ok());
+            assert!(
+                limiter
+                    .try_arg(make_arg_init("abc"), empty_cursor())
+                    .is_ok()
+            );
         }
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_err());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_err()
+        );
     }
 
     #[test]
@@ -1466,42 +1489,62 @@ mod tests {
         };
 
         let mut limiter = MaxArgsCommandSizeLimiter::new(1);
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), reject_cursor)
-            .is_err());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), reject_cursor)
+                .is_err()
+        );
         // Ensure the limiter didn't update before trying the cursor.
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
     }
 
     #[test]
     fn test_lines_limiter() {
         let mut limiter = MaxLinesCommandSizeLimiter::new(2);
-        assert!(limiter
-            .try_arg(make_arg_soft("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_soft("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_soft("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_soft("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
-        assert!(limiter
-            .try_arg(make_arg_soft("abc"), empty_cursor())
-            .is_err());
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_err());
+        assert!(
+            limiter
+                .try_arg(make_arg_soft("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_soft("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_soft("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_soft("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_soft("abc"), empty_cursor())
+                .is_err()
+        );
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_err()
+        );
     }
 
     #[test]
@@ -1512,13 +1555,17 @@ mod tests {
         };
 
         let mut limiter = MaxLinesCommandSizeLimiter::new(1);
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), reject_cursor)
-            .is_err());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), reject_cursor)
+                .is_err()
+        );
         // Ensure the limiter didn't update before trying the cursor.
-        assert!(limiter
-            .try_arg(make_arg_hard("abc"), empty_cursor())
-            .is_ok());
+        assert!(
+            limiter
+                .try_arg(make_arg_hard("abc"), empty_cursor())
+                .is_ok()
+        );
     }
 
     #[test]

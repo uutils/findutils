@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::Read;
 use tempfile::Builder;
 
-use common::test_helpers::{fix_up_slashes, path_to_testing_commandline, FakeDependencies};
+use common::test_helpers::{FakeDependencies, fix_up_slashes, path_to_testing_commandline};
 use findutils::find::find_main;
 
 mod common;
