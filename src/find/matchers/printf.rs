@@ -532,7 +532,7 @@ fn format_directive<'entry>(
         FormatDirective::Permissions(PermissionsFormat::Octal) => "777".into(),
         #[cfg(unix)]
         FormatDirective::Permissions(PermissionsFormat::Octal) => {
-            format!("{:>03o}", meta()?.mode() & 0o777).into()
+            format!("{:o}", meta()?.mode() & 0o7777).into()
         }
 
         FormatDirective::Size => meta()?.len().to_string().into(),
@@ -1299,5 +1299,29 @@ mod tests {
         let matcher = Printf::new("%m %M", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!("755 -rwxr-xr-x", deps.get_output_as_string());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_printf_permissions_special_bits() {
+        use std::fs::File;
+
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+
+        for (mode, expected) in [(0o4755, "4755 -rwsr-xr-x"), (0o044, "44 ----r--r--")] {
+            let new_file_name = format!("file{mode:o}");
+            let file = File::create(temp_dir.path().join(&new_file_name)).unwrap();
+            let mut perms = file.metadata().unwrap().permissions();
+            perms.set_mode(mode);
+            file.set_permissions(perms).unwrap();
+
+            let file_info = get_dir_entry_for(&temp_dir_path, &new_file_name);
+            let deps = FakeDependencies::new();
+
+            let matcher = Printf::new("%m %M", None).unwrap();
+            assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+            assert_eq!(expected, deps.get_output_as_string());
+        }
     }
 }
