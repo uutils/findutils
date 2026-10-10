@@ -2,7 +2,7 @@
 name = "findutils"
 version = "0.11.0"
 repository = "https://github.com/uutils/findutils"
-edition = "2021"
+edition = "2024"
 rust-version = "1.89.0"
 license = "MIT"
 readme = "README.md"

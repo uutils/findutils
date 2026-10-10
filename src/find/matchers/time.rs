@@ -6,7 +6,7 @@
 
 use std::error::Error;
 use std::fs::{self, Metadata};
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[cfg(unix)]
@@ -269,11 +269,7 @@ impl FileTimeType {
 /// rather than wrapping, which would turn a very old file into a future one.
 fn signed_age_secs(age: Duration, is_negative: bool) -> i64 {
     let secs = i64::try_from(age.as_secs()).unwrap_or(i64::MAX);
-    if is_negative {
-        -secs
-    } else {
-        secs
-    }
+    if is_negative { -secs } else { secs }
 }
 
 /// This matcher checks whether a file's accessed|creation|modification time is

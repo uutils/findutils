@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use std::{
     fs::File,
-    io::{stderr, Write},
+    io::{Write, stderr},
 };
 
 use super::{Matcher, MatcherIO, StdoutErrors, WalkEntry};
@@ -100,11 +100,11 @@ impl Ls {
         };
         let last_modified = Self::format_last_modified(metadata);
         let mut path = file_info.path().to_string_lossy().into_owned();
-        if file_info.file_type().is_symlink() {
-            if let Ok(target) = std::fs::read_link(file_info.path()) {
-                path.push_str(" -> ");
-                path.push_str(&target.to_string_lossy());
-            }
+        if file_info.file_type().is_symlink()
+            && let Ok(target) = std::fs::read_link(file_info.path())
+        {
+            path.push_str(" -> ");
+            path.push_str(&target.to_string_lossy());
         }
 
         match writeln!(

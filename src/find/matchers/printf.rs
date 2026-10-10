@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -929,11 +929,11 @@ mod tests {
 
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
+    use crate::find::tests::fix_up_slashes;
 
     #[cfg(unix)]
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::os::unix::fs::{PermissionsExt, symlink};
 
     #[cfg(windows)]
     use std::os::windows::fs::{symlink_dir, symlink_file};
@@ -1841,9 +1841,11 @@ mod tests {
         assert!(FormatString::parse("%TS").is_ok());
         let now = SystemTime::UNIX_EPOCH;
         let far_future = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(300_000_000_000);
-        assert!(TimeFormat::Strftime("%Y".to_string())
-            .apply(far_future)
-            .is_err());
+        assert!(
+            TimeFormat::Strftime("%Y".to_string())
+                .apply(far_future)
+                .is_err()
+        );
         assert!(TimeFormat::Strftime("%".to_string()).apply(now).is_err());
     }
 }

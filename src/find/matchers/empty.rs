@@ -6,7 +6,7 @@
 
 use std::{
     fs::read_dir,
-    io::{stderr, Write},
+    io::{Write, stderr},
 };
 
 use super::{Matcher, MatcherIO, WalkEntry};

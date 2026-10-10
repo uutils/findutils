@@ -7,12 +7,12 @@ use std::{
     env,
     ffi::{CStr, CString},
     fs::{self, File},
-    io::{self, stderr, BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write, stderr},
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
+use clap::{self, Arg, ArgAction, ArgMatches, Command, Id, crate_version, value_parser};
 use itertools::Itertools;
 use onig::{Regex, RegexOptions, Syntax};
 use thiserror::Error;
@@ -644,8 +644,8 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 }
 
                 // if we can get the mtime of the file, check it against the current time
-                if let Ok(metadata) = fs::metadata(&dbreader.path) {
-                    if let Ok(time) = metadata.modified() {
+                if let Ok(metadata) = fs::metadata(&dbreader.path)
+                    && let Ok(time) = metadata.modified() {
                         let delta = jiff::Timestamp::try_from(time)
                             .map_or(jiff::SignedDuration::ZERO, |modified| {
                                 jiff::Timestamp::now().duration_since(modified)
@@ -660,7 +660,6 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                             );
                         }
                     }
-                }
 
                 // the first line of the statistics description is printed before matches
                 // (given --print)
@@ -734,7 +733,7 @@ mod tests {
     use std::io::{self, Write};
     use std::path::Path;
 
-    use super::{is_db_too_old, path_exists, DbReader, Statistics};
+    use super::{DbReader, Statistics, is_db_too_old, path_exists};
 
     /// A writer that always fails, to emulate stdout with no space left
     /// (`> /dev/full`) or a closed pipe.

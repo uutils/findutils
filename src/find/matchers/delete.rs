@@ -8,7 +8,7 @@
  */
 
 use std::fs;
-use std::io::{self, stderr, ErrorKind, Write};
+use std::io::{self, ErrorKind, Write, stderr};
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -60,7 +60,7 @@ impl Matcher for DeleteMatcher {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{create_dir, File};
+    use std::fs::{File, create_dir};
     use tempfile::Builder;
 
     use super::*;
