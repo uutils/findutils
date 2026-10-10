@@ -13,7 +13,7 @@ use std::cell::RefCell;
 use std::error::Error;
 #[cfg(unix)]
 use std::io::IsTerminal;
-use std::io::{self, stderr, stdout, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write, stderr, stdout};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -507,10 +507,9 @@ pub fn program_name() -> &'static str {
         && path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+        && let Some(stem) = path.file_stem().and_then(std::ffi::OsStr::to_str)
     {
-        if let Some(stem) = path.file_stem().and_then(std::ffi::OsStr::to_str) {
-            return stem;
-        }
+        return stem;
     }
     name
 }
@@ -554,8 +553,8 @@ mod tests {
     #[cfg(windows)]
     use std::os::windows::fs::symlink_file;
 
-    use crate::find::matchers::time::ChangeTime;
     use crate::find::matchers::MatcherIO;
+    use crate::find::matchers::time::ChangeTime;
 
     use super::*;
 
@@ -1300,9 +1299,10 @@ mod tests {
                 let rc = find_main(&["find", "./test_data/simple/subdir", arg, time], &deps);
 
                 assert_eq!(rc, 0);
-                assert!(deps
-                    .get_output_as_string()
-                    .contains("./test_data/simple/subdir"));
+                assert!(
+                    deps.get_output_as_string()
+                        .contains("./test_data/simple/subdir")
+                );
                 assert!(deps.get_output_as_string().contains("ABBBC"));
             }
         }

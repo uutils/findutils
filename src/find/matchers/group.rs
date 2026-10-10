@@ -93,7 +93,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_group_matcher() {
-        use crate::find::matchers::{group::GroupMatcher, tests::get_dir_entry_for, Matcher};
+        use crate::find::matchers::{Matcher, group::GroupMatcher, tests::get_dir_entry_for};
         use crate::find::tests::FakeDependencies;
         use chrono::Local;
         use nix::unistd::{Gid, Group};

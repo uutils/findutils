@@ -6,7 +6,7 @@
 use chrono::DateTime;
 use std::{
     fs::File,
-    io::{stderr, Write},
+    io::{Write, stderr},
 };
 
 use super::{Matcher, MatcherIO, WalkEntry};

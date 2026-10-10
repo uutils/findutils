@@ -91,7 +91,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_user_matcher() {
-        use crate::find::matchers::{tests::get_dir_entry_for, user::UserMatcher, Matcher};
+        use crate::find::matchers::{Matcher, tests::get_dir_entry_for, user::UserMatcher};
         use crate::find::tests::FakeDependencies;
         use chrono::Local;
         use nix::unistd::{Uid, User};

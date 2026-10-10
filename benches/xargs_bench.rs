@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use findutils::xargs::xargs_main;
 
 /// Run `xargs` end-to-end. `args` are the arguments after the program name.

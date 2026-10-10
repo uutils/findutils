@@ -7,7 +7,7 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 use std::path::Path;
 use std::process::Command;
 
