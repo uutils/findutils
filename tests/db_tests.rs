@@ -69,11 +69,23 @@ fn test_locate_non_existing() {
 
 #[test]
 fn test_locate_statistics() {
-    Command::cargo_bin("locate")
+    let assert = Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
         .args(["", "--statistics", DB_FLAG])
         .assert()
         .success();
+
+    let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let line = output
+        .lines()
+        .find(|line| line.starts_with("Database was last modified at "))
+        .expect("should output last modified date");
+    let date_part = line.strip_prefix("Database was last modified at ").unwrap();
+    let parts: Vec<&str> = date_part.split(' ').collect();
+    assert_eq!(parts.len(), 3);
+    let fraction = parts[1].split('.').nth(1).unwrap();
+    assert_eq!(fraction.len(), 9);
+    assert!(fraction.chars().all(|c| c.is_ascii_digit()));
 }
 
 #[rstest]
