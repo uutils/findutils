@@ -190,8 +190,8 @@ fn xargs_max_chars() {
             .stdout_only("ab cd\nefg\n");
     }
 
-    // Behavior should be the same with -x, which only takes effect with -L or
-    // -n.
+    // Behavior should be the same with -x: without -L or -n, it only takes
+    // effect for an argument that does not fit into a command of its own.
     ucmd()
         .args(&["-xs11"])
         .pipe_in("ab cd efg")
@@ -220,6 +220,24 @@ fn xargs_exit_on_large() {
         .fails_with_code(1)
         .stderr_contains("Error:")
         .no_stdout();
+}
+
+#[test]
+fn xargs_exit_on_large_single_argument() {
+    // With -x nothing runs; without -x the command built so far runs first.
+    ucmd()
+        .args(&["-xs11"])
+        .pipe_in("ab cdefghijkl")
+        .fails_with_code(1)
+        .stderr_contains("Error:")
+        .no_stdout();
+
+    ucmd()
+        .args(&["-s11"])
+        .pipe_in("ab cdefghijkl")
+        .fails_with_code(1)
+        .stderr_contains("Error:")
+        .stdout_is("ab\n");
 }
 
 #[test]
