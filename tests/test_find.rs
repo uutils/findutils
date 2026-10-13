@@ -540,6 +540,78 @@ fn matcher_with_side_effects_in_front() {
     assert!(!temp_dir.path().exists(), "temp dir should also be deleted");
 }
 
+// The file is removed by -exec before -delete gets to it, which is what a
+// readdir race looks like to -delete.
+#[test]
+#[cfg(unix)]
+fn delete_vanished_file_is_an_error_by_default() {
+    for args in [
+        &["-name", "test", "-exec", "rm", "{}", ";", "-delete"][..],
+        &[
+            "-ignore_readdir_race",
+            "-noignore_readdir_race",
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+        ][..],
+    ] {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        File::create(temp_dir.path().join("test")).expect("created test file");
+
+        ucmd()
+            .arg(temp_dir.path())
+            .args(args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("No such file or directory");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn delete_vanished_file_with_ignore_readdir_race() {
+    // It is a global option, so its position in the expression is irrelevant.
+    for args in [
+        &[
+            "-ignore_readdir_race",
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+        ][..],
+        &[
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+            "-ignore_readdir_race",
+        ][..],
+    ] {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        let test_file = temp_dir.path().join("test");
+        File::create(&test_file).expect("created test file");
+
+        ucmd()
+            .arg(temp_dir.path())
+            .args(args)
+            .succeeds()
+            .no_output();
+
+        assert!(!test_file.exists(), "test file should be deleted");
+        assert!(temp_dir.path().exists(), "temp dir should NOT be deleted");
+    }
+}
+
 // This could be covered by a unit test in principle... in practice, changing
 // the working dir can't be done safely in unit tests unless `--test-threads=1`
 // or `serial` goes everywhere, and it doesn't seem possible to get an

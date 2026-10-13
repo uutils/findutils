@@ -144,6 +144,7 @@ pub struct MatcherIO<'a> {
     should_skip_dir: bool,
     exit_code: i32,
     quit: bool,
+    ignore_readdir_race: bool,
     deps: &'a dyn Dependencies,
 }
 
@@ -153,8 +154,20 @@ impl MatcherIO<'_> {
             should_skip_dir: false,
             exit_code: 0,
             quit: false,
+            ignore_readdir_race: false,
             deps,
         }
+    }
+
+    pub fn set_ignore_readdir_race(&mut self, ignore: bool) {
+        self.ignore_readdir_race = ignore;
+    }
+
+    /// Whether -ignore_readdir_race is in effect, i.e. a file that vanished
+    /// after its name was read from the directory is not an error.
+    #[must_use]
+    pub fn ignore_readdir_race(&self) -> bool {
+        self.ignore_readdir_race
     }
 
     pub fn mark_current_dir_to_be_skipped(&mut self) {
@@ -512,6 +525,8 @@ enum Predicate {
     Follow,
     DayStart,
     NoLeaf,
+    IgnoreReaddirRace,
+    NoIgnoreReaddirRace,
     Depth,
     Mount,
     Sorted,
@@ -593,6 +608,8 @@ const PREDICATES: &[(&str, Predicate)] = &[
     ("-follow", Predicate::Follow),
     ("-daystart", Predicate::DayStart),
     ("-noleaf", Predicate::NoLeaf),
+    ("-ignore_readdir_race", Predicate::IgnoreReaddirRace),
+    ("-noignore_readdir_race", Predicate::NoIgnoreReaddirRace),
     ("-d", Predicate::Depth),
     ("-depth", Predicate::Depth),
     ("-mount", Predicate::Mount),
@@ -1100,6 +1117,17 @@ fn build_matcher_tree(
             Predicate::NoLeaf => {
                 // No change of behavior
                 config.no_leaf_dirs = true;
+                Some(TrueMatcher.into_box())
+            }
+            Predicate::IgnoreReaddirRace => {
+                // Like GNU find, this is a global option: it applies to the
+                // whole expression wherever it appears, and the last of
+                // -ignore_readdir_race and -noignore_readdir_race wins.
+                config.ignore_readdir_race = true;
+                Some(TrueMatcher.into_box())
+            }
+            Predicate::NoIgnoreReaddirRace => {
+                config.ignore_readdir_race = false;
                 Some(TrueMatcher.into_box())
             }
             Predicate::Depth => {
