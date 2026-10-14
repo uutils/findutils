@@ -1457,6 +1457,34 @@ fn find_ls() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn find_ls_reports_stdout_write_error() {
+    let dev_full = fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    ucmd()
+        .args(&["test_data/simple", "-ls"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_only("find: 'standard output': No space left on device\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn find_ls_reports_stdout_write_error_once_for_all_ls() {
+    let dev_full = fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    ucmd()
+        .args(&["test_data/simple", "-ls", "-ls"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_only("find: 'standard output': No space left on device\n");
+}
+
+#[test]
 #[cfg(unix)]
 fn find_ls_shows_file_type_and_special_bits() {
     use std::os::unix::fs::PermissionsExt;

@@ -9,7 +9,7 @@ pub mod matchers;
 
 use error::ParseError;
 use matchers::{Follow, WalkEntry};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 #[cfg(unix)]
 use std::io::IsTerminal;
@@ -34,6 +34,9 @@ pub struct Config {
     /// Whether the expression uses -ok or -okdir, which prompt on stderr and
     /// read the answer from stdin when there is no terminal.
     interactive_exec: bool,
+    /// Shared by every -ls, so that a failed write to standard output is
+    /// reported only once.
+    ls_stdout_error_reported: Rc<Cell<bool>>,
 }
 
 impl Default for Config {
@@ -54,6 +57,7 @@ impl Default for Config {
             follow: Follow::Never,
             files0_argument: None, // This option exclusively for -files0-from argument.
             interactive_exec: false,
+            ls_stdout_error_reported: Rc::default(),
         }
     }
 }

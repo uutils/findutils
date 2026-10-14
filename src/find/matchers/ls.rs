@@ -5,9 +5,12 @@
 
 use chrono::DateTime;
 use std::{
+    cell::Cell,
     fs::File,
     io::{stderr, Write},
+    rc::Rc,
 };
+use uucore::error::strip_errno;
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -40,11 +43,33 @@ fn format_permissions(file_attributes: u32) -> String {
 
 pub struct Ls {
     output_file: Option<File>,
+    stdout_error_reported: Rc<Cell<bool>>,
 }
 
 impl Ls {
-    pub fn new(output_file: Option<File>) -> Self {
-        Self { output_file }
+    pub fn new(output_file: Option<File>, stdout_error_reported: Rc<Cell<bool>>) -> Self {
+        Self {
+            output_file,
+            stdout_error_reported,
+        }
+    }
+
+    /// Handles a failed write to standard output. A broken pipe is ignored;
+    /// any other error is reported once, as
+    /// `find: 'standard output': <error>`, and makes find exit with status 1.
+    fn report_stdout_error(&self, error: &std::io::Error, matcher_io: &mut MatcherIO) {
+        if error.kind() == std::io::ErrorKind::BrokenPipe {
+            return;
+        }
+        if !self.stdout_error_reported.replace(true) {
+            let _ = writeln!(
+                &mut stderr(),
+                "{}: 'standard output': {}",
+                crate::find::program_name(),
+                strip_errno(error)
+            );
+        }
+        matcher_io.set_exit_code(1);
     }
 
     #[cfg(unix)]
@@ -116,6 +141,8 @@ impl Ls {
                     )
                     .unwrap();
                     matcher_io.set_exit_code(1);
+                } else {
+                    self.report_stdout_error(&e, matcher_io);
                 }
             }
         }
@@ -189,6 +216,8 @@ impl Ls {
                     )
                     .unwrap();
                     matcher_io.set_exit_code(1);
+                } else {
+                    self.report_stdout_error(&e, matcher_io);
                 }
             }
         }
@@ -212,5 +241,30 @@ impl Matcher for Ls {
 
     fn has_side_effects(&self) -> bool {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::ErrorKind;
+    use std::rc::Rc;
+
+    use super::{Ls, MatcherIO};
+    use crate::find::tests::FakeDependencies;
+
+    #[test]
+    fn reports_stdout_write_errors() {
+        for (kind, expected_exit_code, expected_reported) in [
+            (ErrorKind::Other, 1, true),
+            (ErrorKind::BrokenPipe, 0, false),
+        ] {
+            let ls = Ls::new(None, Rc::default());
+            let deps = FakeDependencies::new();
+            let mut matcher_io = MatcherIO::new(&deps);
+            ls.report_stdout_error(&kind.into(), &mut matcher_io);
+            assert_eq!(matcher_io.exit_code(), expected_exit_code);
+            assert!(!matcher_io.should_quit());
+            assert_eq!(ls.stdout_error_reported.get(), expected_reported);
+        }
     }
 }

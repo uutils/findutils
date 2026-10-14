@@ -713,7 +713,9 @@ fn build_matcher_tree(
                 let file = get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
             }
-            Predicate::Ls => Some(Ls::new(None).into_box()),
+            Predicate::Ls => {
+                Some(Ls::new(None, config.ls_stdout_error_reported.clone()).into_box())
+            }
             Predicate::Fls => {
                 if i >= args.len() - 1 {
                     return Err(missing_argument_error(args, i).into());
@@ -721,7 +723,7 @@ fn build_matcher_tree(
                 i += 1;
 
                 let file = get_or_create_file(args[i])?;
-                Some(Ls::new(Some(file)).into_box())
+                Some(Ls::new(Some(file), config.ls_stdout_error_reported.clone()).into_box())
             }
             Predicate::True => Some(TrueMatcher.into_box()),
             Predicate::False => Some(FalseMatcher.into_box()),
