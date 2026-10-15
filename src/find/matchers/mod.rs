@@ -63,12 +63,16 @@ use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
 use std::{
+    cell::Cell,
     error::Error,
     fs::{File, Metadata},
+    io::{stderr, Write},
     path::{Path, PathBuf},
+    rc::Rc,
     str::FromStr,
     time::SystemTime,
 };
+use uucore::error::strip_errno;
 
 use super::error::{self, ParseError};
 use super::{Config, Dependencies};
@@ -195,6 +199,32 @@ impl MatcherIO<'_> {
     #[must_use]
     pub fn confirm(&self, prompt: &str) -> bool {
         self.deps.confirm(prompt)
+    }
+}
+
+/// Handles failed writes to standard output for `-ls` and `-printf`. A closed
+/// pipe ends the walk; any other error is reported once for the whole command
+/// and makes find exit with status 1.
+#[derive(Clone, Default)]
+pub(crate) struct StdoutErrors {
+    reported: Rc<Cell<bool>>,
+}
+
+impl StdoutErrors {
+    pub(crate) fn handle(&self, error: &std::io::Error, matcher_io: &mut MatcherIO) {
+        if error.kind() == std::io::ErrorKind::BrokenPipe {
+            matcher_io.quit();
+            return;
+        }
+        if !self.reported.replace(true) {
+            let _ = writeln!(
+                &mut stderr(),
+                "{}: 'standard output': {}",
+                crate::find::program_name(),
+                strip_errno(error)
+            );
+        }
+        matcher_io.set_exit_code(1);
     }
 }
 
@@ -679,7 +709,11 @@ fn build_matcher_tree(
                     return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
-                Some(Printf::new(args[i], None)?.into_box())
+                Some(
+                    Printf::new(args[i], None)?
+                        .with_stdout_errors(config.stdout_errors.clone())
+                        .into_box(),
+                )
             }
             Predicate::Fprint => {
                 if i >= args.len() - 1 {
@@ -713,9 +747,11 @@ fn build_matcher_tree(
                 let file = get_or_create_file(args[i])?;
                 Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
             }
-            Predicate::Ls => {
-                Some(Ls::new(None, config.ls_stdout_error_reported.clone()).into_box())
-            }
+            Predicate::Ls => Some(
+                Ls::new(None)
+                    .with_stdout_errors(config.stdout_errors.clone())
+                    .into_box(),
+            ),
             Predicate::Fls => {
                 if i >= args.len() - 1 {
                     return Err(missing_argument_error(args, i).into());
@@ -723,7 +759,7 @@ fn build_matcher_tree(
                 i += 1;
 
                 let file = get_or_create_file(args[i])?;
-                Some(Ls::new(Some(file), config.ls_stdout_error_reported.clone()).into_box())
+                Some(Ls::new(Some(file)).into_box())
             }
             Predicate::True => Some(TrueMatcher.into_box()),
             Predicate::False => Some(FalseMatcher.into_box()),

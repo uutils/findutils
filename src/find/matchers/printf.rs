@@ -13,7 +13,7 @@ use std::time::SystemTime;
 
 use chrono::{format::StrftimeItems, DateTime, Local};
 
-use super::{FileType, Matcher, MatcherIO, WalkEntry, WalkError};
+use super::{FileType, Matcher, MatcherIO, StdoutErrors, WalkEntry, WalkError};
 
 #[cfg(unix)]
 use std::os::unix::prelude::MetadataExt;
@@ -608,6 +608,7 @@ fn format_directive<'entry>(
 pub struct Printf {
     format: FormatString,
     output_file: Option<(File, PathBuf)>,
+    stdout_errors: StdoutErrors,
 }
 
 impl Printf {
@@ -615,7 +616,13 @@ impl Printf {
         Ok(Self {
             format: FormatString::parse(format)?,
             output_file,
+            stdout_errors: StdoutErrors::default(),
         })
+    }
+
+    pub fn with_stdout_errors(mut self, stdout_errors: StdoutErrors) -> Self {
+        self.stdout_errors = stdout_errors;
+        self
     }
 
     fn print(&self, file_info: &WalkEntry, mut out: impl Write) -> std::io::Result<()> {
@@ -658,21 +665,20 @@ impl Printf {
     }
 
     fn handle_output_error(&self, error: &std::io::Error, matcher_io: &mut MatcherIO) {
+        let Some((_, path)) = &self.output_file else {
+            self.stdout_errors.handle(error, matcher_io);
+            return;
+        };
         if error.kind() == std::io::ErrorKind::BrokenPipe {
             matcher_io.quit();
             return;
         }
-
-        if let Some((_, path)) = &self.output_file {
-            let _ = writeln!(
-                &mut stderr(),
-                "{}: {}: {error}",
-                crate::find::program_name(),
-                path.display()
-            );
-        } else {
-            let _ = writeln!(&mut stderr(), "{}: {error}", crate::find::program_name());
-        }
+        let _ = writeln!(
+            &mut stderr(),
+            "{}: {}: {error}",
+            crate::find::program_name(),
+            path.display()
+        );
         matcher_io.set_exit_code(1);
     }
 }
