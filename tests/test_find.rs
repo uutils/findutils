@@ -1458,30 +1458,42 @@ fn find_ls() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn find_ls_reports_stdout_write_error() {
-    let dev_full = fs::OpenOptions::new()
-        .write(true)
-        .open("/dev/full")
-        .unwrap();
-    ucmd()
-        .args(&["test_data/simple", "-ls"])
-        .set_stdout(dev_full)
-        .fails_with_code(1)
-        .stderr_only("find: 'standard output': No space left on device\n");
+fn find_reports_stdout_write_error_once() {
+    for actions in [
+        &["-ls", "-ls"][..],
+        &["-printf", "%p\n"],
+        &["-ls", "-printf", "%p\n"],
+    ] {
+        let dev_full = fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .unwrap();
+        ucmd()
+            .arg("test_data/simple")
+            .args(actions)
+            .set_stdout(dev_full)
+            .fails_with_code(1)
+            .stderr_only("find: 'standard output': No space left on device\n");
+    }
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-fn find_ls_reports_stdout_write_error_once_for_all_ls() {
-    let dev_full = fs::OpenOptions::new()
-        .write(true)
-        .open("/dev/full")
-        .unwrap();
-    ucmd()
-        .args(&["test_data/simple", "-ls", "-ls"])
-        .set_stdout(dev_full)
-        .fails_with_code(1)
-        .stderr_only("find: 'standard output': No space left on device\n");
+#[cfg(unix)]
+fn find_stops_when_stdout_pipe_is_closed() {
+    let temp_dir = Builder::new().prefix("find_closed_pipe").tempdir().unwrap();
+    let printed = temp_dir.path().join("printed");
+    for action in [&["-ls"][..], &["-printf", "%p\n"]] {
+        let (reader, writer) = std::io::pipe().unwrap();
+        drop(reader);
+        ucmd()
+            .arg("test_data/simple")
+            .args(action)
+            .args(&["-fprint", printed.to_str().unwrap()])
+            .set_stdout(writer)
+            .run()
+            .no_stderr();
+        assert_eq!(fs::read_to_string(&printed).unwrap(), "");
+    }
 }
 
 #[test]
