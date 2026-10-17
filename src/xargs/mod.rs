@@ -49,6 +49,7 @@ struct Options {
     replace: Option<String>,
     verbose: bool,
     eof_delimiter: Option<String>,
+    keep_empty: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -710,16 +711,19 @@ where
 struct ByteDelimitedArgumentReader<R: Read> {
     rd: BufReader<NonFatalPipeReader<R>>,
     delimiter: u8,
+    /// Explicit -0/-d delimiters make empty items arguments; plain -I skips empty lines.
+    keep_empty: bool,
 }
 
 impl<R> ByteDelimitedArgumentReader<R>
 where
     R: Read,
 {
-    fn new(rd: R, delimiter: u8) -> Self {
+    fn new(rd: R, delimiter: u8, keep_empty: bool) -> Self {
         Self {
             rd: BufReader::new(NonFatalPipeReader::new(rd)),
             delimiter,
+            keep_empty,
         }
     }
 }
@@ -735,7 +739,7 @@ where
             if bytes_read > 0 {
                 let need_to_trim_delimiter = buf[buf.len() - 1] == self.delimiter;
                 let bytes = if need_to_trim_delimiter {
-                    if buf.len() == 1 {
+                    if buf.len() == 1 && !self.keep_empty {
                         // This was *only* a delimiter, so we didn't actually
                         // read anything interesting. Try again.
                         continue;
@@ -981,6 +985,7 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
         // so the input should be split at newlines only.
         (None, false) => replace.as_ref().map(|_| b'\n'),
     };
+    let keep_empty = options.delimiter.is_some() || options.null;
 
     let eof_delimiter = if delimiter.is_some() {
         None
@@ -1000,6 +1005,7 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
         replace,
         verbose: options.verbose,
         eof_delimiter,
+        keep_empty,
     }
 }
 
@@ -1204,6 +1210,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                     .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
             })
         }),
+        keep_empty: false,
     };
 
     let options = normalize_options(options, &matches);
@@ -1248,7 +1255,11 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     };
 
     let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
-        Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
+        Box::new(ByteDelimitedArgumentReader::new(
+            args_file,
+            delimiter,
+            options.keep_empty,
+        ))
     } else {
         Box::new(WhitespaceDelimitedArgumentReader::new(args_file))
     };
@@ -1648,6 +1659,22 @@ mod tests {
     }
 
     #[test]
+    fn test_byte_delimited_reader_keep_empty() {
+        // The final delimiter only ends the last item; it adds no empty one.
+        let mut reader = ByteDelimitedArgumentReader::new(
+            ChunkReader::new(vec![Chunk::Data(b"!ab!!"), Chunk::Data(b"!c!")]),
+            b'!',
+            true,
+        );
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("ab"));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard(""));
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("c"));
+        assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
     fn test_byte_delimited_reader() {
         let mut reader = ByteDelimitedArgumentReader::new(
             ChunkReader::new(vec![
@@ -1658,6 +1685,7 @@ mod tests {
                 Chunk::Data(b"!ij"),
             ]),
             b'!',
+            false,
         );
 
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("abc"));
@@ -1689,6 +1717,7 @@ mod tests {
                 Chunk::Data(b"def\0"),
             ]),
             b'\0',
+            false,
         );
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("abc"));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("def"));
