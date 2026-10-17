@@ -26,7 +26,9 @@ fn parse(type_string: &str, mode: &str) -> Result<FileType, Box<dyn Error>> {
         "D" => {
             #[cfg(not(target_os = "solaris"))]
             {
-                return Err(From::from(format!("{mode} D is not supported because Solaris doors are not supported on the platform find was compiled on.")));
+                return Err(From::from(format!(
+                    "{mode} D is not supported because Solaris doors are not supported on the platform find was compiled on."
+                )));
             }
             #[cfg(target_os = "solaris")]
             {
@@ -38,12 +40,12 @@ fn parse(type_string: &str, mode: &str) -> Result<FileType, Box<dyn Error>> {
         "" => {
             return Err(From::from(format!(
                 "Arguments to {mode} should contain at least one letter"
-            )))
+            )));
         }
         _ => {
             return Err(From::from(format!(
                 "Unrecognised type argument {type_string}"
-            )))
+            )));
         }
     };
     Ok(file_type)
@@ -107,7 +109,9 @@ fn type_creator(type_string: &str, mode: &str) -> Result<HashSet<FileType>, Box<
     if type_string.contains(',') {
         for part in type_string.split(',') {
             if part.is_empty() {
-                return Err(From::from(format!("Last file type in list argument to {mode} is missing, i.e., list is ending on: ','")));
+                return Err(From::from(format!(
+                    "Last file type in list argument to {mode} is missing, i.e., list is ending on: ','"
+                )));
             }
             let file_type = parse(part, mode)?;
             if !file_types.insert(file_type) {

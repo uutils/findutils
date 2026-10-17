@@ -6,7 +6,7 @@
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::{stdin, stdout, Read, Write};
+use std::io::{Read, Write, stdin, stdout};
 use std::path::PathBuf;
 
 fn usage() -> ! {

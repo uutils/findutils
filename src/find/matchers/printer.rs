@@ -5,7 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::fs::File;
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -93,8 +93,8 @@ impl Matcher for Printer {
 mod tests {
     use super::*;
     use crate::find::matchers::tests::get_dir_entry_for;
-    use crate::find::tests::fix_up_slashes;
     use crate::find::tests::FakeDependencies;
+    use crate::find::tests::fix_up_slashes;
 
     #[test]
     fn prints_newline() {

@@ -7,13 +7,13 @@ use std::{
     env,
     ffi::{CStr, CString},
     fs::{self, File},
-    io::{self, stderr, BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write, stderr},
     path::{Path, PathBuf},
     str::FromStr,
 };
 
 use chrono::{DateTime, Local, TimeDelta};
-use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
+use clap::{self, Arg, ArgAction, ArgMatches, Command, Id, crate_version, value_parser};
 use itertools::Itertools;
 use onig::{Regex, RegexOptions, Syntax};
 use thiserror::Error;
@@ -630,20 +630,20 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 .filter_map(|p| DbReader::new(p.as_path()).ok())
             {
                 // if we can get the mtime of the file, check it against the current time
-                if let Ok(metadata) = fs::metadata(&dbreader.path) {
-                    if let Ok(time) = metadata.modified() {
-                        let modified: DateTime<Local> = time.into();
-                        let now = Local::now();
-                        let delta = now - modified;
-                        if is_db_too_old(delta, config.max_age) {
-                            eprintln!(
-                                "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
-                                args[0],
-                                dbreader.path.to_string_lossy(),
-                                config.max_age,
-                                delta.num_seconds() as f64 / (60 * 60 * 24) as f64
-                            );
-                        }
+                if let Ok(metadata) = fs::metadata(&dbreader.path)
+                    && let Ok(time) = metadata.modified()
+                {
+                    let modified: DateTime<Local> = time.into();
+                    let now = Local::now();
+                    let delta = now - modified;
+                    if is_db_too_old(delta, config.max_age) {
+                        eprintln!(
+                            "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
+                            args[0],
+                            dbreader.path.to_string_lossy(),
+                            config.max_age,
+                            delta.num_seconds() as f64 / (60 * 60 * 24) as f64
+                        );
                     }
                 }
 
@@ -721,7 +721,7 @@ mod tests {
 
     use chrono::TimeDelta;
 
-    use super::{is_db_too_old, path_exists, DbReader, Statistics};
+    use super::{DbReader, Statistics, is_db_too_old, path_exists};
 
     /// A writer that always fails, to emulate stdout with no space left
     /// (`> /dev/full`) or a closed pipe.
