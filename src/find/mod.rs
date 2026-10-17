@@ -34,8 +34,8 @@ pub struct Config {
     /// Whether the expression uses -ok or -okdir, which prompt on stderr and
     /// read the answer from stdin when there is no terminal.
     interactive_exec: bool,
-    /// Shared by every -ls and -printf that writes to standard output, so
-    /// that a failed write is reported only once.
+    /// Shared by every action that writes to standard output, so that a
+    /// failed write is reported only once.
     stdout_errors: matchers::StdoutErrors,
 }
 

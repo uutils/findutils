@@ -1529,9 +1529,14 @@ fn find_ls() {
 #[cfg(target_os = "linux")]
 fn find_reports_stdout_write_error_once() {
     for actions in [
-        &["-ls", "-ls"][..],
+        &[][..],
+        &["-print"],
+        &["-print0"],
+        &["-ls", "-ls"],
         &["-printf", "%p\n"],
         &["-ls", "-printf", "%p\n"],
+        &["-print", "-ls"],
+        &["-print0", "-ls"],
     ] {
         let dev_full = fs::OpenOptions::new()
             .write(true)

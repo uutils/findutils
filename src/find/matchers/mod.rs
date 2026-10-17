@@ -201,9 +201,9 @@ impl MatcherIO<'_> {
     }
 }
 
-/// Handles failed writes to standard output for `-ls` and `-printf`. A closed
-/// pipe ends the walk; any other error is reported once for the whole command
-/// and makes find exit with status 1.
+/// Handles failed writes to standard output. A closed pipe ends the walk; any
+/// other error is reported once for the whole command and makes find exit with
+/// status 1.
 #[derive(Clone, Default)]
 pub(crate) struct StdoutErrors {
     reported: Rc<Cell<bool>>,
@@ -322,7 +322,10 @@ pub fn build_top_level_matcher(
     if !top_level_matcher.has_side_effects() {
         let mut new_and_matcher = AndMatcherBuilder::new();
         new_and_matcher.new_and_condition(top_level_matcher);
-        new_and_matcher.new_and_condition(Printer::new(PrintDelimiter::Newline, None));
+        new_and_matcher.new_and_condition(
+            Printer::new(PrintDelimiter::Newline, None)
+                .with_stdout_errors(config.stdout_errors.clone()),
+        );
         return Ok(new_and_matcher.build());
     }
     Ok(top_level_matcher)
@@ -674,8 +677,16 @@ fn build_matcher_tree(
     let mut invert_next_matcher = false;
     while i < args.len() {
         let possible_submatcher = match lookup_predicate(args[i]) {
-            Predicate::Print => Some(Printer::new(PrintDelimiter::Newline, None).into_box()),
-            Predicate::Print0 => Some(Printer::new(PrintDelimiter::Null, None).into_box()),
+            Predicate::Print => Some(
+                Printer::new(PrintDelimiter::Newline, None)
+                    .with_stdout_errors(config.stdout_errors.clone())
+                    .into_box(),
+            ),
+            Predicate::Print0 => Some(
+                Printer::new(PrintDelimiter::Null, None)
+                    .with_stdout_errors(config.stdout_errors.clone())
+                    .into_box(),
+            ),
             Predicate::Printf => {
                 if i >= args.len() - 1 {
                     return Err(missing_argument_error(args, i).into());
