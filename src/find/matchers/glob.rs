@@ -4,13 +4,11 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use onig::{Regex, RegexOptions, Syntax};
+use std::error::Error;
 
-/// Parse a string as a POSIX Basic Regular Expression.
-fn parse_bre(expr: &str, options: RegexOptions) -> Result<Regex, onig::Error> {
-    let bre = Syntax::posix_basic();
-    Regex::with_options(expr, bre.options() | options, bre)
-}
+use fancy_regex::Regex;
+
+use super::{bre_to_ere::bre_to_ere, regex_transpile};
 
 /// Push a literal character onto a regex, escaping it if necessary.
 fn regex_push_literal(regex: &mut String, ch: char) {
@@ -107,7 +105,7 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
         next = chars.next();
     }
 
-    if parse_bre(&expr, RegexOptions::REGEX_OPTION_NONE).is_ok() {
+    if bre_to_ere(&expr, false).is_ok_and(|re| Regex::new(&re).is_ok()) {
         Some((expr, chars.as_str()))
     } else {
         None
@@ -157,21 +155,28 @@ pub struct Pattern {
 
 impl Pattern {
     /// Parse an fnmatch()-style glob.
-    pub fn new(pattern: &str, caseless: bool) -> Self {
-        let options = if caseless {
-            RegexOptions::REGEX_OPTION_IGNORECASE
-        } else {
-            RegexOptions::REGEX_OPTION_NONE
+    pub fn new(pattern: &str, caseless: bool) -> Result<Self, Box<dyn Error>> {
+        let regex = match glob_to_regex(pattern) {
+            Some(r) => {
+                // GNU find's -path, -name, -lname etc. do full-string matching,
+                // so anchor the regex to prevent partial matches.
+                let anchored = format!("^{r}$");
+                Some(regex_transpile::compile(
+                    &anchored,
+                    super::regex::RegexType::PosixBasic,
+                    caseless,
+                )?)
+            }
+            None => None,
         };
-
-        // As long as glob_to_regex() is correct, this should never fail
-        let regex = glob_to_regex(pattern).map(|r| parse_bre(&r, options).unwrap());
-        Self { regex }
+        Ok(Self { regex })
     }
 
     /// Test if this pattern matches a string.
     pub fn matches(&self, string: &str) -> bool {
-        self.regex.as_ref().is_some_and(|r| r.is_match(string))
+        self.regex
+            .as_ref()
+            .is_some_and(|r| r.is_match(string).unwrap_or(false))
     }
 }
 
@@ -239,20 +244,20 @@ mod tests {
 
     #[test]
     fn pattern_matches() {
-        assert!(Pattern::new(r"foo*bar", false).matches("foo--bar"));
+        assert!(Pattern::new(r"foo*bar", false).unwrap().matches("foo--bar"));
 
-        assert!(!Pattern::new(r"foo*bar", false).matches("bar--foo"));
+        assert!(!Pattern::new(r"foo*bar", false).unwrap().matches("bar--foo"));
     }
 
     #[test]
     fn caseless_matches() {
-        assert!(Pattern::new(r"foo*BAR", true).matches("FOO--bar"));
+        assert!(Pattern::new(r"foo*BAR", true).unwrap().matches("FOO--bar"));
 
-        assert!(!Pattern::new(r"foo*BAR", true).matches("BAR--foo"));
+        assert!(!Pattern::new(r"foo*BAR", true).unwrap().matches("BAR--foo"));
     }
 
     #[test]
     fn incomplete_escape_matches() {
-        assert!(!Pattern::new(r"foo\", false).matches("\n"));
+        assert!(!Pattern::new(r"foo\", false).unwrap().matches("\n"));
     }
 }
