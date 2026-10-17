@@ -7,9 +7,28 @@ use chrono::DateTime;
 use std::{
     fs::File,
     io::{stderr, Write},
+    time::SystemTime,
 };
 
 use super::{Matcher, MatcherIO, StdoutErrors, WalkEntry};
+
+/// Formats the date column: the time of day for
+/// timestamps from 180 days before find started until one hour after it,
+/// comparing whole seconds, and the year for anything else.
+fn format_date(modified: SystemTime, now: SystemTime) -> impl std::fmt::Display {
+    const RECENT_PAST_SECS: i64 = 180 * 24 * 60 * 60;
+    const RECENT_FUTURE_SECS: i64 = 60 * 60;
+
+    let modified: DateTime<chrono::Utc> = modified.into();
+    let now = DateTime::<chrono::Utc>::from(now).timestamp();
+    let recent = now - RECENT_PAST_SECS..=now + RECENT_FUTURE_SECS;
+    let format = if recent.contains(&modified.timestamp()) {
+        "%b %e %H:%M"
+    } else {
+        "%b %e  %Y"
+    };
+    modified.format(format)
+}
 
 #[cfg(windows)]
 fn format_permissions(file_attributes: u32) -> String {
@@ -94,11 +113,7 @@ impl Ls {
         let group =
             uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
         let size = metadata.size();
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
-        };
+        let last_modified = format_date(metadata.modified().unwrap(), matcher_io.now());
         let path = file_info.path().to_string_lossy();
 
         match writeln!(
@@ -169,11 +184,7 @@ impl Ls {
         let hard_links = 0;
         let user = 0;
         let group = 0;
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
-        };
+        let last_modified = format_date(metadata.modified().unwrap(), matcher_io.now());
         let path = file_info.path().to_string_lossy();
 
         match writeln!(
@@ -225,5 +236,30 @@ impl Matcher for Ls {
 
     fn has_side_effects(&self) -> bool {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    use super::format_date;
+
+    #[test]
+    fn date_shows_year_outside_recent_window() {
+        // find started at 2023-11-14 22:13:20.9 UTC.
+        let now_secs = 1_700_000_000;
+        let now = UNIX_EPOCH + Duration::new(now_secs, 900_000_000);
+        let date =
+            |secs, nanos| format_date(UNIX_EPOCH + Duration::new(secs, nanos), now).to_string();
+
+        assert_eq!(date(now_secs - 15_552_000, 0), "May 18 22:13");
+        assert_eq!(date(now_secs - 15_552_001, 999_999_999), "May 18  2023");
+        assert_eq!(date(now_secs + 3_600, 500_000_000), "Nov 14 23:13");
+        assert_eq!(date(now_secs + 3_601, 0), "Nov 14  2023");
+        assert_eq!(
+            format_date(UNIX_EPOCH - Duration::from_secs(1), now).to_string(),
+            "Dec 31  1969"
+        );
     }
 }
