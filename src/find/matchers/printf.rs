@@ -1321,30 +1321,12 @@ mod tests {
 
         let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
         let temp_dir_path = temp_dir.path().to_string_lossy();
-        let new_file_name = "newFile";
-        let file = File::create(temp_dir.path().join(new_file_name)).expect("create temp file");
 
-        let mut perms = file.metadata().unwrap().permissions();
-        perms.set_mode(0o755);
-        file.set_permissions(perms).unwrap();
-
-        let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
-        let deps = FakeDependencies::new();
-
-        let matcher = Printf::new("%m %M", None).unwrap();
-        assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
-        assert_eq!("755 -rwxr-xr-x", deps.get_output_as_string());
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_printf_permissions_special_bits() {
-        use std::fs::File;
-
-        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
-        let temp_dir_path = temp_dir.path().to_string_lossy();
-
-        for (mode, expected) in [(0o4755, "4755 -rwsr-xr-x"), (0o044, "44 ----r--r--")] {
+        for (mode, expected) in [
+            (0o755, "755 -rwxr-xr-x"),
+            (0o4755, "4755 -rwsr-xr-x"),
+            (0o044, "44 ----r--r--"),
+        ] {
             let new_file_name = format!("file{mode:o}");
             let file = File::create(temp_dir.path().join(&new_file_name)).unwrap();
             let mut perms = file.metadata().unwrap().permissions();
