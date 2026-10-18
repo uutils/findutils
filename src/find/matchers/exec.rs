@@ -37,7 +37,7 @@ pub fn check_path_for_relative_entries(action: &str) -> Result<(), Box<dyn Error
 }
 
 fn check_path_entries(path: &OsStr, action: &str) -> Result<(), Box<dyn Error>> {
-    for entry in std::env::split_paths(path) {
+    for entry in crate::split_paths(path) {
         if entry.as_os_str().is_empty() || entry == Path::new(".") {
             return Err(From::from(format!(
                 "The current directory is included in the PATH environment variable, \

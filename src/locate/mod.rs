@@ -210,7 +210,7 @@ impl TryFrom<ArgMatches> for ParsedInfo {
             basename: value.get_flag("basename"),
             db: value
                 .get_one::<String>("database")
-                .map_or_else(Vec::new, |s| std::env::split_paths(s).collect()),
+                .map_or_else(Vec::new, |s| crate::split_paths(s.as_ref()).collect()),
 
             mode: value
                 .get_many::<Id>("mode")
@@ -505,22 +505,6 @@ impl DbReader {
     }
 }
 
-/// Decode a raw database entry into a path.
-///
-/// On Unix a path is an arbitrary byte string, so the bytes are used verbatim. On other
-/// platforms paths aren't raw bytes; the database stores UTF-8 text (find emits paths via
-/// `Path::to_string_lossy`), so it is decoded lossily back into a path.
-#[cfg(unix)]
-fn bytes_to_path(bytes: &[u8]) -> PathBuf {
-    use std::os::unix::ffi::OsStrExt;
-    PathBuf::from(std::ffi::OsStr::from_bytes(bytes))
-}
-
-#[cfg(not(unix))]
-fn bytes_to_path(bytes: &[u8]) -> PathBuf {
-    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
-}
-
 /// Whether `path` currently exists on disk.
 ///
 /// With `follow_symlinks` (the `-L`/`--follow` default) a symlink is resolved, so a broken
@@ -542,7 +526,7 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     #[cfg(not(windows))]
     const GLOB_METACHARS: &str = r"*?[]\";
 
-    let buf = bytes_to_path(entry.to_bytes());
+    let buf = crate::bytes_to_path(entry.to_bytes());
     let name = if config.basename {
         let Some(path) = buf.file_name() else {
             return false;
