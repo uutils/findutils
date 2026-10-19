@@ -629,7 +629,11 @@ impl Printf {
             match component {
                 FormatComponent::Literal(literal) => write!(out, "{literal}")?,
                 FormatComponent::Byte(byte) => out.write_all(&[*byte])?,
-                FormatComponent::Flush => out.flush()?,
+                // \c stops the rest of this format, as in GNU find
+                FormatComponent::Flush => {
+                    out.flush()?;
+                    break;
+                }
                 FormatComponent::Directive {
                     directive,
                     width,
@@ -987,6 +991,16 @@ mod tests {
         let matcher = Printf::new("%f,%7f,%-7f", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!("abbbc,  abbbc,abbbc  ", deps.get_output_as_string());
+    }
+
+    #[test]
+    fn test_printf_backslash_c_stops_the_format() {
+        let file_info = get_dir_entry_for("test_data/simple", "abbbc");
+        let deps = FakeDependencies::new();
+
+        let matcher = Printf::new("%f\\c%s\n", None).unwrap();
+        assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+        assert_eq!("abbbc", deps.get_output_as_string());
     }
 
     #[test]
