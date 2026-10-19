@@ -44,13 +44,7 @@ impl Printer {
         self
     }
 
-    fn print(
-        &self,
-        file_info: &WalkEntry,
-        matcher_io: &mut MatcherIO,
-        mut out: impl Write,
-        print_error_message: bool,
-    ) {
+    fn print(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO, mut out: impl Write) {
         let result = write!(
             out,
             "{}{}",
@@ -59,7 +53,7 @@ impl Printer {
         )
         .and_then(|()| out.flush());
         if let Err(e) = result {
-            if !print_error_message {
+            if self.output_file.is_none() {
                 self.stdout_errors.handle(&e, matcher_io);
                 return;
             }
@@ -81,13 +75,12 @@ impl Printer {
 impl Matcher for Printer {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         if let Some(file) = &self.output_file {
-            self.print(file_info, matcher_io, file, true);
+            self.print(file_info, matcher_io, file);
         } else {
             self.print(
                 file_info,
                 matcher_io,
                 &mut *matcher_io.deps.get_output().borrow_mut(),
-                false,
             );
         }
         true
