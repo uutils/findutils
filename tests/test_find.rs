@@ -1487,7 +1487,7 @@ fn find_reports_stdout_write_error_once() {
 fn find_stops_when_stdout_pipe_is_closed() {
     let temp_dir = Builder::new().prefix("find_closed_pipe").tempdir().unwrap();
     let printed = temp_dir.path().join("printed");
-    for action in [&["-ls"][..], &["-printf", "%p\n"]] {
+    for action in [&["-print"][..], &["-ls"], &["-printf", "%p\n"]] {
         let (reader, writer) = std::io::pipe().unwrap();
         drop(reader);
         ucmd()
