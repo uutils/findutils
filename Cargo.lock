@@ -557,6 +557,7 @@ dependencies = [
  "itertools 0.15.0",
  "nix 0.31.3",
  "onig",
+ "parse_datetime",
  "regex",
  "rstest",
  "rustix",
@@ -989,6 +990,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad5fd71b79026fb918650dde6d125000a233764f1c2f1659a1c71118e33ea08f"
 dependencies = [
  "unicode-width",
+]
+
+[[package]]
+name = "parse_datetime"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb51967a779ef73b125a243688e53e4bb2474f91cae72734ee5051e857fb2645"
+dependencies = [
+ "jiff",
+ "num-traits",
+ "winnow",
 ]
 
 [[package]]
