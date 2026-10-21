@@ -810,6 +810,39 @@ fn find_printf_time_plus_fixed_width_fraction() {
 }
 
 #[test]
+fn find_printf_octal_escapes_write_raw_bytes() {
+    use std::fmt::Write as _;
+
+    let mut format = String::from("é");
+    for value in 0..=0o777 {
+        write!(format, "\\{value:03o}").unwrap();
+    }
+    format.push_str("€%f\\n");
+    let bytes = (0..=u8::MAX).chain(0..=u8::MAX).collect::<Vec<_>>();
+    let expected = ["é".as_bytes(), &bytes, "€simple\n".as_bytes()].concat();
+
+    ucmd()
+        .args(&["test_data/simple", "-maxdepth", "0", "-printf", &format])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(&expected);
+
+    let temp_dir = Builder::new()
+        .prefix("find_fprintf_octal_")
+        .tempdir()
+        .unwrap();
+    let output = temp_dir.path().join("out");
+    ucmd()
+        .args(&["test_data/simple", "-maxdepth", "0", "-fprintf"])
+        .arg(&output)
+        .arg(&format)
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"");
+    assert_eq!(fs::read(output).unwrap(), expected);
+}
+
+#[test]
 fn find_printf_octal_escape_before_multibyte_char() {
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "\\0€\\n"])

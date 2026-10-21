@@ -123,6 +123,7 @@ enum FormatDirective {
 #[derive(Debug, PartialEq, Eq)]
 enum FormatComponent {
     Literal(String),
+    Byte(u8),
     Flush,
     Directive {
         directive: FormatDirective,
@@ -191,10 +192,8 @@ impl FormatStringParser<'_> {
                 .collect();
             let code = u32::from_str_radix(&octal, OCTAL_RADIX)?;
             self.advance_by(octal.len())?;
-            return match char::from_u32(code) {
-                Some(c) => Ok(FormatComponent::Literal(c.to_string())),
-                None => Err(format!("Invalid character value: \\{octal}").into()),
-            };
+            // GNU octal escapes emit one byte, truncating values above 0xff.
+            return Ok(FormatComponent::Byte(code as u8));
         }
 
         self.advance_one()?;
@@ -629,6 +628,7 @@ impl Printf {
         for component in &self.format.components {
             match component {
                 FormatComponent::Literal(literal) => write!(out, "{literal}")?,
+                FormatComponent::Byte(byte) => out.write_all(&[*byte])?,
                 FormatComponent::Flush => out.flush()?,
                 FormatComponent::Directive {
                     directive,
@@ -738,7 +738,7 @@ mod tests {
     fn print_propagates_output_errors() -> Result<(), Box<dyn Error>> {
         let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
 
-        for format in ["literal", "%p", "\\c"] {
+        for format in ["literal", "%p", "\\c", "\\377"] {
             let printf = Printf::new(format, None)?;
             assert_eq!(
                 printf
@@ -789,11 +789,11 @@ mod tests {
                 .components,
             vec![
                 FormatComponent::Literal("abc".to_owned()),
-                FormatComponent::Literal("\0".to_owned()),
+                FormatComponent::Byte(0),
                 FormatComponent::Literal("\t".to_owned()),
                 FormatComponent::Literal("\n".to_owned()),
                 FormatComponent::Literal("\\".to_owned()),
-                FormatComponent::Literal("a".to_owned()),
+                FormatComponent::Byte(b'a'),
                 FormatComponent::Literal("de".to_owned()),
                 FormatComponent::Flush,
                 FormatComponent::Literal("f".to_owned())
@@ -824,21 +824,21 @@ mod tests {
         assert_eq!(
             FormatString::parse("\\0€").unwrap().components,
             vec![
-                FormatComponent::Literal("\0".to_owned()),
+                FormatComponent::Byte(0),
                 FormatComponent::Literal("€".to_owned()),
             ]
         );
         assert_eq!(
             FormatString::parse("\\1😀").unwrap().components,
             vec![
-                FormatComponent::Literal("\u{1}".to_owned()),
+                FormatComponent::Byte(1),
                 FormatComponent::Literal("😀".to_owned()),
             ]
         );
         assert_eq!(
             FormatString::parse("\\00é").unwrap().components,
             vec![
-                FormatComponent::Literal("\0".to_owned()),
+                FormatComponent::Byte(0),
                 FormatComponent::Literal("é".to_owned()),
             ]
         );
