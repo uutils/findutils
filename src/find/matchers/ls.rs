@@ -69,21 +69,8 @@ impl Ls {
         let metadata = file_info.metadata().unwrap();
 
         let inode_number = metadata.ino();
-        let number_of_blocks = {
-            let size = metadata.size();
-            let number_of_blocks = size / 1024;
-            let remainder = number_of_blocks % 4;
-
-            if remainder == 0 {
-                if number_of_blocks == 0 {
-                    4
-                } else {
-                    number_of_blocks
-                }
-            } else {
-                number_of_blocks + (4 - (remainder))
-            }
-        };
+        // st_blocks counts 512-byte units; -ls shows 1 KiB ones
+        let number_of_blocks = metadata.blocks().div_ceil(2);
         let permission = uucore::fs::display_permissions(metadata, true);
         let hard_links = metadata.nlink();
         // Fall back to the numeric id when the uid/gid has no passwd/group entry
@@ -99,7 +86,13 @@ impl Ls {
             let now_utc: DateTime<chrono::Utc> = system_time.into();
             now_utc.format("%b %e %H:%M")
         };
-        let path = file_info.path().to_string_lossy();
+        let mut path = file_info.path().to_string_lossy().into_owned();
+        if file_info.file_type().is_symlink() {
+            if let Ok(target) = std::fs::read_link(file_info.path()) {
+                path.push_str(" -> ");
+                path.push_str(&target.to_string_lossy());
+            }
+        }
 
         match writeln!(
             out,
