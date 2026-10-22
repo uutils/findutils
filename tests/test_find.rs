@@ -1592,6 +1592,31 @@ fn find_ls_shows_file_type_and_special_bits() {
         .stdout_contains(" drwxrwxrwt ");
 }
 
+#[test]
+#[cfg(unix)]
+fn find_ls_shows_allocated_blocks_and_link_target() {
+    use std::os::unix::fs::MetadataExt;
+
+    let temp_dir = Builder::new().prefix("find_ls_blocks").tempdir().unwrap();
+    let file = temp_dir.path().join("sparse");
+    File::create(&file)
+        .unwrap()
+        .set_len(10 * 1024 * 1024)
+        .unwrap();
+    symlink("sparse", temp_dir.path().join("link")).unwrap();
+
+    // the 1 KiB blocks actually allocated, not the size rounded up
+    let blocks = fs::metadata(&file).unwrap().blocks().div_ceil(2);
+    let result = ucmd().args(&[file.to_str().unwrap(), "-ls"]).succeeds();
+    let fields: Vec<&str> = result.stdout_str().split_whitespace().collect();
+    assert_eq!(fields[1], blocks.to_string());
+
+    ucmd()
+        .args(&[temp_dir.path().join("link").to_str().unwrap(), "-ls"])
+        .succeeds()
+        .stdout_contains(" -> sparse\n");
+}
+
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
 // a file's owning uid/gid had no passwd/group entry; it must fall back to the
 // numeric id like GNU find. Creating such a file needs privilege to chown to an
