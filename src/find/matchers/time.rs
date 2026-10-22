@@ -188,13 +188,15 @@ impl NewerTimeMatcher {
     fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
         let this_time = self.newer_time_type.get_file_time(file_info.metadata()?)?;
         // `self.time` is in milliseconds and negative before 1970
+        let offset = Duration::from_millis(self.time.unsigned_abs());
         let reference = if self.time >= 0 {
-            UNIX_EPOCH + Duration::from_millis(self.time.unsigned_abs())
+            UNIX_EPOCH.checked_add(offset)
         } else {
-            UNIX_EPOCH - Duration::from_millis(self.time.unsigned_abs())
+            UNIX_EPOCH.checked_sub(offset)
         };
-        // Strictly newer, like GNU find
-        Ok(this_time > reference)
+        // Strictly newer, like GNU find. A reference outside what the platform
+        // can store (e.g. before 1601 on Windows) is older or newer than any file.
+        Ok(reference.map_or(self.time < 0, |reference| this_time > reference))
     }
 }
 
@@ -849,6 +851,10 @@ mod tests {
         let t = UNIX_EPOCH - Duration::from_secs(300_000_000);
         assert!(!newer(t, -200_000_000_000));
         assert!(newer(t, -400_000_000_000));
+
+        // References far outside any file time don't panic.
+        assert!(newer(t, i64::MIN));
+        assert!(!newer(t, i64::MAX));
     }
 
     #[test]
