@@ -45,7 +45,7 @@ impl TimeFormat {
                 format!("{}.{:09}0", duration.as_secs(), duration.subsec_nanos())
             }
             Self::Ctime => {
-                const CTIME_FORMAT: &str = "%a %b %d %H:%M:%S.%f0 %Y";
+                const CTIME_FORMAT: &str = "%a %b %e %H:%M:%S.%f0 %Y";
 
                 DateTime::<Local>::from(time)
                     .format(CTIME_FORMAT)
@@ -1220,6 +1220,35 @@ mod tests {
                 "Sat Jan 15 09:30:21.0020000000 2000,{}.0020000000,2000-01-15",
                 mtime.timestamp()
             ),
+            deps.get_output_as_string()
+        );
+    }
+
+    #[test]
+    fn test_printf_ctime_pads_day_with_space() {
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let new_file_name = "newFile";
+        let file_path = temp_dir.path().join(new_file_name);
+        File::create(&file_path).expect("create temp file");
+
+        let mtime = chrono::Local
+            .with_ymd_and_hms(2000, 1, 2, 9, 30, 21)
+            .unwrap();
+        filetime::set_file_mtime(
+            &file_path,
+            filetime::FileTime::from_unix_time(mtime.timestamp(), 0),
+        )
+        .expect("set temp file mtime");
+
+        let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
+        let deps = FakeDependencies::new();
+
+        // like ctime(3): "Jan  2", not "Jan 02"
+        let matcher = Printf::new("%t", None).unwrap();
+        assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+        assert_eq!(
+            "Sun Jan  2 09:30:21.0000000000 2000",
             deps.get_output_as_string()
         );
     }
