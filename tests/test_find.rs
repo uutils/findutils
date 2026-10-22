@@ -810,6 +810,38 @@ fn find_printf_time_plus_fixed_width_fraction() {
 }
 
 #[test]
+#[cfg(unix)] // TZ only reliably selects the local time zone on unix
+fn find_newermt_uses_local_time() {
+    let temp_dir = Builder::new().prefix("find_newermt_").tempdir().unwrap();
+    // 1999-12-31 23:00 and 2000-01-01 04:00 UTC
+    for (name, secs) in [("early", 946_681_200), ("late", 946_699_200)] {
+        let file_path = temp_dir.path().join(name);
+        File::create(&file_path).expect("create test file");
+        filetime::set_file_mtime(&file_path, filetime::FileTime::from_unix_time(secs, 0))
+            .expect("set test file mtime");
+    }
+
+    // 03:00 is 03:00 UTC in UTC0 and 22:00 UTC the day before in UTC-5.
+    for (tz, expected) in [("UTC0", "late\n"), ("UTC-5", "early\nlate\n")] {
+        let result = ucmd()
+            .env("TZ", tz)
+            .arg(temp_dir.path())
+            .args(&[
+                "-type",
+                "f",
+                "-newermt",
+                "2000-01-01 03:00:00",
+                "-printf",
+                "%f\n",
+            ])
+            .succeeds();
+        let mut names: Vec<_> = result.stdout_str().lines().collect();
+        names.sort_unstable();
+        assert_eq!(names.join("\n") + "\n", expected, "TZ={tz}");
+    }
+}
+
+#[test]
 fn find_printf_octal_escapes_write_raw_bytes() {
     use std::fmt::Write as _;
 

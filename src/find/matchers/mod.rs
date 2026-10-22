@@ -395,15 +395,9 @@ fn convert_arg_to_comparable_value_and_suffix(
     )))
 }
 
-/// This is a function that converts a specific string format into a timestamp.
-/// It allows converting a time string of
-/// "(week abbreviation) (date), (year) (time)" to a Unix timestamp.
-/// such as: "jan 01, 2025 00:00:01" -> 1735689601000
-/// When (time) is not provided, it will be automatically filled in as 00:00:00
-/// such as: "jan 01, 2025" = "jan 01, 2025 00:00:00" -> 1735689600000
+/// Parses a `-newerXt` date in `date -d` syntax, in local time, to Unix milliseconds.
 fn parse_date_str_to_timestamps(date_str: &str) -> Option<i64> {
-    // `date -d` syntax in the local time zone, like GNU find; an empty
-    // string is the start of today.
+    // An empty string is the start of today, like GNU find.
     let date_str = if date_str.is_empty() {
         "00:00"
     } else {
