@@ -27,6 +27,16 @@ enum Justify {
     Right,
 }
 
+/// The `+`, space, `#` and `0` flags of a directive. Like GNU find, they only
+/// change the numeric directives `%d` and `%m`.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Flags {
+    plus: bool,
+    space: bool,
+    alternate: bool,
+    zero: bool,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum TimeFormat {
     /// Follow ctime(3).
@@ -128,7 +138,9 @@ enum FormatComponent {
     Directive {
         directive: FormatDirective,
         width: Option<usize>,
+        precision: Option<usize>,
         justify: Justify,
+        flags: Flags,
     },
 }
 
@@ -269,9 +281,12 @@ impl FormatStringParser<'_> {
 
     fn parse_format_specifier(&mut self) -> Result<FormatComponent, Box<dyn Error>> {
         let mut justify = Justify::Right;
+        let mut flags = Flags::default();
         loop {
             match self.front()? {
-                ' ' => (),
+                ' ' => flags.space = true,
+                '+' => flags.plus = true,
+                '#' => flags.alternate = true,
                 '-' => justify = Justify::Left,
                 _ => break,
             }
@@ -279,8 +294,19 @@ impl FormatStringParser<'_> {
             // safe to unwrap: .front() already succeeded above.
             self.advance_one().unwrap();
         }
+        // GNU find only takes `0` after the other flags.
+        if self.front()? == '0' {
+            flags.zero = true;
+            self.advance_one()?;
+        }
 
         let width = self.parse_format_width()?;
+        let precision = if self.front()? == '.' {
+            self.advance_one()?;
+            Some(self.parse_format_width()?.unwrap_or(0))
+        } else {
+            None
+        };
 
         let first = self.advance_one()?;
         if first == '%' {
@@ -338,7 +364,9 @@ impl FormatStringParser<'_> {
         Ok(FormatComponent::Directive {
             directive,
             width,
+            precision,
             justify,
+            flags,
         })
     }
 
@@ -403,6 +431,54 @@ fn format_non_link_file_type(file_type: FileType) -> char {
         FileType::Socket => 's',
         _ => 'U',
     }
+}
+
+/// Apply a directive's precision and flags the way GNU find does: `%d` and
+/// `%m` are printed like a C integer conversion (decimal and octal), `%S` is
+/// left alone, and every other directive is a string, cut to the precision.
+fn apply_precision_and_flags<'a>(
+    directive: &FormatDirective,
+    content: Cow<'a, str>,
+    precision: Option<usize>,
+    flags: &Flags,
+    width: Option<usize>,
+    justify: &Justify,
+) -> Cow<'a, str> {
+    let octal = match directive {
+        FormatDirective::Depth => false,
+        FormatDirective::Permissions(PermissionsFormat::Octal) => true,
+        FormatDirective::Sparseness => return content,
+        _ => {
+            return match precision {
+                Some(precision) => content.chars().take(precision).collect::<String>().into(),
+                None => content,
+            };
+        }
+    };
+
+    let mut digits = content.into_owned();
+    if precision == Some(0) && digits == "0" {
+        digits.clear();
+    }
+    if let Some(precision) = precision {
+        digits = format!("{digits:0>precision$}");
+    }
+    if octal && flags.alternate && !digits.starts_with('0') {
+        digits.insert(0, '0');
+    }
+    let sign = match (octal, flags.plus, flags.space) {
+        (false, true, _) => "+",
+        (false, false, true) => " ",
+        _ => "",
+    };
+    if let (Some(width), true) = (
+        width,
+        flags.zero && precision.is_none() && *justify == Justify::Right,
+    ) {
+        let pad = width.saturating_sub(sign.len());
+        digits = format!("{digits:0>pad$}");
+    }
+    format!("{sign}{digits}").into()
 }
 
 fn format_directive<'entry>(
@@ -633,9 +709,14 @@ impl Printf {
                 FormatComponent::Directive {
                     directive,
                     width,
+                    precision,
                     justify,
+                    flags,
                 } => match format_directive(file_info, directive) {
                     Ok(content) => {
+                        let content = apply_precision_and_flags(
+                            directive, content, *precision, flags, *width, justify,
+                        );
                         if let Some(width) = width {
                             match justify {
                                 Justify::Left => {
@@ -863,7 +944,9 @@ mod tests {
             FormatComponent::Directive {
                 directive,
                 width: None,
+                precision: None,
                 justify: Justify::Right,
+                flags: Flags::default(),
             }
         }
 
@@ -948,34 +1031,95 @@ mod tests {
                 FormatComponent::Directive {
                     directive: FormatDirective::Depth,
                     justify: Justify::Right,
-                    width: None
+                    width: None,
+                    precision: None,
+                    flags: Flags::default(),
                 },
                 FormatComponent::Directive {
                     directive: FormatDirective::Size,
                     justify: Justify::Left,
-                    width: None
+                    width: None,
+                    precision: None,
+                    flags: Flags::default(),
                 },
                 FormatComponent::Directive {
                     directive: FormatDirective::Sparseness,
                     justify: Justify::Right,
-                    width: Some(5)
+                    width: Some(5),
+                    precision: None,
+                    flags: Flags::default(),
                 },
                 FormatComponent::Directive {
                     directive: FormatDirective::HardlinkCount,
                     justify: Justify::Left,
-                    width: Some(12)
+                    width: Some(12),
+                    precision: None,
+                    flags: Flags::default(),
                 },
                 FormatComponent::Directive {
                     directive: FormatDirective::Basename,
                     justify: Justify::Right,
-                    width: Some(3)
+                    width: Some(3),
+                    precision: None,
+                    flags: Flags {
+                        space: true,
+                        ..Flags::default()
+                    },
                 },
                 FormatComponent::Directive {
                     directive: FormatDirective::Inode,
                     justify: Justify::Left,
-                    width: Some(4)
+                    width: Some(4),
+                    precision: None,
+                    flags: Flags {
+                        space: true,
+                        ..Flags::default()
+                    },
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn test_parse_precision_and_flags() {
+        assert_eq!(
+            FormatString::parse("%-+ #08.3d").unwrap().components,
+            vec![FormatComponent::Directive {
+                directive: FormatDirective::Depth,
+                width: Some(8),
+                precision: Some(3),
+                justify: Justify::Left,
+                flags: Flags {
+                    plus: true,
+                    space: true,
+                    alternate: true,
+                    zero: true,
+                },
+            }]
+        );
+        assert_eq!(
+            FormatString::parse("%.f").unwrap().components,
+            vec![FormatComponent::Directive {
+                directive: FormatDirective::Basename,
+                width: None,
+                precision: Some(0),
+                justify: Justify::Right,
+                flags: Flags::default(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_printf_precision_and_flags() {
+        let file_info = get_dir_entry_for("test_data/simple", "abbbc");
+        let deps = FakeDependencies::new();
+
+        let matcher =
+            Printf::new("%.3f|%6.2f|%05f|%+f|%+d|%+04d|% d|%.2d|%.0d|%-4d|", None).unwrap();
+        assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+        assert_eq!(
+            "abb|    ab|abbbc|abbbc|+1|+001| 1|01|1|1   |",
+            deps.get_output_as_string()
         );
     }
 
