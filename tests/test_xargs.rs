@@ -93,6 +93,97 @@ fn xargs_null_conflict() {
 }
 
 #[test]
+fn xargs_delimiter_empty_items() {
+    let commandline = path_to_testing_commandline();
+    for (option, input) in [("-0", "a\0\0b\0"), ("-d,", "a,,b,"), ("-d\\n", "a\n\nb")] {
+        ucmd()
+            .args(&[option, &commandline, "-", "--no_print_cwd"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("args=\n--no_print_cwd\na\n\nb\n");
+    }
+
+    ucmd()
+        .args(&["-0", &commandline, "-", "--no_print_cwd"])
+        .pipe_in("\0a\0\0")
+        .succeeds()
+        .stdout_only("args=\n--no_print_cwd\n\na\n\n");
+
+    // An empty argument counts for -r, -n and -I like any other.
+    ucmd()
+        .args(&["-0", "-r", &commandline, "-", "--no_print_cwd"])
+        .pipe_in("\0")
+        .succeeds()
+        .stdout_only("args=\n--no_print_cwd\n\n");
+
+    ucmd()
+        .args(&["-0", "-n2", &commandline, "-", "--no_print_cwd"])
+        .pipe_in("a\0\0b\0")
+        .succeeds()
+        .stdout_only("args=\n--no_print_cwd\na\n\nargs=\n--no_print_cwd\nb\n");
+
+    ucmd()
+        .args(&["-0", "-I{}", &commandline, "-", "--no_print_cwd", "x{}y"])
+        .pipe_in("a\0\0b\0")
+        .succeeds()
+        .stdout_only(
+            "args=\n--no_print_cwd\nxay\n\
+            args=\n--no_print_cwd\nxy\n\
+            args=\n--no_print_cwd\nxby\n",
+        );
+
+    // Without -0 or -d, -I reads lines and skips empty ones.
+    ucmd()
+        .args(&["-I{}", &commandline, "-", "--no_print_cwd", "x{}y"])
+        .pipe_in("a\n\nb\n")
+        .succeeds()
+        .stdout_only("args=\n--no_print_cwd\nxay\nargs=\n--no_print_cwd\nxby\n");
+}
+
+#[test]
+fn xargs_explicit_delimiter_replace_empty_items() {
+    let commandline = path_to_testing_commandline();
+    for (option, input) in [("-d,", "a,,b,"), ("-d\\n", "a\n\nb\n")] {
+        ucmd()
+            .args(&[option, "-I{}", &commandline, "-", "--no_print_cwd", "x{}y"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(
+                "args=\n--no_print_cwd\nxay\n\
+                args=\n--no_print_cwd\nxy\n\
+                args=\n--no_print_cwd\nxby\n",
+            );
+    }
+}
+
+#[test]
+fn xargs_explicit_delimiter_line_limit_empty_items() {
+    let commandline = path_to_testing_commandline();
+    for (option, input) in [("-d,", "a,,b,"), ("-d\\n", "a\n\nb\n")] {
+        ucmd()
+            .args(&[option, "-L2", &commandline, "-", "--no_print_cwd"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("args=\n--no_print_cwd\na\n\nargs=\n--no_print_cwd\nb\n");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn xargs_explicit_delimiter_size_limit_empty_items() {
+    // echo plus its terminator takes five bytes; the empty argument takes one.
+    for (option, input) in [("-d,", "a,,b,"), ("-d\\n", "a\n\nb\n")] {
+        for (limit, expected) in [("8", "a \nb\n"), ("9", "a \nb\n"), ("10", "a  b\n")] {
+            ucmd()
+                .args(&[option, "-s", limit])
+                .pipe_in(input)
+                .succeeds()
+                .stdout_only(expected);
+        }
+    }
+}
+
+#[test]
 fn xargs_if_empty() {
     // Should echo at least once still.
     ucmd().succeeds().no_stderr().stdout_only("\n");
