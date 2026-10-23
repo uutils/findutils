@@ -12,30 +12,253 @@ use std::{
 use super::{Matcher, MatcherIO, StdoutErrors, WalkEntry};
 
 #[cfg(windows)]
-fn format_permissions(file_attributes: u32) -> String {
-    let mut attributes = Vec::new();
+fn format_permissions(is_symlink: bool, file_attributes: u32) -> String {
+    use uucore::windows_sys::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_READONLY,
+    };
 
-    // https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
-    if file_attributes & 0x0001 != 0 {
-        attributes.push("read-only");
+    // The link check has to come first: a link to a directory also carries
+    // FILE_ATTRIBUTE_DIRECTORY. Only true symlinks print `l`: junctions stay
+    // `d` and OneDrive placeholders `-`, none of which are symlinks.
+    let file_type = if is_symlink {
+        "l"
+    } else if file_attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
+        "d"
+    } else {
+        "-"
+    };
+
+    // Windows ACLs have no POSIX mode bits for this column to print, so
+    // synthesize a fixed approximation rather than list attribute names:
+    // * `r` is always set: read access cannot be derived from the metadata
+    //   find reads, only from the full ACL;
+    // * `w` mirrors FILE_ATTRIBUTE_READONLY, the only write-related bit;
+    // * `x` is always set: Windows has no execute bit, every file is
+    //   potentially executable;
+    // * group and other mirror the owner as `r-x`: telling them apart would
+    //   require walking the DACL per file.
+    let write = if file_attributes & FILE_ATTRIBUTE_READONLY != 0 {
+        "-"
+    } else {
+        "w"
+    };
+
+    format!("{file_type}r{write}xr-xr-x")
+}
+
+/// Whether `path` is a reparse point with the symlink tag. `std` reports
+/// every name-surrogate reparse point through `FileType::is_symlink`, which
+/// includes junctions, so the tag itself has to be checked. Only reparse
+/// points (junctions, links, OneDrive placeholders, ...) pay for the extra
+/// `FindFirstFileW`, which exposes the tag in `dwReserved0`.
+#[cfg(windows)]
+fn is_symlink_reparse_point(path: &std::path::Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+
+    use uucore::windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use uucore::windows_sys::Win32::Storage::FileSystem::{
+        FindClose, FindFirstFileW, FILE_ATTRIBUTE_REPARSE_POINT, WIN32_FIND_DATAW,
+    };
+
+    // windows-sys puts this tag behind its Win32_System_SystemServices
+    // feature, which uucore does not enable.
+    const IO_REPARSE_TAG_SYMLINK: u32 = 0xA000_000C;
+
+    let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut find_data: WIN32_FIND_DATAW = unsafe { std::mem::zeroed() };
+    // SAFETY: wide_path is null-terminated and find_data a valid output
+    // buffer.
+    let handle = unsafe { FindFirstFileW(wide_path.as_ptr(), &raw mut find_data) };
+    if handle == INVALID_HANDLE_VALUE {
+        return false;
     }
-    if file_attributes & 0x0002 != 0 {
-        attributes.push("hidden");
+    // SAFETY: handle comes from FindFirstFileW above.
+    unsafe {
+        FindClose(handle);
     }
-    if file_attributes & 0x0004 != 0 {
-        attributes.push("system");
-    }
-    if file_attributes & 0x0020 != 0 {
-        attributes.push("archive");
-    }
-    if file_attributes & 0x0040 != 0 {
-        attributes.push("compressed");
-    }
-    if file_attributes & 0x0080 != 0 {
-        attributes.push("offline");
+    find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        && find_data.dwReserved0 == IO_REPARSE_TAG_SYMLINK
+}
+
+/// Get the owner and group of `path` for display: `DOMAIN\name` when each SID
+/// resolves to an account, the raw `S-1-...` SID string when it does not (e.g.
+/// a deleted account), or the `0` placeholder when not even the security
+/// descriptor could be read.
+#[cfg(windows)]
+fn display_owner_group(path: &std::path::Path) -> (String, String) {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::{null, null_mut};
+
+    use uucore::windows_sys::Win32::Security::{
+        GetFileSecurityW, GetLengthSid, GetSecurityDescriptorGroup, GetSecurityDescriptorOwner,
+        LookupAccountSidW, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+        PSECURITY_DESCRIPTOR, PSID,
+    };
+
+    thread_local! {
+        /// SIDs resolved so far, failures included: one account lookup per
+        /// distinct SID per run instead of one per file, so a SID without an
+        /// account cannot reach the domain controller for every file it
+        /// appears on. `find` walks the tree single-threaded, so the cache
+        /// needs no locking.
+        static SID_NAMES: RefCell<HashMap<Box<[u8]>, Option<String>>> =
+            RefCell::new(HashMap::new());
     }
 
-    attributes.join(", ")
+    /// Look up `sid` in the cache, filling it with `LookupAccountSidW` on a
+    /// miss (classic two-call size query, then fill).
+    fn display_name(sid: PSID) -> String {
+        fn resolve_account(sid: PSID) -> Option<String> {
+            let mut name_len = 0;
+            let mut domain_len = 0;
+            let mut sid_type = 0;
+            // SAFETY: name and domain buffers may be null when only querying
+            // the required lengths.
+            unsafe {
+                LookupAccountSidW(
+                    null(),
+                    sid,
+                    null_mut(),
+                    &raw mut name_len,
+                    null_mut(),
+                    &raw mut domain_len,
+                    &raw mut sid_type,
+                );
+            }
+            if name_len == 0 {
+                return None;
+            }
+            let mut name = vec![0; name_len as usize];
+            let mut domain = vec![0; domain_len as usize];
+            // SAFETY: buffers are sized from the preceding length query.
+            let ok = unsafe {
+                LookupAccountSidW(
+                    null(),
+                    sid,
+                    name.as_mut_ptr(),
+                    &raw mut name_len,
+                    if domain.is_empty() {
+                        null_mut()
+                    } else {
+                        domain.as_mut_ptr()
+                    },
+                    &raw mut domain_len,
+                    &raw mut sid_type,
+                )
+            };
+            if ok == 0 {
+                return None;
+            }
+            let name = String::from_utf16_lossy(&name[..(name_len as usize).min(name.len())]);
+            let domain =
+                String::from_utf16_lossy(&domain[..(domain_len as usize).min(domain.len())]);
+            if domain.is_empty() {
+                Some(name)
+            } else {
+                Some(format!("{domain}\\{name}"))
+            }
+        }
+
+        /// Format a SID as its canonical `S-1-...` string. windows-sys only
+        /// exposes `ConvertSidToStringSidW` behind the
+        /// `Win32_Security_Authorization` feature, and the format is plain:
+        /// revision, identifier authority, then the sub-authorities.
+        fn sid_to_string(sid: PSID) -> Option<String> {
+            // SAFETY: SID layout — byte 0 is the revision, byte 1 the
+            // sub-authority count, bytes 2..8 the big-endian identifier
+            // authority, then `count` little-endian u32 sub-authorities.
+            let raw = sid.cast::<u8>();
+            let (revision, count, authority) = unsafe {
+                (
+                    raw.read(),
+                    raw.add(1).read(),
+                    u64::from_be_bytes([
+                        raw.add(2).read(),
+                        raw.add(3).read(),
+                        raw.add(4).read(),
+                        raw.add(5).read(),
+                        raw.add(6).read(),
+                        raw.add(7).read(),
+                        0,
+                        0,
+                    ]),
+                )
+            };
+            if count == 0 || count > 15 {
+                return None;
+            }
+            let mut result = format!("S-{revision}-{authority}");
+            for i in 0..count as usize {
+                // SAFETY: sub-authority i lives at bytes 8 + 4*i..12 + 4*i.
+                // The SID may sit in a byte buffer, so read unaligned.
+                let subauthority = unsafe { raw.add(8 + i * 4).cast::<u32>().read_unaligned() };
+                result.push_str(&format!("-{subauthority}"));
+            }
+            Some(result)
+        }
+
+        if sid.is_null() {
+            return "0".to_string();
+        }
+        // SAFETY: sid points to a valid SID of GetLengthSid(sid) bytes.
+        let key = unsafe {
+            Box::from(std::slice::from_raw_parts(
+                sid.cast::<u8>(),
+                GetLengthSid(sid) as usize,
+            ))
+        };
+        if let Some(cached) = SID_NAMES.with_borrow(|cache| cache.get(&key).cloned()) {
+            return cached.unwrap_or_else(|| sid_to_string(sid).unwrap_or_else(|| "0".into()));
+        }
+        let name = resolve_account(sid);
+        SID_NAMES.with_borrow_mut(|cache| cache.insert(key, name.clone()));
+        name.unwrap_or_else(|| sid_to_string(sid).unwrap_or_else(|| "0".into()))
+    }
+
+    let information = OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION;
+    let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut needed = 0;
+    // SAFETY: passing a null descriptor queries the required buffer size.
+    unsafe {
+        GetFileSecurityW(
+            wide_path.as_ptr(),
+            information,
+            null_mut(),
+            0,
+            &raw mut needed,
+        );
+    }
+    if needed == 0 {
+        return ("0".to_string(), "0".to_string());
+    }
+    let mut buffer = vec![0u8; needed as usize];
+    // SAFETY: the self-relative descriptor lives in `buffer` for the rest of
+    // this function, so nothing needs to be freed.
+    let descriptor = buffer.as_mut_ptr() as PSECURITY_DESCRIPTOR;
+    // SAFETY: descriptor has room for the `needed` bytes reported above.
+    let ok = unsafe {
+        GetFileSecurityW(
+            wide_path.as_ptr(),
+            information,
+            descriptor,
+            needed,
+            &raw mut needed,
+        )
+    };
+    if ok == 0 {
+        return ("0".to_string(), "0".to_string());
+    }
+    let mut owner: PSID = null_mut();
+    let mut group: PSID = null_mut();
+    let mut defaulted = 0;
+    // SAFETY: descriptor is a valid security descriptor from the call above.
+    unsafe {
+        GetSecurityDescriptorOwner(descriptor, &raw mut owner, &raw mut defaulted);
+        GetSecurityDescriptorGroup(descriptor, &raw mut group, &raw mut defaulted);
+    }
+    (display_name(owner), display_name(group))
 }
 
 pub struct Ls {
@@ -140,8 +363,8 @@ impl Ls {
         mut out: impl Write,
         print_error_message: bool,
     ) {
-        // Non-Unix targets (Windows, wasm, ...) don't expose inode, owner,
-        // group or Unix permission bits, so those columns are left blank.
+        // Non-Unix targets have no inode number. Windows fills the remaining
+        // columns from its own metadata, other targets keep placeholders.
         let metadata = file_info.metadata().unwrap();
 
         let inode_number = 0;
@@ -162,13 +385,19 @@ impl Ls {
         #[cfg(windows)]
         let permission = {
             use std::os::windows::fs::MetadataExt;
-            format_permissions(metadata.file_attributes())
+            // path_is_symlink() alone would also flag junctions, so confirm
+            // the reparse tag for those entries.
+            let is_symlink =
+                file_info.path_is_symlink() && is_symlink_reparse_point(file_info.path());
+            format_permissions(is_symlink, metadata.file_attributes())
         };
         #[cfg(not(windows))]
         let permission = "?---------";
         let hard_links = 0;
-        let user = 0;
-        let group = 0;
+        #[cfg(windows)]
+        let (user, group) = display_owner_group(file_info.path());
+        #[cfg(not(windows))]
+        let (user, group) = ("0".to_string(), "0".to_string());
         let last_modified = {
             let system_time = metadata.modified().unwrap();
             let now_utc: DateTime<chrono::Utc> = system_time.into();
@@ -225,5 +454,34 @@ impl Matcher for Ls {
 
     fn has_side_effects(&self) -> bool {
         true
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::format_permissions;
+    use uucore::windows_sys::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_REPARSE_POINT,
+    };
+
+    #[test]
+    fn test_format_permissions() {
+        assert_eq!(format_permissions(false, 0), "-rwxr-xr-x");
+        assert_eq!(
+            format_permissions(false, FILE_ATTRIBUTE_READONLY),
+            "-r-xr-xr-x"
+        );
+        assert_eq!(
+            format_permissions(false, FILE_ATTRIBUTE_DIRECTORY),
+            "drwxr-xr-x"
+        );
+        // A link to a directory carries both attributes; the link wins.
+        assert_eq!(
+            format_permissions(
+                true,
+                FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT
+            ),
+            "lrwxr-xr-x"
+        );
     }
 }
