@@ -1624,6 +1624,23 @@ fn find_ls_unmapped_owner_renders_numeric_id() {
 }
 
 #[test]
+fn find_ls_shows_year_for_old_files() {
+    let temp_dir = Builder::new().prefix("find_ls_old_").tempdir().unwrap();
+    let path = temp_dir.path().join("old");
+    File::create(&path).unwrap();
+    // 2020-06-15 12:00:00 UTC
+    let mtime = filetime::FileTime::from_unix_time(1_592_222_400, 0);
+    filetime::set_file_mtime(&path, mtime).unwrap();
+
+    ucmd()
+        .arg(path.to_str().unwrap())
+        .arg("-ls")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains(" Jun 15  2020 ");
+}
+
+#[test]
 #[cfg(unix)]
 fn find_slashes() {
     ucmd()
