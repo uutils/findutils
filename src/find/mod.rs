@@ -29,6 +29,7 @@ pub struct Config {
     version_requested: bool,
     today_start: bool,
     no_leaf_dirs: bool,
+    ignore_readdir_race: bool,
     follow: Follow,
     files0_argument: Option<String>,
     /// Whether the expression uses -ok or -okdir, which prompt on stderr and
@@ -54,6 +55,7 @@ impl Default for Config {
             // and this configuration field will exist as
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
+            ignore_readdir_race: false,
             follow: Follow::Never,
             files0_argument: None, // This option exclusively for -files0-from argument.
             interactive_exec: false,
@@ -320,6 +322,7 @@ fn process_dir(
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
+                matcher_io.set_ignore_readdir_race(config.ignore_readdir_race);
 
                 let new_dir = entry.path().parent().map(std::path::Path::to_path_buf);
                 if new_dir != current_dir {
@@ -426,6 +429,8 @@ Positional options:
  -d / -depth              Process directory contents before directory itself
  -mount / -xdev           Do not descend into other file systems
  -noleaf                  Do not optimize by assuming 2+ hard links
+ -ignore_readdir_race     Do not report files that vanish during the search
+ -noignore_readdir_race   Report files that vanish during the search (default)
  -sorted                  Sort directory contents by name (non-standard)
  -regextype type          Set regex syntax (default: emacs)
  -files0-from file        Read starting points from file, NUL-separated
@@ -1615,6 +1620,23 @@ mod tests {
         let rc = find_main(&["find", "./test_data/simple/subdir", "-noleaf"], &deps);
 
         assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn test_ignore_readdir_race() {
+        for option in ["-ignore_readdir_race", "-noignore_readdir_race"] {
+            let deps = FakeDependencies::new();
+            let rc = find_main(
+                &["find", &fix_up_slashes("./test_data/simple/subdir"), option],
+                &deps,
+            );
+
+            assert_eq!(rc, 0);
+            assert_eq!(
+                deps.get_output_as_string(),
+                fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n")
+            );
+        }
     }
 
     #[test]
