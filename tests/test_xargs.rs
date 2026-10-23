@@ -225,6 +225,20 @@ fn xargs_max_chars() {
 }
 
 #[test]
+fn xargs_max_chars_runs_pending_command_before_error() {
+    // An argument that can never fit must not discard the command built so
+    // far: it still runs before xargs reports the error.
+    for procs in ["-P1", "-P2", "-P0"] {
+        ucmd()
+            .args(&["-s11", procs])
+            .pipe_in("ab cd abcdefghijkl ef")
+            .fails_with_code(1)
+            .stderr_contains("Error:")
+            .stdout_is("ab cd\n");
+    }
+}
+
+#[test]
 fn xargs_exit_on_large() {
     ucmd()
         .args(&["-xs11", "-n2"])
@@ -389,6 +403,57 @@ fn xargs_exec_with_signal() {
         result.stdout_str(),
         "args=\n--no_print_cwd\n--exit_with_signal\na\n"
     );
+}
+
+#[test]
+fn xargs_exec_urgent_failure_parallel() {
+    // When a command exits with 255, no new command is launched: each of the
+    // two workers runs at most the command it already started.
+    let result = ucmd()
+        .args(&[
+            "-n1",
+            "-P2",
+            &path_to_testing_commandline(),
+            "-",
+            "--no_print_cwd",
+            "--exit_with_urgent_failure",
+        ])
+        .pipe_in("a b c d e f g h i j")
+        .run();
+    result.code_is(124);
+    assert!(
+        !result.stderr_str().is_empty(),
+        "stderr should not be empty"
+    );
+    let runs = result.stdout_str().matches("args=").count();
+    assert!(
+        (1..=2).contains(&runs),
+        "expected at most 2 commands to run, got {runs}"
+    );
+}
+
+#[test]
+fn xargs_parallel_zero() {
+    // `-P 0` runs as many commands at once as possible.
+    for arg in ["-P0", "--max-procs=0"] {
+        let result = ucmd().args(&[arg, "-n1"]).pipe_in("a b c d e").succeeds();
+        result.no_stderr();
+        let mut lines: Vec<_> = result.stdout_str().lines().collect();
+        lines.sort_unstable();
+        assert_eq!(lines, ["a", "b", "c", "d", "e"]);
+    }
+}
+
+#[test]
+fn xargs_parallel_more_procs_than_cpus() {
+    let result = ucmd()
+        .args(&["-P64", "-n1"])
+        .pipe_in("a b c d e")
+        .succeeds();
+    result.no_stderr();
+    let mut lines: Vec<_> = result.stdout_str().lines().collect();
+    lines.sort_unstable();
+    assert_eq!(lines, ["a", "b", "c", "d", "e"]);
 }
 
 #[test]

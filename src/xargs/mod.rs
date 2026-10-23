@@ -12,15 +12,11 @@ use std::{
     fs,
     io::{self, BufRead, BufReader, Read},
     process::{Command, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicBool, Ordering},
 };
-
-static ACTIVE_PROCS: AtomicU64 = AtomicU64::new(0);
 
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
-use rayon::iter::{
-    FromParallelIterator, IntoParallelIterator, ParallelBridge as _, ParallelIterator as _,
-};
+use rayon::iter::{ParallelBridge as _, ParallelIterator as _};
 use uucore::error::strip_errno;
 
 mod options {
@@ -363,39 +359,16 @@ impl CommandSizeLimiter for MaxLinesCommandSizeLimiter {
     }
 }
 
-#[derive(Default)]
 enum CommandResult {
-    #[default]
     Success,
     Failure,
 }
 
-impl FromIterator<Self> for CommandResult {
-    fn from_iter<I: IntoIterator<Item = Self>>(iter: I) -> Self {
-        iter.into_iter()
-            .fold(None, |acc, item| {
-                acc.or_else(|| (!matches!(item, Self::Success)).then_some(item))
-            })
-            .unwrap_or_default()
-    }
-}
-
-impl FromParallelIterator<Self> for CommandResult {
-    fn from_par_iter<I>(par_iter: I) -> Self
-    where
-        I: IntoParallelIterator<Item = Self>,
-    {
-        par_iter
-            .into_par_iter()
-            .fold(
-                || None,
-                |acc, item| acc.or_else(|| (!matches!(item, Self::Success)).then_some(item)),
-            )
-            .collect_vec_list()
-            .into_iter()
-            .flatten()
-            .flatten()
-            .collect()
+impl CommandResult {
+    fn combine(&mut self, other: Self) {
+        if matches!(*self, Self::Success) {
+            *self = other;
+        }
     }
 }
 
@@ -574,20 +547,6 @@ impl CommandBuilder<'_> {
                 Ok(CommandResult::Success)
             }
         }
-    }
-
-    fn execute_parallel(self, capacity: u64) -> Result<CommandResult, CommandExecutionError> {
-        loop {
-            let current = ACTIVE_PROCS.fetch_add(1, Ordering::SeqCst);
-            if current < capacity {
-                break;
-            }
-            ACTIVE_PROCS.fetch_sub(1, Ordering::SeqCst);
-            std::hint::spin_loop();
-        }
-        let result = self.execute();
-        ACTIVE_PROCS.fetch_sub(1, Ordering::SeqCst);
-        result
     }
 }
 
@@ -881,7 +840,8 @@ struct InputProcessOptions {
     max_args: Option<usize>,
     max_lines: Option<usize>,
     no_run_if_empty: bool,
-    max_procs: std::num::NonZero<u64>,
+    /// Maximum number of commands run at once; `0` means as many as possible.
+    max_procs: usize,
 }
 
 impl InputProcessOptions {
@@ -890,7 +850,7 @@ impl InputProcessOptions {
         max_args: Option<usize>,
         max_lines: Option<usize>,
         no_run_if_empty: bool,
-        max_procs: std::num::NonZero<u64>,
+        max_procs: usize,
     ) -> Self {
         Self {
             exit_if_pass_char_limit,
@@ -902,12 +862,18 @@ impl InputProcessOptions {
     }
 }
 
+/// Groups the input arguments into ready-to-run commands.
+///
+/// Errors are yielded in input order: when an argument is too large to fit
+/// even on its own, the command built so far is yielded first and the error
+/// right after it, so the pending command still runs (as in serial xargs).
 struct CommandBatchIter<'a> {
     builder_options: &'a CommandBuilderOptions,
     args: Box<dyn ArgumentReader + Send>,
     options: &'a InputProcessOptions,
     current_builder: CommandBuilder<'a>,
     have_pending_command: bool,
+    pending_error: Option<XargsError>,
     done: bool,
 }
 
@@ -923,8 +889,16 @@ impl<'a> CommandBatchIter<'a> {
             args,
             options,
             have_pending_command: false,
+            pending_error: None,
             done: false,
         }
+    }
+
+    fn take_builder(&mut self) -> CommandBuilder<'a> {
+        std::mem::replace(
+            &mut self.current_builder,
+            CommandBuilder::new(self.builder_options),
+        )
     }
 }
 
@@ -932,6 +906,9 @@ impl<'a> Iterator for CommandBatchIter<'a> {
     type Item = Result<CommandBuilder<'a>, XargsError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(e) = self.pending_error.take() {
+            return Some(Err(e));
+        }
         if self.done {
             return None;
         }
@@ -944,10 +921,7 @@ impl<'a> Iterator for CommandBatchIter<'a> {
                 Ok(None) => {
                     self.done = true;
                     if !self.options.no_run_if_empty || self.have_pending_command {
-                        return Some(Ok(std::mem::replace(
-                            &mut self.current_builder,
-                            CommandBuilder::new(self.builder_options),
-                        )));
+                        return Some(Ok(self.take_builder()));
                     }
                     return None;
                 }
@@ -963,15 +937,19 @@ impl<'a> Iterator for CommandBatchIter<'a> {
                             self.done = true;
                             return Some(Err(XargsError::ArgumentTooLarge));
                         }
-                        let old = std::mem::replace(
-                            &mut self.current_builder,
-                            CommandBuilder::new(self.builder_options),
-                        );
+                        let old = self.take_builder();
                         let batch = self.have_pending_command.then_some(old);
                         if let Err(ExhaustedCommandSpace { .. }) = self.current_builder.add_arg(arg)
                         {
                             self.done = true;
-                            return Some(Err(XargsError::ArgumentTooLarge));
+                            // Run the pending command before reporting the error.
+                            return match batch {
+                                Some(ready) => {
+                                    self.pending_error = Some(XargsError::ArgumentTooLarge);
+                                    Some(Ok(ready))
+                                }
+                                None => Some(Err(XargsError::ArgumentTooLarge)),
+                            };
                         }
                         self.have_pending_command = true;
                         if let Some(ready) = batch {
@@ -984,6 +962,37 @@ impl<'a> Iterator for CommandBatchIter<'a> {
     }
 }
 
+/// Runs one command in parallel mode.
+///
+/// Once any command fails in a way that aborts xargs (e.g. it exits with 255),
+/// `stop` is set and commands that have not started yet are skipped, so no new
+/// command is launched, as in GNU xargs.
+fn run_parallel_batch(
+    batch: Result<CommandBuilder<'_>, XargsError>,
+    stop: &AtomicBool,
+) -> Result<CommandResult, XargsError> {
+    // An input error ends the batch iterator, so it doesn't need to stop the
+    // commands that were read before it.
+    let builder = batch?;
+    if stop.load(Ordering::Relaxed) {
+        return Ok(CommandResult::Success);
+    }
+    let result = builder.execute().map_err(XargsError::from);
+    if result.is_err() {
+        stop.store(true, Ordering::Relaxed);
+    }
+    result
+}
+
+fn combine_results(
+    first: Result<CommandResult, XargsError>,
+    second: Result<CommandResult, XargsError>,
+) -> Result<CommandResult, XargsError> {
+    let mut result = first?;
+    result.combine(second?);
+    Ok(result)
+}
+
 fn process_input(
     builder_options: &CommandBuilderOptions,
     args: Box<dyn ArgumentReader + Send>,
@@ -991,18 +1000,80 @@ fn process_input(
 ) -> Result<CommandResult, XargsError> {
     let batches = CommandBatchIter::new(builder_options, args, options);
 
-    let capacity = options.max_procs.get();
-
-    if capacity == 1 {
-        batches
-            .map(|batch| batch?.execute().map_err(XargsError::from))
-            .collect()
-    } else {
-        batches
-            .par_bridge()
-            .map(|batch| batch?.execute_parallel(capacity).map_err(XargsError::from))
-            .collect()
+    match options.max_procs {
+        1 => {
+            let mut result = CommandResult::Success;
+            for batch in batches {
+                result.combine(batch?.execute()?);
+            }
+            Ok(result)
+        }
+        0 => process_input_unbounded(batches),
+        capacity => process_input_pooled(batches, capacity),
     }
+}
+
+/// `-P N`: run up to `capacity` commands at once on a dedicated thread pool.
+/// Each worker blocks while its child runs, and `par_bridge` only pulls the
+/// next command when a worker is free, so input is read lazily.
+fn process_input_pooled(
+    batches: CommandBatchIter<'_>,
+    capacity: usize,
+) -> Result<CommandResult, XargsError> {
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(capacity)
+        .build()
+        .map_err(|e| format!("Failed to start {capacity} worker threads: {e}"))?;
+    let stop = AtomicBool::new(false);
+
+    pool.install(|| {
+        batches
+            .take_while(|_| !stop.load(Ordering::Relaxed))
+            .par_bridge()
+            .map(|batch| run_parallel_batch(batch, &stop))
+            .reduce(|| Ok(CommandResult::Success), combine_results)
+    })
+}
+
+/// `-P 0`: run as many commands at once as possible, one thread per command.
+fn process_input_unbounded(batches: CommandBatchIter<'_>) -> Result<CommandResult, XargsError> {
+    let stop = AtomicBool::new(false);
+
+    std::thread::scope(|scope| {
+        let mut workers = Vec::new();
+        let mut result = Ok(CommandResult::Success);
+
+        for batch in batches {
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
+            let builder = match batch {
+                Ok(builder) => builder,
+                Err(e) => {
+                    result = Err(e);
+                    break;
+                }
+            };
+            let stop = &stop;
+            match std::thread::Builder::new()
+                .spawn_scoped(scope, move || run_parallel_batch(Ok(builder), stop))
+            {
+                Ok(worker) => workers.push(worker),
+                Err(e) => {
+                    result = Err(XargsError::from(format!("Failed to start a thread: {e}")));
+                    break;
+                }
+            }
+        }
+
+        for worker in workers {
+            let worker_result = worker
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+            result = combine_results(result, worker_result);
+        }
+        result
+    })
 }
 
 fn parse_delimiter(s: &str) -> Result<u8, String> {
@@ -1184,7 +1255,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_PROCS)
                 .short('P')
                 .long(options::MAX_PROCS)
-                .help("Run up to this many commands in parallel")
+                .help("Run up to this many commands in parallel (0: as many as possible)")
                 .value_parser(clap::value_parser!(usize)),
         )
         .arg(
@@ -1369,13 +1440,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         args = Box::new(EofArgumentReader::new(args, &eof_delimiter));
     }
 
-    let max_procs =
-        matches
-            .get_one::<usize>(options::MAX_PROCS)
-            .map_or(std::num::NonZero::<u64>::MIN, |&n| {
-                std::num::NonZero::new(n.try_into().expect("max-procs value exceeds u64 range"))
-                    .expect("max-procs must be non-zero")
-            });
+    let max_procs = matches
+        .get_one::<usize>(options::MAX_PROCS)
+        .copied()
+        .unwrap_or(1);
 
     let result = process_input(
         &builder_options,
