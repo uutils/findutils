@@ -2052,13 +2052,14 @@ mod tests {
 
     #[test]
     fn parse_date_str_to_timestamps_test() {
-        use chrono::{Local, TimeZone};
         // Dates without a zone are local time, as in GNU find.
         let local = |y, m, d, h, min, sec| {
-            Local
-                .with_ymd_and_hms(y, m, d, h, min, sec)
+            jiff::civil::date(y, m, d)
+                .at(h, min, sec, 0)
+                .to_zoned(jiff::tz::TimeZone::system())
                 .unwrap()
-                .timestamp_millis()
+                .timestamp()
+                .as_millisecond()
         };
 
         assert_eq!(
@@ -2071,18 +2072,14 @@ mod tests {
         );
 
         // An empty string is the start of today.
-        let today = Local::now().date_naive();
-        assert_eq!(
-            parse_date_str_to_timestamps(""),
-            Some(
-                today
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_local_timezone(Local)
-                    .unwrap()
-                    .timestamp_millis()
-            )
-        );
+        let today = jiff::Zoned::now().date();
+        let expected = today
+            .at(0, 0, 0, 0)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .unwrap()
+            .timestamp()
+            .as_millisecond();
+        assert_eq!(parse_date_str_to_timestamps(""), Some(expected));
 
         // A year of non-ASCII decimal digits must be rejected, not panic.
         assert_eq!(parse_date_str_to_timestamps("jan 01, ٠٠٠٠"), None);

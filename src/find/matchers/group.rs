@@ -95,7 +95,6 @@ mod tests {
     fn test_group_matcher() {
         use crate::find::matchers::{group::GroupMatcher, tests::get_dir_entry_for, Matcher};
         use crate::find::tests::FakeDependencies;
-        use chrono::Local;
         use nix::unistd::{Gid, Group};
         use std::fs::File;
         use std::os::unix::fs::MetadataExt;
@@ -122,7 +121,7 @@ mod tests {
         );
 
         // Testing a non-existent group name
-        let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
+        let time_string = jiff::Zoned::now().strftime("%Y%m%d%H%M%S").to_string();
         let matcher = GroupMatcher::from_group_name(time_string.as_str());
         assert!(
             matcher.is_none(),
