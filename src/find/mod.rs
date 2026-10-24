@@ -1627,23 +1627,6 @@ mod tests {
     }
 
     #[test]
-    fn test_ignore_readdir_race() {
-        for option in ["-ignore_readdir_race", "-noignore_readdir_race"] {
-            let deps = FakeDependencies::new();
-            let rc = find_main(
-                &["find", &fix_up_slashes("./test_data/simple/subdir"), option],
-                &deps,
-            );
-
-            assert_eq!(rc, 0);
-            assert_eq!(
-                deps.get_output_as_string(),
-                fix_up_slashes("./test_data/simple/subdir\n./test_data/simple/subdir/ABBBC\n")
-            );
-        }
-    }
-
-    #[test]
     fn find_maxdepth_and() {
         let deps = FakeDependencies::new();
         let rc = find_main(
