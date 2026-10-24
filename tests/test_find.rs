@@ -782,6 +782,16 @@ fn find_printf() {
 }
 
 #[test]
+fn find_printf_backslash_c_runs_the_next_action() {
+    ucmd()
+        .arg(fix_up_slashes("./test_data/simple"))
+        .args(&["-sorted", "-printf", "%f\\c%s\\n", "-printf", "|\\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("simple|\nabbbc|\nsubdir|\nABBBC|\n");
+}
+
+#[test]
 #[cfg(unix)] // %T+ prints local time; TZ only reliably selects it on unix
 fn find_printf_time_plus_fixed_width_fraction() {
     let temp_dir = Builder::new().prefix("find_time_plus_").tempdir().unwrap();
