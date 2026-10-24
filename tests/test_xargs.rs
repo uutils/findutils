@@ -634,3 +634,14 @@ fn xargs_non_utf8_argument_is_rejected_gracefully() {
         .stderr_contains("non-UTF-8")
         .no_stdout();
 }
+
+#[test]
+fn xargs_replace_reads_quoted_lines() {
+    // Like GNU: leading blanks and blank lines are skipped, quotes are
+    // removed, inner and trailing blanks stay, and -E still ends the input.
+    ucmd()
+        .args(&["-E", "END", "-I", "{}", "echo", "[{}]"])
+        .pipe_in("  a b  \n\n''\n\t\"q r\" x\nEND\nlast\n")
+        .succeeds()
+        .stdout_only("[a b  ]\n[]\n[q r x]\n");
+}
