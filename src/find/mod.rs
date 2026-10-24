@@ -352,6 +352,7 @@ fn process_dir(
     }
 
     let mut matcher_io = matchers::MatcherIO::new(deps);
+    matcher_io.set_ignore_readdir_race(config.ignore_readdir_race);
     if let Some(dir) = current_dir.take() {
         matcher.finished_dir(dir.as_path(), &mut matcher_io);
     }
