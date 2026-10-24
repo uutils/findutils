@@ -612,6 +612,64 @@ fn delete_vanished_file_with_ignore_readdir_race() {
     }
 }
 
+// While "a" is visited, -exec removes the directory "b", which has already
+// been read from "d" but not opened yet.  -sorted makes "a" come first.
+#[cfg(unix)]
+fn vanished_dir_during_walk() -> tempfile::TempDir {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+    File::create(temp_dir.path().join("a")).expect("created test file");
+    fs::create_dir_all(temp_dir.path().join("b").join("inner")).expect("created test dir");
+    temp_dir
+}
+
+#[test]
+#[cfg(unix)]
+fn vanished_dir_during_walk_is_an_error_by_default() {
+    let temp_dir = vanished_dir_during_walk();
+    let b = temp_dir.path().join("b");
+
+    ucmd()
+        .arg(temp_dir.path())
+        .args(&["-sorted", "-name", "a", "-exec", "rm", "-rf"])
+        .arg(&b)
+        .args(&[";", "-print"])
+        .fails_with_code(1)
+        .stdout_is(format!("{}\n", temp_dir.path().join("a").display()))
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn vanished_dir_during_walk_with_ignore_readdir_race() {
+    let temp_dir = vanished_dir_during_walk();
+    let b = temp_dir.path().join("b");
+
+    ucmd()
+        .arg(temp_dir.path())
+        .args(&["-ignore_readdir_race", "-sorted", "-name", "a"])
+        .args(&["-exec", "rm", "-rf"])
+        .arg(&b)
+        .args(&[";", "-print"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("{}\n", temp_dir.path().join("a").display()));
+
+    assert!(!b.exists(), "b should have been removed by -exec");
+}
+
+#[test]
+fn missing_start_point_still_reported_with_ignore_readdir_race() {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+    let missing = temp_dir.path().join("missing");
+
+    ucmd()
+        .arg(&missing)
+        .arg("-ignore_readdir_race")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("missing");
+}
+
 // This could be covered by a unit test in principle... in practice, changing
 // the working dir can't be done safely in unit tests unless `--test-threads=1`
 // or `serial` goes everywhere, and it doesn't seem possible to get an

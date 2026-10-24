@@ -312,6 +312,13 @@ fn process_dir(
     let mut current_dir: Option<PathBuf> = None;
     while let Some(result) = it.next() {
         match WalkEntry::from_walkdir(result, config.follow) {
+            // With -ignore_readdir_race, an entry that vanished after its
+            // parent directory was read is not an error.  Starting points
+            // (depth 0) are still reported, as GNU find does.
+            Err(err)
+                if config.ignore_readdir_race
+                    && err.is_not_found()
+                    && err.depth().is_some_and(|depth| depth > 0) => {}
             Err(err) => {
                 ret = 1;
                 writeln!(&mut stderr(), "Error: {err}").unwrap();
