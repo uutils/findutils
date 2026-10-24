@@ -677,12 +677,13 @@ where
                     in_argument = true;
                     escape = Some(Escape::Slash);
                 }
-                (None, c) if c.is_ascii_whitespace() => {
-                    if in_argument {
-                        terminated_by_newline = c == b'\n';
-                        break;
-                    }
+                (None, c @ (b' ' | b'\t' | b'\n')) if in_argument => {
+                    terminated_by_newline = c == b'\n';
+                    break;
                 }
+                // Any isspace() byte is skipped before an argument, but only
+                // blanks and newlines end one, as in GNU xargs and POSIX.
+                (None, b' ' | b'\t' | b'\n' | b'\r' | b'\x0b' | b'\x0c') if !in_argument => {}
                 (None, c) => {
                     in_argument = true;
                     result.push(c);
@@ -1600,6 +1601,21 @@ mod tests {
         let mut reader =
             WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(b"x ''")]));
         assert_eq!(reader.next().unwrap().unwrap(), make_arg_soft("x"));
+        assert_eq!(reader.next().unwrap(), None);
+    }
+
+    #[test]
+    fn test_whitespace_delimited_reader_only_blanks_separate() {
+        // CR, VT and FF are skipped before an argument but are part of one.
+        let mut reader =
+            WhitespaceDelimitedArgumentReader::new(ChunkReader::new(vec![Chunk::Data(
+                b"\r\x0b\x0ca\rb\x0bc\x0cd e\r\n",
+            )]));
+        assert_eq!(
+            reader.next().unwrap().unwrap(),
+            make_arg_soft("a\rb\x0bc\x0cd")
+        );
+        assert_eq!(reader.next().unwrap().unwrap(), make_arg_hard("e\r"));
         assert_eq!(reader.next().unwrap(), None);
     }
 
