@@ -5,7 +5,7 @@
 // https://opensource.org/licenses/MIT.
 
 use std::error::Error;
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 use std::str::FromStr;
 
 use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
@@ -143,13 +143,16 @@ mod tests {
 
     #[test]
     fn size_matcher_bad_unit() {
-        if let Err(e) = SizeMatcher::new(ComparableValue::EqualTo(2), "xyz") {
-            assert!(
-                e.to_string().contains("Invalid suffix") && e.to_string().contains("xyz"),
-                "bad description: {e}"
-            );
-        } else {
-            panic!("parsing a unit string should fail");
+        match SizeMatcher::new(ComparableValue::EqualTo(2), "xyz") {
+            Err(e) => {
+                assert!(
+                    e.to_string().contains("Invalid suffix") && e.to_string().contains("xyz"),
+                    "bad description: {e}"
+                );
+            }
+            _ => {
+                panic!("parsing a unit string should fail");
+            }
         }
     }
 
