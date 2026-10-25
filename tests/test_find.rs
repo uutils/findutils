@@ -1379,6 +1379,16 @@ fn find_fs() {
 }
 
 #[test]
+fn find_newer_missing_reference_names_it() {
+    for predicate in ["-newer", "-anewer", "-cnewer", "-newermc"] {
+        ucmd()
+            .args(&["test_data/simple", predicate, "test_data/no_such_file"])
+            .fails_with_code(1)
+            .stderr_contains("test_data/no_such_file: No such file or directory");
+    }
+}
+
+#[test]
 fn find_samefile() {
     let temp_dir = Builder::new().prefix("find_samefile_").tempdir().unwrap();
     let temp_dir_path = temp_dir.path().to_str().unwrap();
