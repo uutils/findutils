@@ -32,6 +32,8 @@ pub struct Config {
     /// Whether the expression uses -ok or -okdir, which prompt on stderr and
     /// read the answer from stdin when there is no terminal.
     interactive_exec: bool,
+    /// None = auto (warn only if stdin is a TTY), Some(true) = force warn (-warn), Some(false) = suppress (-nowarn)
+    warn_mode: Option<bool>,
 }
 
 impl Default for Config {
@@ -52,6 +54,7 @@ impl Default for Config {
             follow: Follow::Never,
             files0_argument: None, // This option exclusively for -files0-from argument.
             interactive_exec: false,
+            warn_mode: None,
         }
     }
 }

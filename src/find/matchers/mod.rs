@@ -62,6 +62,7 @@ use ::regex::Regex;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use fs::FileSystemMatcher;
 use ls::Ls;
+use std::io::IsTerminal;
 use std::{
     error::Error,
     fs::{File, Metadata},
@@ -447,19 +448,24 @@ fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
     Ok(file)
 }
 
+fn should_warn(config: &Config) -> bool {
+    match config.warn_mode {
+        Some(warn) => warn,
+        None => std::io::stdin().is_terminal(),
+    }
+}
+
 /// GNU find warns if a pattern that is matched against basenames only
 /// (the argument to -name/-iname) contains a directory separator, because
 /// such a pattern can never match. Returns the warning message, if any.
-fn basename_pattern_warning(option_name: &str, pattern: &str) -> Option<String> {
-    if pattern.contains('/') && pattern != "/" {
-        Some(format!(
-            "‘{option_name}’ matches against basenames only, but the given \
+fn basename_pattern_warning(option_name: &str, pattern: &str, config: &Config) {
+    if pattern.contains('/') && pattern != "/" && should_warn(config) {
+        eprintln!(
+            "find: warning: ‘{option_name}’ matches against basenames only, but the given \
              pattern contains a directory separator (‘/’), thus the \
              expression will evaluate to false all the time.  Did you mean \
              ‘-wholename’?"
-        ))
-    } else {
-        None
+        );
     }
 }
 
@@ -467,19 +473,11 @@ fn basename_pattern_warning(option_name: &str, pattern: &str) -> Option<String> 
 /// argument to -path/-ipath/-wholename/-iwholename) ends with a directory
 /// separator, because such a pattern can never match. Returns the warning
 /// message, if any.
-fn fullpath_pattern_warning(option_name: &str, pattern: &str) -> Option<String> {
-    if pattern.ends_with('/') && pattern != "/" {
-        Some(format!(
-            "{option_name} {pattern} will not match anything because it ends with /."
-        ))
-    } else {
-        None
-    }
-}
-
-fn issue_warning(warning: Option<String>) {
-    if let Some(warning) = warning {
-        eprintln!("find: warning: {warning}");
+fn fullpath_pattern_warning(option_name: &str, pattern: &str, config: &Config) {
+    if pattern.ends_with('/') && pattern != "/" && should_warn(config) {
+        eprintln!(
+            "find: warning: ‘{option_name}’ {pattern} will not match anything because it ends with /."
+        );
     }
 }
 
@@ -569,7 +567,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                issue_warning(basename_pattern_warning(args[i - 1], args[i]));
+                basename_pattern_warning(args[i - 1], args[i], config);
                 Some(NameMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-path" | "-ipath" | "-wholename" | "-iwholename" => {
@@ -577,7 +575,7 @@ fn build_matcher_tree(
                     return Err(From::from(format!("missing argument to {}", args[i])));
                 }
                 i += 1;
-                issue_warning(fullpath_pattern_warning(args[i - 1], args[i]));
+                fullpath_pattern_warning(args[i - 1], args[i], config);
                 Some(PathMatcher::new(args[i], args[i - 1].starts_with("-i")).into_box())
             }
             "-readable" => Some(AccessMatcher::Readable.into_box()),
@@ -996,6 +994,14 @@ fn build_matcher_tree(
                 }
                 let _ = config.files0_argument.insert(args[i + 1].to_string());
                 i += 1;
+                Some(TrueMatcher.into_box())
+            }
+            "-warn" => {
+                config.warn_mode = Some(true);
+                Some(TrueMatcher.into_box())
+            }
+            "-nowarn" => {
+                config.warn_mode = Some(false);
                 Some(TrueMatcher.into_box())
             }
 

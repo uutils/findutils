@@ -1306,56 +1306,96 @@ fn find_slashes() {
 }
 
 #[test]
-fn find_name_pattern_with_directory_separator_warns() {
-    ucmd()
-        .args(&["./test_data/simple", "-name", "/a.txt"])
-        .succeeds()
-        .stderr_only("find: warning: ‘-name’ matches against basenames only, but the given pattern contains a directory separator (‘/’), thus the expression will evaluate to false all the time.  Did you mean ‘-wholename’?\n");
+fn find_slash_pattern_does_not_warn() {
+    for flag in [
+        "-name",
+        "-iname",
+        "-path",
+        "-ipath",
+        "-wholename",
+        "-iwholename",
+    ] {
+        ucmd()
+            .args(&["./test_data/simple", "-warn", flag, "/"])
+            .succeeds()
+            .no_stderr();
+    }
 }
 
 #[test]
-fn find_iname_pattern_with_directory_separator_warns() {
+fn find_basename_pattern_warning_for_name_variants() {
+    for flag in ["-name", "-iname"] {
+        ucmd()
+            .args(&["./test_data/simple", "-warn", flag, "foo/bar"])
+            .succeeds()
+            .stderr_contains(flag)
+            .stderr_contains("matches against basenames only")
+            .stderr_contains("Did you mean ‘-wholename’?")
+            .no_stdout();
+    }
+}
+
+#[test]
+fn find_fullpath_pattern_warning_for_path_variants() {
+    for flag in ["-path", "-ipath", "-wholename", "-iwholename"] {
+        ucmd()
+            .args(&["./test_data/simple", "-warn", flag, "foo/"])
+            .succeeds()
+            .stderr_contains(flag)
+            .stderr_contains("foo/ will not match anything because it ends with /.")
+            .no_stdout();
+    }
+}
+
+#[test]
+fn find_pattern_warnings_suppressed_without_tty() {
     ucmd()
-        .args(&["./test_data/simple", "-iname", "foo/bar"])
+        .args(&["./test_data/simple", "-name", "foo/bar"])
         .succeeds()
-        .stderr_contains("‘-iname’ matches against basenames only")
-        .stderr_contains("Did you mean ‘-wholename’?")
+        .no_stderr()
+        .no_stdout();
+
+    ucmd()
+        .args(&["./test_data/simple", "-path", "foo/"])
+        .succeeds()
+        .no_stderr()
         .no_stdout();
 }
 
 #[test]
-fn find_wholename_pattern_with_trailing_separator_warns() {
+fn find_warn_flag_forces_pattern_warnings() {
     ucmd()
-        .args(&["./test_data/simple", "-wholename", "a.txt/"])
+        .args(&["./test_data/simple", "-warn", "-name", "foo/bar"])
         .succeeds()
-        .stderr_only(
-            "find: warning: -wholename a.txt/ will not match anything because it ends with /.\n",
-        );
+        .stderr_contains("matches against basenames only");
+
+    ucmd()
+        .args(&["./test_data/simple", "-warn", "-path", "foo/"])
+        .succeeds()
+        .stderr_contains("will not match anything because it ends with /");
 }
 
 #[test]
-fn find_path_pattern_with_trailing_separator_warns() {
+fn find_nowarn_flag_suppresses_pattern_warnings() {
     ucmd()
-        .args(&["./test_data/simple", "-path", "./"])
+        .args(&["./test_data/simple", "-nowarn", "-name", "foo/bar"])
         .succeeds()
-        .stderr_only("find: warning: -path ./ will not match anything because it ends with /.\n");
-}
+        .no_stderr()
+        .no_stdout();
 
-#[test]
-fn find_ipath_pattern_with_trailing_separator_warns() {
     ucmd()
-        .args(&["./test_data/simple", "-ipath", "foo/"])
+        .args(&["./test_data/simple", "-nowarn", "-path", "foo/"])
         .succeeds()
-        .stderr_contains("-ipath foo/ will not match anything because it ends with /.")
+        .no_stderr()
         .no_stdout();
 }
 
 #[test]
-fn find_iwholename_pattern_with_trailing_separator_warns() {
+fn find_nowarn_overrides_warn() {
     ucmd()
-        .args(&["./test_data/simple", "-iwholename", "foo/"])
+        .args(&["./test_data/simple", "-warn", "-nowarn", "-name", "foo/bar"])
         .succeeds()
-        .stderr_contains("-iwholename foo/ will not match anything because it ends with /.")
+        .no_stderr()
         .no_stdout();
 }
 
@@ -1363,7 +1403,15 @@ fn find_iwholename_pattern_with_trailing_separator_warns() {
 fn find_pattern_warnings_are_issued_for_every_occurrence() {
     let warning = "find: warning: ‘-name’ matches against basenames only, but the given pattern contains a directory separator (‘/’), thus the expression will evaluate to false all the time.  Did you mean ‘-wholename’?\n";
     ucmd()
-        .args(&["./test_data/simple", "-name", "a/b", "-o", "-name", "c/d"])
+        .args(&[
+            "./test_data/simple",
+            "-warn",
+            "-name",
+            "a/b",
+            "-o",
+            "-name",
+            "c/d",
+        ])
         .succeeds()
         .stderr_only(format!("{warning}{warning}"));
 }
@@ -1373,6 +1421,7 @@ fn find_pattern_warning_does_not_suppress_normal_output() {
     ucmd()
         .args(&[
             "./test_data/simple",
+            "-warn",
             "-maxdepth",
             "1",
             "-name",
