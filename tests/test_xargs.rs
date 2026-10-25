@@ -658,3 +658,21 @@ fn xargs_replace_reads_quoted_lines() {
             args=\n--no_print_cwd\n[q r x]\n",
         );
 }
+
+#[test]
+fn xargs_replace_unterminated_quote() {
+    // An unbalanced quote in a -I line is an error, as without -I.
+    ucmd()
+        .args(&[
+            "-I",
+            "{}",
+            &path_to_testing_commandline(),
+            "-",
+            "--no_print_cwd",
+            "[{}]",
+        ])
+        .pipe_in("it's\nb\n")
+        .fails_with_code(1)
+        .stderr_contains("Error: Unterminated quote:")
+        .no_stdout();
+}
