@@ -311,7 +311,12 @@ impl FormatStringParser<'_> {
         let width = self.parse_format_width()?;
         let precision = if self.front()? == '.' {
             self.advance_one()?;
-            Some(self.parse_format_number()?.unwrap_or(0))
+            // A precision too large for usize is still too large to print, so
+            // saturate it; print() reports it as GNU find does.
+            Some(match self.parse_format_number() {
+                Ok(precision) => precision.unwrap_or(0),
+                Err(_) => usize::MAX,
+            })
         } else {
             None
         };
@@ -723,6 +728,7 @@ impl Printf {
     }
 
     fn print(&self, file_info: &WalkEntry, mut out: impl Write) -> std::io::Result<()> {
+        let mut result = Ok(());
         for component in &self.format.components {
             match component {
                 FormatComponent::Literal(literal) => write!(out, "{literal}")?,
@@ -731,6 +737,16 @@ impl Printf {
                 FormatComponent::Flush => {
                     out.flush()?;
                     break;
+                }
+                FormatComponent::Directive {
+                    precision: Some(precision),
+                    ..
+                } if *precision > i32::MAX as usize => {
+                    // Like GNU find, print nothing for it, go on with the rest
+                    // of the format, and fail with EOVERFLOW.
+                    result = Err(std::io::Error::other(
+                        "Value too large for defined data type",
+                    ));
                 }
                 FormatComponent::Directive {
                     directive,
@@ -765,7 +781,7 @@ impl Printf {
             }
         }
 
-        Ok(())
+        result
     }
 
     fn handle_output_error(&self, error: &std::io::Error, matcher_io: &mut MatcherIO) {
