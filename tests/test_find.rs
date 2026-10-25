@@ -1536,6 +1536,41 @@ fn find_ls() {
 }
 
 #[test]
+#[cfg(unix)] // TZ only reliably selects the local time zone on unix
+fn find_ls_uses_local_time() {
+    use chrono::{DateTime, FixedOffset};
+
+    let temp_dir = Builder::new().prefix("find_ls_time_").tempdir().unwrap();
+    let file_path = temp_dir.path().join("stamped");
+    File::create(&file_path).expect("create test file");
+    // An hour ago, so the date column shows the time of day.
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        - 3600;
+    filetime::set_file_mtime(&file_path, filetime::FileTime::from_unix_time(secs, 0))
+        .expect("set test file mtime");
+
+    // POSIX TZ "UTC-5" is five hours east of UTC.
+    let expected = DateTime::from_timestamp(secs, 0)
+        .unwrap()
+        .with_timezone(&FixedOffset::east_opt(5 * 3600).unwrap())
+        .format("%b %e %H:%M")
+        .to_string();
+    let result = ucmd()
+        .env("TZ", "UTC-5")
+        .arg(&file_path)
+        .arg("-ls")
+        .succeeds();
+    assert!(
+        result.stdout_str().contains(&expected),
+        "{} does not contain {expected}",
+        result.stdout_str()
+    );
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn find_reports_stdout_write_error_once() {
     for actions in [

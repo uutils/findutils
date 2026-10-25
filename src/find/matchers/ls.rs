@@ -83,8 +83,8 @@ impl Ls {
         let size = metadata.size();
         let last_modified = {
             let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
+            let local: DateTime<chrono::Local> = system_time.into();
+            local.format("%b %e %H:%M")
         };
         let mut path = file_info.path().to_string_lossy().into_owned();
         if file_info.file_type().is_symlink() {
@@ -164,8 +164,8 @@ impl Ls {
         let group = 0;
         let last_modified = {
             let system_time = metadata.modified().unwrap();
-            let now_utc: DateTime<chrono::Utc> = system_time.into();
-            now_utc.format("%b %e %H:%M")
+            let local: DateTime<chrono::Local> = system_time.into();
+            local.format("%b %e %H:%M")
         };
         let path = file_info.path().to_string_lossy();
 
