@@ -640,8 +640,21 @@ fn xargs_replace_reads_quoted_lines() {
     // Like GNU: leading blanks and blank lines are skipped, quotes are
     // removed, inner and trailing blanks stay, and -E still ends the input.
     ucmd()
-        .args(&["-E", "END", "-I", "{}", "echo", "[{}]"])
+        .args(&[
+            "-E",
+            "END",
+            "-I",
+            "{}",
+            &path_to_testing_commandline(),
+            "-",
+            "--no_print_cwd",
+            "[{}]",
+        ])
         .pipe_in("  a b  \n\n''\n\t\"q r\" x\nEND\nlast\n")
         .succeeds()
-        .stdout_only("[a b  ]\n[]\n[q r x]\n");
+        .stdout_only(
+            "args=\n--no_print_cwd\n[a b  ]\n\
+            args=\n--no_print_cwd\n[]\n\
+            args=\n--no_print_cwd\n[q r x]\n",
+        );
 }
