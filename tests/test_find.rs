@@ -955,6 +955,23 @@ fn find_printf_width_too_large() {
 }
 
 #[test]
+fn find_printf_precision_too_large() {
+    // GNU find prints nothing for a precision above INT_MAX, goes on, and
+    // fails with EOVERFLOW instead of trying to pad that far.
+    ucmd()
+        .args(&[
+            "./test_data/simple",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "%.2147483648d%.99999999999999999999m|%.2147483647f|\\n",
+        ])
+        .fails_with_code(1)
+        .stdout_is("|simple|\n")
+        .stderr_contains("'standard output': Value too large for defined data type");
+}
+
+#[test]
 fn find_printf_multibyte_char_after_directive() {
     ucmd()
         .args(&["./test_data/simple", "-maxdepth", "0", "-printf", "%€\\n"])
