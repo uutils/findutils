@@ -1948,3 +1948,13 @@ fn find_exits_cleanly_on_broken_pipe() {
         "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn missing_starting_point_is_named_without_os_error() {
+    ucmd()
+        .args(&["./test_data/simple/abbbc", "xyz.nonexistentDir"])
+        .fails()
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: 'xyz.nonexistentDir': No such file or directory\n");
+}
