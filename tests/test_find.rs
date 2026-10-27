@@ -992,6 +992,53 @@ fn find_perm() {
 
 #[cfg(unix)]
 #[test]
+fn find_perm_directory_symbolic_modes() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = Builder::new().prefix("find_perm_").tempdir().unwrap();
+    for (name, mode, is_dir) in [
+        ("d600", 0o600, true),
+        ("d700", 0o700, true),
+        ("f600", 0o600, false),
+        ("f700", 0o700, false),
+    ] {
+        let path = temp_dir.path().join(name);
+        if is_dir {
+            fs::create_dir(&path).unwrap();
+        } else {
+            File::create(&path).unwrap();
+        }
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    for (pattern, expected) in [
+        ("u=rwX", "d700\nf600\n"),
+        ("-u+X", "d700\nf600\nf700\n"),
+        ("/u+X", "d700\nf600\nf700\n"),
+        ("u=rw", "d600\nf600\n"),
+        ("700", "d700\nf700\n"),
+    ] {
+        ucmd()
+            .current_dir(temp_dir.path())
+            .args(&[
+                "d600",
+                "d700",
+                "f600",
+                "f700",
+                "-maxdepth",
+                "0",
+                "-perm",
+                pattern,
+                "-print",
+            ])
+            .succeeds()
+            .no_stderr()
+            .stdout_is(expected);
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn find_perm_plus_octal_is_rejected() {
     // GNU find rejects the deprecated `-perm +MODE` octal form; only symbolic
     // modes may follow a leading `+`.
