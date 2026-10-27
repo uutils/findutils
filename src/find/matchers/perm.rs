@@ -87,7 +87,7 @@ impl PermMatcher {
         let invalid_mode = || format!("invalid mode '{pattern}'");
         let (comparison_type, mode) = parsing::split_comparison_type(pattern);
         let file_pattern = parsing::parse_mode(mode, false).ok_or_else(invalid_mode)?;
-        let dir_pattern = parsing::parse_mode(mode, false).ok_or_else(invalid_mode)?;
+        let dir_pattern = parsing::parse_mode(mode, true).ok_or_else(invalid_mode)?;
         Ok(Self {
             comparison_type,
             file_pattern,
@@ -205,6 +205,25 @@ mod tests {
         assert_parse("/u=rwx,g=rx,o+r", AnyOf, 0o754);
         assert_parse("/u=rwx,g=rx,o+r,a+w", AnyOf, 0o776);
         assert_parse("/ug=rwx,o+r", AnyOf, 0o774);
+    }
+
+    #[test]
+    fn parsing_directory_symbolic_modes() {
+        for (pattern, file_mode, dir_mode) in [
+            ("u=rwX", 0o600, 0o700),
+            ("a+X", 0, 0o111),
+            ("u+x,g+X", 0o110, 0o110),
+            ("u+s,u=rw", 0o600, 0o4600),
+            ("g+s,g=rx", 0o050, 0o2050),
+            ("u+s,u-s,u=rwX", 0o600, 0o700),
+        ] {
+            let matcher = PermMatcher::new(pattern).unwrap();
+            assert_eq!(
+                (matcher.file_pattern, matcher.dir_pattern),
+                (file_mode, dir_mode),
+                "{pattern}"
+            );
+        }
     }
 
     #[test]
