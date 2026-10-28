@@ -1007,6 +1007,8 @@ mod tests {
     }
 
     #[test]
+    // The change time is only read on Unix.
+    #[cfg(unix)]
     fn used_matcher() {
         let temp_dir = Builder::new().prefix("used_matcher").tempdir().unwrap();
         let later = temp_dir.path().join("later");
