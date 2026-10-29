@@ -1726,6 +1726,21 @@ fn find_ls_shows_allocated_blocks_and_link_target() {
         .stdout_contains(" -> sparse\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn find_ls_escapes_special_characters_in_names() {
+    let temp_dir = Builder::new().prefix("find_ls_escape").tempdir().unwrap();
+    let file = temp_dir.path().join("a b\nc\\d\"\u{e9}");
+    File::create(&file).unwrap();
+    symlink("x\ty", temp_dir.path().join("link")).unwrap();
+
+    ucmd()
+        .args(&[temp_dir.path().to_str().unwrap(), "-ls"])
+        .succeeds()
+        .stdout_contains("/a\\ b\\nc\\\\d\\\"\\303\\251\n")
+        .stdout_contains("/link -> x\\ty\n");
+}
+
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
 // a file's owning uid/gid had no passwd/group entry; it must fall back to the
 // numeric id like GNU find. Creating such a file needs privilege to chown to an

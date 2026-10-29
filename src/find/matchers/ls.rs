@@ -11,6 +11,32 @@ use std::{
 
 use super::{Matcher, MatcherIO, StdoutErrors, WalkEntry};
 
+/// A name as GNU find's -ls prints it: a backslash before `\`, space and `"`,
+/// `\n`, `\b`, `\r`, `\t` and `\f` for those controls, and three octal digits
+/// for any other byte outside `!`..`~`.
+#[cfg(unix)]
+fn escape_name(name: &std::ffi::OsStr) -> String {
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut out = String::new();
+    for &byte in name.as_bytes() {
+        match byte {
+            b'\\' | b' ' | b'"' => {
+                out.push('\\');
+                out.push(byte as char);
+            }
+            b'\n' => out.push_str("\\n"),
+            0x08 => out.push_str("\\b"),
+            b'\r' => out.push_str("\\r"),
+            b'\t' => out.push_str("\\t"),
+            0x0c => out.push_str("\\f"),
+            b'!'..=b'~' => out.push(byte as char),
+            _ => out.push_str(&format!("\\{byte:03o}")),
+        }
+    }
+    out
+}
+
 #[cfg(windows)]
 fn format_permissions(file_attributes: u32) -> String {
     let mut attributes = Vec::new();
@@ -86,11 +112,11 @@ impl Ls {
             let local: DateTime<chrono::Local> = system_time.into();
             local.format("%b %e %H:%M")
         };
-        let mut path = file_info.path().to_string_lossy().into_owned();
+        let mut path = escape_name(file_info.path().as_os_str());
         if file_info.file_type().is_symlink() {
             if let Ok(target) = std::fs::read_link(file_info.path()) {
                 path.push_str(" -> ");
-                path.push_str(&target.to_string_lossy());
+                path.push_str(&escape_name(target.as_os_str()));
             }
         }
 
