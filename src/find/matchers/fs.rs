@@ -28,7 +28,7 @@ pub struct Cache {
 #[cfg(unix)]
 use std::{
     cell::RefCell,
-    io::{stderr, Write},
+    io::{Write, stderr},
     path::Path,
 };
 
@@ -54,10 +54,10 @@ pub fn get_file_system_type(path: &Path, cache: &RefCell<Option<Cache>>) -> URes
 /// This is only supported on Unix.
 #[cfg(unix)]
 pub fn fs_type_for_dev(dev_id: String, cache: &RefCell<Option<Cache>>) -> UResult<String> {
-    if let Some(cache) = cache.borrow().as_ref() {
-        if cache.dev_id == dev_id {
-            return Ok(cache.fs_type.clone());
-        }
+    if let Some(cache) = cache.borrow().as_ref()
+        && cache.dev_id == dev_id
+    {
+        return Ok(cache.fs_type.clone());
     }
 
     let fs_list = uucore::fsext::read_fs_list()?;
@@ -148,9 +148,9 @@ mod tests {
     fn test_fs_matcher() {
         use crate::find::{
             matchers::{
-                fs::{get_file_system_type, Cache},
-                tests::get_dir_entry_for,
                 Matcher,
+                fs::{Cache, get_file_system_type},
+                tests::get_dir_entry_for,
             },
             tests::FakeDependencies,
         };
