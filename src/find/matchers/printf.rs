@@ -41,8 +41,15 @@ impl TimeFormat {
     fn apply(&self, time: SystemTime) -> Result<Cow<'static, str>, Box<dyn Error>> {
         let formatted = match self {
             Self::SinceEpoch => {
-                let duration = time.duration_since(SystemTime::UNIX_EPOCH)?;
-                format!("{}.{:09}0", duration.as_secs(), duration.subsec_nanos())
+                let nanos = match time.duration_since(SystemTime::UNIX_EPOCH) {
+                    Ok(duration) => i128::try_from(duration.as_nanos())?,
+                    Err(error) => -i128::try_from(error.duration().as_nanos())?,
+                };
+                // GNU prints signed whole seconds with a nonnegative fraction,
+                // so half a second before the epoch is -1.5000000000.
+                let seconds = nanos.div_euclid(1_000_000_000);
+                let fraction = nanos.rem_euclid(1_000_000_000);
+                format!("{seconds}.{fraction:09}0")
             }
             Self::Ctime => {
                 const CTIME_FORMAT: &str = "%a %b %e %H:%M:%S.%f0 %Y";
@@ -1204,6 +1211,49 @@ mod tests {
             ],
             deps.get_output_as_string().lines().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn test_time_format_since_epoch() {
+        for (offset, expected) in [
+            (-2_500_000_000_i64, "-3.5000000000"),
+            (-1_999_999_900, "-2.0000001000"),
+            (-1_000_000_000, "-1.0000000000"),
+            (-500_000_000, "-1.5000000000"),
+            (-100, "-1.9999999000"),
+            (0, "0.0000000000"),
+            (100, "0.0000001000"),
+            (500_000_000, "0.5000000000"),
+            (1_500_000_000, "1.5000000000"),
+        ] {
+            let duration = std::time::Duration::from_nanos(offset.unsigned_abs());
+            let time = if offset < 0 {
+                SystemTime::UNIX_EPOCH - duration
+            } else {
+                SystemTime::UNIX_EPOCH + duration
+            };
+            assert_eq!(
+                TimeFormat::SinceEpoch.apply(time).unwrap(),
+                expected,
+                "offset: {offset} ns"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(unix)] // Windows SystemTime has 100 ns precision.
+    fn test_time_format_since_epoch_nanosecond_boundaries() {
+        let nanosecond = std::time::Duration::from_nanos(1);
+        for (time, expected) in [
+            (SystemTime::UNIX_EPOCH - nanosecond, "-1.9999999990"),
+            (SystemTime::UNIX_EPOCH + nanosecond, "0.0000000010"),
+            (
+                SystemTime::UNIX_EPOCH - std::time::Duration::from_nanos(1_999_999_999),
+                "-2.0000000010",
+            ),
+        ] {
+            assert_eq!(TimeFormat::SinceEpoch.apply(time).unwrap(), expected);
+        }
     }
 
     #[test]
