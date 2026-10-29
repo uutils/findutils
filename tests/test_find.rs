@@ -616,6 +616,76 @@ fn regex_types() {
         .stdout_contains("teeest");
 }
 
+#[rstest::rstest]
+#[case::inherited(
+    &["-regextype", "posix-basic", "("],
+    &[")"],
+    "f1+"
+)]
+#[case::inherited_nested(
+    &["-regextype", "posix-basic", "(", "("],
+    &[")", ")"],
+    "f1+"
+)]
+#[case::propagated(
+    &["(", "-regextype", "posix-basic", ")"],
+    &[],
+    "f1+"
+)]
+#[case::propagated_nested(
+    &["(", "(", "-regextype", "posix-basic", ")", ")"],
+    &[],
+    "f1+"
+)]
+#[case::overridden(
+    &["-regextype", "posix-basic", "(", "-regextype", "posix-extended", ")"],
+    &[],
+    "f1"
+)]
+#[case::positional(
+    &[
+        "-regextype", "posix-extended", "-regex", ".*f[0-9]+",
+        "(", "-regextype", "posix-basic", ")", "!"
+    ],
+    &[],
+    "f1"
+)]
+#[case::short_circuited(
+    &["(", "-false", "-a", "-regextype", "posix-basic", ")", "-o", "("],
+    &[")"],
+    "f1+"
+)]
+fn regex_type_parentheses(
+    #[values("-regex", "-iregex")] predicate: &str,
+    #[case] before: &[&str],
+    #[case] after: &[&str],
+    #[case] expected: &str,
+) {
+    let temp_dir = Builder::new().prefix("find_regex_").tempdir().unwrap();
+    fs::create_dir(temp_dir.path().join("d")).unwrap();
+    File::create(temp_dir.path().join("d/f1")).unwrap();
+    File::create(temp_dir.path().join("d/f1+")).unwrap();
+
+    // Basic syntax matches the literal '+', while extended syntax matches f1.
+    let pattern = if predicate == "-iregex" {
+        ".*/F[0-9]+"
+    } else {
+        ".*/f[0-9]+"
+    };
+    ucmd()
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .arg("d")
+        .args(before)
+        .arg(predicate)
+        .arg(fix_up_regex_slashes(pattern))
+        .args(after)
+        .arg("-print")
+        .succeeds()
+        .no_stderr()
+        .stdout_only(fix_up_slashes(&format!("d/{expected}\n")));
+}
+
 #[test]
 fn empty_files() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();

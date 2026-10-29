@@ -316,7 +316,8 @@ pub fn build_top_level_matcher(
     args: &[&str],
     config: &mut Config,
 ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
-    let (_, top_level_matcher) = (build_matcher_tree(args, config, 0, None))?;
+    let mut regex_type = RegexType::default();
+    let (_, top_level_matcher) = build_matcher_tree(args, config, &mut regex_type, 0, None)?;
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
@@ -659,15 +660,17 @@ fn missing_operand_error(args: &[&str], index: usize) -> ParseError {
 /// `open_bracket` is the index of the '(' this call is parsing the contents of,
 /// or `None` at the top level. It doubles as the "a ')' is expected" flag and
 /// lets an unclosed bracket be pointed at in the error.
+///
+/// `regex_type` is shared across recursive calls because `-regextype` affects
+/// all subsequent regex tests, regardless of parentheses.
 fn build_matcher_tree(
     args: &[&str],
     config: &mut Config,
+    regex_type: &mut RegexType,
     arg_index: usize,
     mut open_bracket: Option<usize>,
 ) -> Result<(usize, Box<dyn Matcher>), Box<dyn Error>> {
     let mut top_level_matcher = ListMatcherBuilder::new();
-
-    let mut regex_type = regex::RegexType::default();
 
     // can't use getopts for a variety or reasons:
     // order of arguments is important
@@ -773,7 +776,7 @@ fn build_matcher_tree(
                     return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
-                regex_type = regex::RegexType::from_str(args[i])?;
+                *regex_type = RegexType::from_str(args[i])?;
                 Some(TrueMatcher.into_box())
             }
             Predicate::Regex => {
@@ -781,14 +784,14 @@ fn build_matcher_tree(
                     return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
-                Some(RegexMatcher::new(regex_type, args[i], false)?.into_box())
+                Some(RegexMatcher::new(*regex_type, args[i], false)?.into_box())
             }
             Predicate::Iregex => {
                 if i >= args.len() - 1 {
                     return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
-                Some(RegexMatcher::new(regex_type, args[i], true)?.into_box())
+                Some(RegexMatcher::new(*regex_type, args[i], true)?.into_box())
             }
             Predicate::Type => {
                 if i >= args.len() - 1 {
@@ -1075,7 +1078,7 @@ fn build_matcher_tree(
             }
             Predicate::OpenParen => {
                 let (new_arg_index, sub_matcher) =
-                    build_matcher_tree(args, config, i + 1, Some(i))?;
+                    build_matcher_tree(args, config, regex_type, i + 1, Some(i))?;
                 i = new_arg_index;
                 Some(sub_matcher)
             }
