@@ -782,6 +782,23 @@ fn find_printf() {
 }
 
 #[test]
+fn find_printf_type_of_followed_links() {
+    ucmd()
+        .args(&["-H", &fix_up_slashes("./test_data/links/link-f")])
+        .args(&["-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("f f\n");
+
+    ucmd()
+        .args(&["-L", &fix_up_slashes("./test_data/links/link-d")])
+        .args(&["-maxdepth", "0", "-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("d d\n");
+}
+
+#[test]
 fn find_printf_backslash_c_runs_the_next_action() {
     ucmd()
         .arg(fix_up_slashes("./test_data/simple"))
