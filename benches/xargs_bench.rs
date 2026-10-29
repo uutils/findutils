@@ -9,6 +9,9 @@
 //! can feed a fixed corpus without touching the process's stdin, and the
 //! command is `true` so the measurement is dominated by `xargs`'s own work
 //! (reading, splitting and batching arguments) rather than the child.
+//!
+//! Both the serial and the parallel (`-P`) paths are covered so the rayon-based
+//! dispatch introduced for `xargs -P` is measured alongside the serial one.
 
 use std::path::PathBuf;
 
@@ -47,6 +50,13 @@ fn bench_e2e(c: &mut Criterion) {
     let ws_path = ws.to_str().unwrap();
     let nul_path = nul.to_str().unwrap();
 
+    // A smaller corpus for the parallel benchmarks: each batch spawns a real
+    // `true` child, so keeping the token (and therefore batch) count modest
+    // avoids thousands of spawns per iteration while still splitting the work
+    // into enough batches to feed the parallel bridge.
+    let ws_small = build_input(400, " ", "ws_small");
+    let ws_small_path = ws_small.to_str().unwrap();
+
     let mut group = c.benchmark_group("xargs");
 
     // Default whitespace splitting, single batch (fits one command line).
@@ -67,8 +77,58 @@ fn bench_e2e(c: &mut Criterion) {
         b.iter(|| run(black_box(&["-a", ws_path, "-s", "4096", "true"])));
     });
 
+    // Parallel execution (`-P`) drives the rayon-based path in `process_input`.
+    // `-n 10` splits the small corpus into a handful of batches that are
+    // dispatched through the parallel bridge, so the measurement captures the
+    // parallel dispatch and batching overhead. Two thread counts are covered: a
+    // low degree of parallelism (`-P2`) and a higher one (`-P8`) to exercise the
+    // scheduler under more contention.
+    group.bench_function("parallel_p2", |b| {
+        b.iter(|| {
+            run(black_box(&[
+                "-a",
+                ws_small_path,
+                "-n",
+                "10",
+                "-P",
+                "2",
+                "true",
+            ]));
+        });
+    });
+    group.bench_function("parallel_p8", |b| {
+        b.iter(|| {
+            run(black_box(&[
+                "-a",
+                ws_small_path,
+                "-n",
+                "10",
+                "-P",
+                "8",
+                "true",
+            ]));
+        });
+    });
+    // Parallel path with larger batches (`-n 50`): fewer, bigger commands so the
+    // balance shifts back towards argument assembly while still going through
+    // the parallel bridge.
+    group.bench_function("parallel_p8_batched_n", |b| {
+        b.iter(|| {
+            run(black_box(&[
+                "-a",
+                ws_small_path,
+                "-n",
+                "50",
+                "-P",
+                "8",
+                "true",
+            ]));
+        });
+    });
+
     group.finish();
 
+    let _ = std::fs::remove_file(&ws_small);
     let _ = std::fs::remove_file(&ws);
     let _ = std::fs::remove_file(&nul);
 }
