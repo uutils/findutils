@@ -21,7 +21,8 @@ cp target/"${PROFILE}"/xargs ../findutils.gnu/xargs.rust
 cd ../findutils.gnu
 if test ! -f configure; then
     ./bootstrap
-    ./configure --quiet
+    # The pinned gnulib does not build in C23 mode (default for newer GCC)
+    ./configure --quiet CFLAGS="${CFLAGS:--O2} -std=gnu17"
     make -j "$(nproc)"
 fi
 
