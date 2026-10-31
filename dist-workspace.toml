@@ -18,6 +18,8 @@ install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
 # Skip checking whether the specified configuration files are up to date
+# release.yml is hand-edited: `gh release create` gets `--draft` so releases
+# are reviewed before publishing. Re-add it after any `dist generate`/`dist init`.
 allow-dirty = ["ci"]
 
 [dist.github-custom-runners]
