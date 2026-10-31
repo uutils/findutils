@@ -316,7 +316,17 @@ fn process_dir(
         match WalkEntry::from_walkdir(result, config.follow) {
             Err(err) => {
                 ret = 1;
-                writeln!(&mut stderr(), "Error: {err}").unwrap();
+                let message = uucore::error::strip_errno(&io::Error::from(&err));
+                match err.path() {
+                    Some(path) => writeln!(
+                        &mut stderr(),
+                        "{}: '{}': {message}",
+                        program_name(),
+                        path.display()
+                    ),
+                    None => writeln!(&mut stderr(), "{}: {message}", program_name()),
+                }
+                .unwrap();
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::new(deps);
