@@ -820,6 +820,45 @@ fn find_printf_time_plus_fixed_width_fraction() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_printf_epoch_times_before_1970() {
+    let temp_dir = Builder::new().prefix("find_epoch_").tempdir().unwrap();
+    let file_path = temp_dir.path().join("stamped");
+    let output_path = temp_dir.path().join("output");
+    File::create(&file_path).expect("create test file");
+
+    for (seconds, nanos, expected_time) in [
+        (-1, 0, "-1.0000000000"),
+        (-1, 500_000_000, "-1.5000000000"),
+        (0, 0, "0.0000000000"),
+        (1, 500_000_000, "1.5000000000"),
+    ] {
+        let timestamp = filetime::FileTime::from_unix_time(seconds, nanos);
+        filetime::set_file_times(&file_path, timestamp, timestamp).expect("set test file times");
+        let format = "before:%A@|%T@:after\n";
+        let expected = format!("before:{expected_time}|{expected_time}:after\n");
+
+        ucmd()
+            .env("LC_ALL", "C")
+            .arg(&file_path)
+            .args(&["-printf", format])
+            .succeeds()
+            .no_stderr()
+            .stdout_only(&expected);
+
+        ucmd()
+            .env("LC_ALL", "C")
+            .arg(&file_path)
+            .arg("-fprintf")
+            .arg(&output_path)
+            .arg(format)
+            .succeeds()
+            .no_output();
+        assert_eq!(fs::read(&output_path).unwrap(), expected.as_bytes());
+    }
+}
+
+#[test]
 #[cfg(unix)] // TZ only reliably selects the local time zone on unix
 fn find_newermt_uses_local_time() {
     let temp_dir = Builder::new().prefix("find_newermt_").tempdir().unwrap();
