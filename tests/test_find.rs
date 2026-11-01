@@ -1733,7 +1733,7 @@ fn find_ls_shows_allocated_blocks_and_link_target() {
 #[test]
 #[cfg(unix)]
 fn find_ls_unmapped_owner_renders_numeric_id() {
-    use nix::unistd::{chown, Gid, Uid};
+    use nix::unistd::{Gid, Uid, chown};
 
     let temp_dir = Builder::new().prefix("find_ls_unmapped").tempdir().unwrap();
     let file = temp_dir.path().join("orphan");
