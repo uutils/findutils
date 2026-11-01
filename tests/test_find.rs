@@ -2047,3 +2047,61 @@ fn find_exits_cleanly_on_broken_pipe() {
         "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
     );
 }
+
+#[test]
+fn path_separator_forward_slash_prints_slashes() {
+    // A no-op where `/` is already the separator; on Windows it replaces `\`.
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "/")
+        .args(&["test_data/depth/1", "-name", "f2"])
+        .succeeds()
+        .stdout_only("test_data/depth/1/2/f2\n");
+}
+
+#[test]
+fn path_separator_forward_slash_matches_slash_patterns() {
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "/")
+        .args(&[
+            "test_data/depth",
+            "-path",
+            "*/2/*",
+            "-prune",
+            "-o",
+            "-type",
+            "f",
+            "-print",
+        ])
+        .succeeds()
+        .stdout_only("test_data/depth/1/f1\ntest_data/depth/f0\n")
+        .no_stderr();
+}
+
+#[test]
+fn path_separator_slash_word_prints_slashes() {
+    // MSYS2 and Git Bash rewrite a bare `/` value into their install folder.
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "slash")
+        .args(&["test_data/depth/1", "-name", "f2"])
+        .succeeds()
+        .stdout_only("test_data/depth/1/2/f2\n");
+}
+
+#[test]
+fn path_separator_forward_slash_reaches_printf() {
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "/")
+        .args(&["test_data/depth/1/2", "-name", "f2", "-printf", "%p %h\n"])
+        .succeeds()
+        .stdout_only("test_data/depth/1/2/f2 test_data/depth/1/2\n");
+}
+
+#[test]
+fn path_separator_other_values_keep_the_native_separator() {
+    let root = fix_up_slashes("test_data/depth/1");
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "\\")
+        .args(&[root.as_str(), "-name", "f2"])
+        .succeeds()
+        .stdout_only(fix_up_slashes("test_data/depth/1/2/f2\n"));
+}
