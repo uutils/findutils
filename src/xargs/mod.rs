@@ -880,9 +880,13 @@ fn process_input(
 
     while let Some(arg) = args.next()? {
         if let Err(ExhaustedCommandSpace { arg, out_of_chars }) = current_builder.add_arg(arg) {
+            let mut next_builder = CommandBuilder::new(builder_options);
+            let arg_fits = next_builder.add_arg(arg).is_ok();
+            // -x exits without running the pending command: with -L or -n
+            // once the command is too long, otherwise only if the argument alone does not fit.
             if out_of_chars
                 && options.exit_if_pass_char_limit
-                && (options.max_args.is_some() || options.max_lines.is_some())
+                && (!arg_fits || options.max_args.is_some() || options.max_lines.is_some())
             {
                 return Err(XargsError::ArgumentTooLarge);
             }
@@ -890,10 +894,10 @@ fn process_input(
                 result.combine(current_builder.execute()?);
             }
 
-            current_builder = CommandBuilder::new(builder_options);
-            if let Err(ExhaustedCommandSpace { .. }) = current_builder.add_arg(arg) {
+            if !arg_fits {
                 return Err(XargsError::ArgumentTooLarge);
             }
+            current_builder = next_builder;
         }
 
         have_pending_command = true;
