@@ -46,6 +46,11 @@ impl LinkNameMatcher {
 
 impl Matcher for LinkNameMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        // Followed links have their target's type; dangling links remain symlinks.
+        if !file_info.file_type().is_symlink() {
+            return false;
+        }
+
         if let Some(target) = read_link_target(file_info) {
             self.pattern.matches(&target.to_string_lossy())
         } else {
