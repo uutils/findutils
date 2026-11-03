@@ -621,6 +621,11 @@ fn lookup_predicate(arg: &str) -> Predicate {
 
 /// Turns one of the `logical_matchers` "binary operator with nothing before it"
 /// errors into a diagnostic pointing at the operator.
+/// Starts an error about a file given on the command line with the file's name.
+fn name_file<T>(path: &str, result: Result<T, Box<dyn Error>>) -> Result<T, String> {
+    result.map_err(|e| format!("{path}: {e}"))
+}
+
 fn binary_operator_error(err: &dyn Error, arg_index: usize) -> ParseError {
     ParseError::new(err.to_string())
         .at(arg_index)
@@ -822,9 +827,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 let path = args[i];
-                let matcher =
-                    NewerMatcher::new(path, config.follow).map_err(|e| format!("{path}: {e}"))?;
-                Some(matcher.into_box())
+                Some(name_file(path, NewerMatcher::new(path, config.follow))?.into_box())
             }
             Predicate::Time(file_time_type) => {
                 if i >= args.len() - 1 {
@@ -967,9 +970,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 let path = args[i];
-                let matcher = SameFileMatcher::new(path, config.follow)
-                    .map_err(|e| format!("{path}: {e}"))?;
-                Some(matcher.into_box())
+                Some(name_file(path, SameFileMatcher::new(path, config.follow))?.into_box())
             }
             Predicate::User => {
                 if i >= args.len() - 1 {
@@ -1216,9 +1217,8 @@ fn build_matcher_tree(
                 } else {
                     let file_path = args[i + 1];
                     i += 1;
-                    let matcher = NewerOptionMatcher::new(&x_option, &y_option, file_path)
-                        .map_err(|e| format!("{file_path}: {e}"))?;
-                    Some(matcher.into_box())
+                    let matcher = NewerOptionMatcher::new(&x_option, &y_option, file_path);
+                    Some(name_file(file_path, matcher)?.into_box())
                 }
             }
         };
