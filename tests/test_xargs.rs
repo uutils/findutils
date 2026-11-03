@@ -263,6 +263,104 @@ fn xargs_explicit_size_can_exceed_default_cap() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn xargs_explicit_size_accounts_for_argument_pointers() {
+    // Linux gives exec one quarter of the stack limit, with a floor of 32 pages.
+    // A private 1 MiB child stack keeps the test independent of the host's ARG_MAX.
+    let arg_max = (256 * 1024).max(linux_argument_string_limit());
+    // The strings fit, but their argv pointers push the command over ARG_MAX.
+    let arg_count = arg_max / 4;
+    // A larger inherited environment must also reduce the space available to argv.
+    for env_size in [0, 32 * 1024] {
+        let result = TestScenario::new("xargs")
+            .cmd("sh")
+            .args(&[
+                "-c",
+                "ulimit -s 1024 && exec \"$@\"",
+                "sh",
+                env!("CARGO_BIN_EXE_xargs"),
+            ])
+            .env("XARGS_LIMIT_ENV", "v".repeat(env_size))
+            .args(&["-s", &arg_max.to_string(), "echo"])
+            .pipe_in("x\n".repeat(arg_count))
+            .succeeds();
+        assert!(result.stdout_str().lines().count() > 1);
+        assert_eq!(
+            arg_count,
+            result.stdout_str().split_ascii_whitespace().count()
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_argument_string_limit() -> usize {
+    // SAFETY: sysconf takes a constant selector and does not access caller memory.
+    let page_size = unsafe { uucore::libc::sysconf(uucore::libc::_SC_PAGESIZE) };
+    assert!(page_size > 0, "sysconf must return a positive page size");
+    usize::try_from(page_size)
+        .expect("page size must fit usize")
+        .checked_mul(32)
+        .expect("argument limit must fit usize")
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn xargs_oversized_argument_exit_status() {
+    // The string budget fits, but one exec argument exceeds Linux's per-argument limit.
+    let string_limit = linux_argument_string_limit();
+    for (replace, input_size, prefix, expected_code) in [
+        (false, string_limit + 1, "", 1),
+        (false, string_limit + 1, "ok\n", 1),
+        (true, string_limit / 3 + 1, "", 126),
+    ] {
+        let mut command = ucmd();
+        command.args(&["-s", &(string_limit * 2).to_string()]);
+        if replace {
+            command.args(&["-I", "{}"]);
+        }
+        command.arg("echo");
+        if replace {
+            command.arg("{}{}{}");
+        }
+        let result = command
+            .pipe_in(format!("{prefix}{}", "x".repeat(input_size)))
+            .fails_with_code(expected_code);
+        result
+            .stderr_contains(if replace {
+                "Command could not be run"
+            } else {
+                "Argument too large"
+            })
+            .stdout_is(prefix);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn xargs_replacement_size_uses_the_actual_argv() {
+    // The input buffer and the expanded command each have their own -s limit.
+    for (template, input_size, expected) in [
+        ("{}", 14, Some(format!("{}\n", "x".repeat(14)))),
+        ("fixed", 19, Some("fixed\n".to_owned())),
+        ("{}{}{}", 6, None),
+        ("fixed", 20, None),
+    ] {
+        let mut command = ucmd();
+        command
+            .args(&["-s", "20", "-I", "{}", "echo", template])
+            .pipe_in("x".repeat(input_size));
+        if let Some(expected) = expected {
+            command.succeeds().stdout_only(expected);
+        } else {
+            command
+                .fails_with_code(1)
+                .stderr_contains("Argument too large")
+                .no_stdout();
+        }
+    }
+}
+
+#[test]
 fn xargs_exec() {
     let result = ucmd()
         .args(&[
