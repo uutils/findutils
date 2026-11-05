@@ -613,15 +613,17 @@ fn format_directive<'entry>(
 
         FormatDirective::ModificationTime(tf) => tf.apply(meta()?.modified()?)?,
 
+        // %p is the path as -print shows it. Don't run it through
+        // strip_prefix, which would drop the trailing slashes of a starting
+        // point like "dir/".
         FormatDirective::Path {
-            strip_starting_point,
+            strip_starting_point: false,
+        } => file_info.path().to_string_lossy(),
+        FormatDirective::Path {
+            strip_starting_point: true,
         } => file_info
             .path()
-            .strip_prefix(if *strip_starting_point {
-                get_starting_point(file_info)
-            } else {
-                Path::new("")
-            })
+            .strip_prefix(get_starting_point(file_info))
             // safe to unwrap: the prefix is derived *from* the path to begin
             // with, so it cannot be invalid.
             .unwrap()

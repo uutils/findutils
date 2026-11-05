@@ -1632,6 +1632,28 @@ fn find_fprintf() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_printf_path_keeps_trailing_slash() {
+    // %p should print a starting point exactly like -print does.
+    ucmd()
+        .args(&[
+            "test_data/simple/",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "%p\n",
+            "-print",
+        ])
+        .succeeds()
+        .stdout_only("test_data/simple/\ntest_data/simple/\n");
+
+    ucmd()
+        .args(&["test_data/simple//", "-name", "abbbc", "-printf", "%p|%P\n"])
+        .succeeds()
+        .stdout_only("test_data/simple//abbbc|abbbc\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn find_fprintf_reports_write_error() {
     let result = ucmd()
