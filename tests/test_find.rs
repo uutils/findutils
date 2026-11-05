@@ -1622,37 +1622,42 @@ fn find_fprinter() {
 }
 
 #[test]
-#[cfg(unix)]
 fn find_fprint_dev_stdout_writes_to_standard_output() {
-    // A redirected stdout must not be truncated or overwritten by -fprint
-    // and -fprintf writing to /dev/stdout.
+    // A redirected stdout must not be truncated or overwritten by -fprint,
+    // -fprint0, -fprintf and -fls writing to /dev/stdout.
     let temp_dir = Builder::new().prefix("find_dev_stdout").tempdir().unwrap();
     let out_path = temp_dir.path().join("out");
     fs::write(&out_path, "before\n").unwrap();
     let out = fs::OpenOptions::new().append(true).open(&out_path).unwrap();
 
     ucmd()
+        .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("test_data/simple"))
         .args(&[
-            "test_data/simple/abbbc",
+            "abbbc",
             "-print",
             "-fprint",
+            "/dev/stdout",
+            "-fprint0",
             "/dev/stdout",
             "-fprintf",
             "/dev/stdout",
             "%f\n",
+            "-fls",
+            "/dev/stdout",
         ])
         .set_stdout(out)
         .succeeds()
         .no_stderr();
 
-    assert_eq!(
-        fs::read_to_string(&out_path).unwrap(),
-        fix_up_slashes("before\ntest_data/simple/abbbc\ntest_data/simple/abbbc\nabbbc\n")
-    );
+    let contents = fs::read_to_string(&out_path).unwrap();
+    let ls_line = contents
+        .strip_prefix("before\nabbbc\nabbbc\nabbbc\0abbbc\n")
+        .unwrap_or_else(|| panic!("{contents:?}"));
+    assert_eq!(ls_line.lines().count(), 1, "{contents:?}");
+    assert!(ls_line.ends_with(" abbbc\n"), "{contents:?}");
 }
 
 #[test]
-#[cfg(unix)]
 fn find_fprint_dev_stderr_writes_to_standard_error() {
     // Error messages and -fprint /dev/stderr output must both end up in a
     // redirected stderr.
@@ -1661,21 +1666,14 @@ fn find_fprint_dev_stderr_writes_to_standard_error() {
     let err = File::create(&err_path).unwrap();
 
     ucmd()
-        .args(&[
-            "test_data/simple/abbbc",
-            "test_data/does_not_exist",
-            "-fprint",
-            "/dev/stderr",
-        ])
+        .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("test_data/simple"))
+        .args(&["abbbc", "does_not_exist", "-fprint", "/dev/stderr"])
         .set_stderr(err)
         .fails_with_code(1)
         .no_stdout();
 
     let contents = fs::read_to_string(&err_path).unwrap();
-    assert!(
-        contents.starts_with("test_data/simple/abbbc\n"),
-        "{contents:?}"
-    );
+    assert!(contents.starts_with("abbbc\n"), "{contents:?}");
     assert!(contents.contains("does_not_exist"), "{contents:?}");
 }
 

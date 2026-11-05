@@ -467,10 +467,19 @@ fn get_or_create_file(path: &str) -> Result<Option<File>, Box<dyn Error>> {
     if path == "/dev/stdout" {
         return Ok(None);
     }
-    #[cfg(unix)]
     if path == "/dev/stderr" {
-        use std::os::fd::AsFd;
-        return Ok(Some(std::io::stderr().as_fd().try_clone_to_owned()?.into()));
+        #[cfg(unix)]
+        let handle = {
+            use std::os::fd::AsFd;
+            std::io::stderr().as_fd().try_clone_to_owned()?
+        };
+        #[cfg(windows)]
+        let handle = {
+            use std::os::windows::io::AsHandle;
+            std::io::stderr().as_handle().try_clone_to_owned()?
+        };
+        #[cfg(any(unix, windows))]
+        return Ok(Some(handle.into()));
     }
     Ok(Some(File::create(path)?))
 }
