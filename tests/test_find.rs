@@ -1605,6 +1605,64 @@ fn find_fprinter() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_fprint_dev_stdout_writes_to_standard_output() {
+    // A redirected stdout must not be truncated or overwritten by -fprint
+    // and -fprintf writing to /dev/stdout.
+    let temp_dir = Builder::new().prefix("find_dev_stdout").tempdir().unwrap();
+    let out_path = temp_dir.path().join("out");
+    fs::write(&out_path, "before\n").unwrap();
+    let out = fs::OpenOptions::new().append(true).open(&out_path).unwrap();
+
+    ucmd()
+        .args(&[
+            "test_data/simple/abbbc",
+            "-print",
+            "-fprint",
+            "/dev/stdout",
+            "-fprintf",
+            "/dev/stdout",
+            "%f\n",
+        ])
+        .set_stdout(out)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        fs::read_to_string(&out_path).unwrap(),
+        fix_up_slashes("before\ntest_data/simple/abbbc\ntest_data/simple/abbbc\nabbbc\n")
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn find_fprint_dev_stderr_writes_to_standard_error() {
+    // Error messages and -fprint /dev/stderr output must both end up in a
+    // redirected stderr.
+    let temp_dir = Builder::new().prefix("find_dev_stderr").tempdir().unwrap();
+    let err_path = temp_dir.path().join("err");
+    let err = File::create(&err_path).unwrap();
+
+    ucmd()
+        .args(&[
+            "test_data/simple/abbbc",
+            "test_data/does_not_exist",
+            "-fprint",
+            "/dev/stderr",
+        ])
+        .set_stderr(err)
+        .fails_with_code(1)
+        .no_stdout();
+
+    let contents = fs::read_to_string(&err_path).unwrap();
+    assert!(
+        contents.starts_with("test_data/simple/abbbc\n"),
+        "{contents:?}"
+    );
+    assert!(contents.contains("does_not_exist"), "{contents:?}");
+}
+
+#[test]
 fn find_follow() {
     ucmd()
         .args(&["test_data/links/link-f", "-follow"])
