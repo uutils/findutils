@@ -435,6 +435,33 @@ fn get_starting_point(file_info: &WalkEntry) -> &Path {
         .unwrap()
 }
 
+/// The %h directive: everything before the last element of the path.
+fn format_dirname(path: &Path) -> Cow<'_, str> {
+    // Cut at the last slash of the path as it was spelled, so that "a//b"
+    // gives "a/" like GNU find and %h/%f still spells out %p. Path::parent()
+    // would collapse the doubled slash.
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let bytes = path.as_os_str().as_bytes();
+        let end = bytes.iter().rposition(|&b| b != b'/').map_or(0, |i| i + 1);
+        if end > 0 {
+            return match bytes[..end].iter().rposition(|&b| b == b'/') {
+                None => ".".into(),
+                Some(slash) => String::from_utf8_lossy(&bytes[..slash]),
+            };
+        }
+    }
+
+    match path.parent() {
+        None => "".into(),
+        Some(p) if p == Path::new("/") => "".into(),
+        Some(p) if p == Path::new("") => ".".into(),
+        Some(parent) => parent.to_string_lossy(),
+    }
+}
+
 fn format_non_link_file_type(file_type: FileType) -> char {
     match file_type {
         FileType::Regular => 'f',
@@ -567,12 +594,7 @@ fn format_directive<'entry>(
         // - "." also returns "."
         // - ".." returns "." (???)
         // These are all (thankfully) documented on the find(1) man page.
-        FormatDirective::Dirname => match file_info.path().parent() {
-            None => "".into(),
-            Some(p) if p == Path::new("/") => "".into(),
-            Some(p) if p == Path::new("") => ".".into(),
-            Some(parent) => parent.to_string_lossy(),
-        },
+        FormatDirective::Dirname => format_dirname(file_info.path()),
 
         #[cfg(not(unix))]
         FormatDirective::Filesystem => "".into(),
