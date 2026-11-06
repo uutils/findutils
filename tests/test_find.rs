@@ -401,6 +401,23 @@ fn files0_streams_before_invalid_utf8() {
         .stderr_contains("invalid utf-8 sequence");
 }
 
+/// A starting point given on the command line can't be mixed with
+/// -files0-from, even when it is `.`, the same path find uses by default.
+#[test]
+fn files0_with_file_operand_is_rejected() {
+    for operand in [".", "./test_data"] {
+        ucmd()
+            .args(&[operand, "-files0-from", "./test_data/simple/abbbc"])
+            .fails()
+            .code_is(1)
+            .no_stdout()
+            .stderr_is(format!(
+                "find: extra operand '{operand}'\n\
+                 find: file operands cannot be combined with -files0-from\n"
+            ));
+    }
+}
+
 /// Both the starting points and the answers to the prompts would be read from
 /// stdin, so GNU find rejects the combination up front (bfs `gnu/*_ok` tests).
 #[test]
