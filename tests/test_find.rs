@@ -1650,6 +1650,32 @@ fn find_fprintf() {
 
 #[test]
 #[cfg(unix)]
+fn find_printf_dirname_keeps_doubled_slash() {
+    // %h is everything before the last slash, so %h/%f gives back %p.
+    ucmd()
+        .args(&[
+            "test_data/simple//",
+            "-sorted",
+            "-mindepth",
+            "1",
+            "-printf",
+            "%h|%f|%p\n",
+        ])
+        .succeeds()
+        .stdout_only(
+            "test_data/simple/|abbbc|test_data/simple//abbbc\n\
+            test_data/simple/|subdir|test_data/simple//subdir\n\
+            test_data/simple//subdir|ABBBC|test_data/simple//subdir/ABBBC\n",
+        );
+
+    ucmd()
+        .args(&["test_data/simple//subdir//ABBBC", "-printf", "%h|%f\n"])
+        .succeeds()
+        .stdout_only("test_data/simple//subdir/|ABBBC\n");
+}
+
+#[test]
+#[cfg(unix)]
 fn find_printf_path_keeps_trailing_slash() {
     // %p should print a starting point exactly like -print does.
     ucmd()
