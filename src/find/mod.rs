@@ -242,7 +242,10 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         paths.push(args[i].to_string());
         i += 1;
     }
-    if i == paths_start {
+    // `.` is only the default when no starting point was given. An explicit
+    // `.` still counts as a file operand for -files0-from below.
+    let paths_given = i > paths_start;
+    if !paths_given {
         paths.push(".".to_string());
     }
     // The matcher builder only sees the expression part of the command line, so
@@ -252,24 +255,24 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         .map_err(|e| ParseError::shift(e, i))?;
     let mut files0_paths = None;
     if let Some(name) = &config.files0_argument {
-        if paths.len() == 1 && paths[0] == "." {
-            // Both would read stdin, so the starting points and the answers to
-            // the prompts would compete for the same bytes.  GNU find rejects
-            // the combination rather than producing arbitrary results.
-            if name == "-" && config.interactive_exec {
-                return Err(From::from(
-                    "option -files0-from reading from standard input cannot be combined \
-                     with -ok, -okdir",
-                ));
-            }
-            files0_paths = Some(Files0Paths::open(name)?);
-            paths.clear();
-        } else {
+        if paths_given {
             return Err(From::from(format!(
-                "extra operand '{}'\nfile operands cannot be combined with -files0-from",
-                paths[0]
+                "extra operand '{}'\n{}: file operands cannot be combined with -files0-from",
+                paths[0],
+                program_name()
             )));
         }
+        // Both would read stdin, so the starting points and the answers to
+        // the prompts would compete for the same bytes.  GNU find rejects
+        // the combination rather than producing arbitrary results.
+        if name == "-" && config.interactive_exec {
+            return Err(From::from(
+                "option -files0-from reading from standard input cannot be combined \
+                 with -ok, -okdir",
+            ));
+        }
+        files0_paths = Some(Files0Paths::open(name)?);
+        paths.clear();
     }
     Ok(ParsedInfo {
         matcher,
