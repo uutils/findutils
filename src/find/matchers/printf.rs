@@ -445,15 +445,17 @@ fn format_dirname(path: &Path) -> Cow<'_, str> {
         use std::os::unix::ffi::OsStrExt;
 
         let bytes = path.as_os_str().as_bytes();
-        let end = bytes.iter().rposition(|&b| b != b'/').map_or(0, |i| i + 1);
-        if end > 0 {
-            return match bytes[..end].iter().rposition(|&b| b == b'/') {
-                None => ".".into(),
-                Some(slash) => String::from_utf8_lossy(&bytes[..slash]),
-            };
+        // A path of only slashes (the root) has nothing before it.
+        let Some(last) = bytes.iter().rposition(|&b| b != b'/') else {
+            return "".into();
+        };
+        match bytes[..last].iter().rposition(|&b| b == b'/') {
+            None => ".".into(),
+            Some(slash) => String::from_utf8_lossy(&bytes[..slash]),
         }
     }
 
+    #[cfg(not(unix))]
     match path.parent() {
         None => "".into(),
         Some(p) if p == Path::new("/") => "".into(),
@@ -875,6 +877,28 @@ mod tests {
 
         fn flush(&mut self) -> std::io::Result<()> {
             Err(self.0.into())
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_format_dirname() {
+        for (path, expected) in [
+            ("", ""),
+            ("/", ""),
+            ("//", ""),
+            ("/a", ""),
+            ("/a/", ""),
+            (".", "."),
+            ("a", "."),
+            ("a/", "."),
+            ("a/b", "a"),
+            ("a//b", "a/"),
+            ("a//b//", "a/"),
+            ("/a/b", "/a"),
+            ("./a/b/c", "./a/b"),
+        ] {
+            assert_eq!(format_dirname(Path::new(path)), expected, "path {path:?}");
         }
     }
 
