@@ -271,6 +271,8 @@ impl FormatStringParser<'_> {
         match self.advance_one()? {
             '@' => Ok(TimeFormat::SinceEpoch),
             'S' => Ok(TimeFormat::Strftime("%S.%f0".to_string())),
+            // Like %S, the seconds of %T and %X carry the same fraction.
+            'T' | 'X' => Ok(TimeFormat::Strftime("%H:%M:%S.%f0".to_string())),
             c => {
                 // We can't store the parsed items inside TimeFormat, because the items
                 // take a reference to the full format string, but we still try to parse
@@ -1481,6 +1483,42 @@ mod tests {
             ),
             deps.get_output_as_string()
         );
+    }
+
+    #[test]
+    fn test_printf_time_of_day_has_fraction() {
+        let temp_dir = Builder::new().prefix("example").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let new_file_name = "newFile";
+        let file_path = temp_dir.path().join(new_file_name);
+        File::create(&file_path).expect("create temp file");
+
+        // GNU findutils prints the seconds of %T and %X with the same ten
+        // digit fraction as %S, even on a whole second.
+        for (nanos, expected) in [
+            (0, "09:30:21.0000000000 09:30:21.0000000000"),
+            (250_000_000, "09:30:21.2500000000 09:30:21.2500000000"),
+        ] {
+            let mtime = chrono::Local
+                .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
+                .unwrap()
+                + Duration::nanoseconds(nanos);
+            filetime::set_file_mtime(
+                &file_path,
+                filetime::FileTime::from_unix_time(
+                    mtime.timestamp(),
+                    mtime.timestamp_subsec_nanos(),
+                ),
+            )
+            .expect("set temp file mtime");
+
+            let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
+            let deps = FakeDependencies::new();
+
+            let matcher = Printf::new("%TT %TX", None).unwrap();
+            assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
+            assert_eq!(expected, deps.get_output_as_string());
+        }
     }
 
     #[test]
