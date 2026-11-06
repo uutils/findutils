@@ -456,13 +456,8 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
-/// Opens the output file of `-fprint`, `-fprint0`, `-fprintf` or `-fls`.
-/// The file is created if it doesn't exist and truncated if it does.
-///
-/// Like GNU find, `/dev/stdout` and `/dev/stderr` aren't opened as files.
-/// Opening them again would truncate a redirected stream and write at a
-/// separate offset, clobbering the rest of the output. `/dev/stdout` gives
-/// `None`, which makes the action write to standard output itself.
+/// Opens (creating or truncating) the output file of `-fprint` and friends.
+/// `/dev/stdout` and `/dev/stderr` reuse the real streams, `None` means stdout.
 fn get_or_create_file(path: &str) -> Result<Option<File>, Box<dyn Error>> {
     if path == "/dev/stdout" {
         return Ok(None);
