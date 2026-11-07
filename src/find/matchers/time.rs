@@ -6,7 +6,7 @@
 
 use std::error::Error;
 use std::fs::{self, Metadata};
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local, Timelike};

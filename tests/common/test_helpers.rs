@@ -11,8 +11,8 @@ use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use std::time::SystemTime;
 
-use findutils::find::matchers::{Follow, MatcherIO, WalkEntry};
 use findutils::find::Dependencies;
+use findutils::find::matchers::{Follow, MatcherIO, WalkEntry};
 
 /// A copy of `find::tests::FakeDependencies`.
 /// TODO: find out how to share #[cfg(test)] functions/structs between unit
