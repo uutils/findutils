@@ -54,7 +54,7 @@ use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
 use self::time::{
     FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
-    NewerOptionType, NewerTimeMatcher,
+    NewerOptionType, NewerTimeMatcher, UsedMatcher,
 };
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
@@ -491,6 +491,7 @@ enum Predicate {
     Newer,
     Time(FileTimeType),
     Min(FileTimeType),
+    Used,
     Size,
     Empty,
     Exec,
@@ -567,6 +568,7 @@ const PREDICATES: &[(&str, Predicate)] = &[
     ("-amin", Predicate::Min(FileTimeType::Accessed)),
     ("-cmin", Predicate::Min(FileTimeType::Changed)),
     ("-mmin", Predicate::Min(FileTimeType::Modified)),
+    ("-used", Predicate::Used),
     ("-size", Predicate::Size),
     ("-empty", Predicate::Empty),
     ("-exec", Predicate::Exec),
@@ -844,6 +846,14 @@ fn build_matcher_tree(
                     FileAgeRangeMatcher::new(file_time_type, minutes, config.today_start)
                         .into_box(),
                 )
+            }
+            Predicate::Used => {
+                if i >= args.len() - 1 {
+                    return Err(missing_argument_error(args, i).into());
+                }
+                let days = convert_arg_to_comparable_value(args[i], args[i + 1])?;
+                i += 1;
+                Some(UsedMatcher::new(days).into_box())
             }
             Predicate::Size => {
                 if i >= args.len() - 1 {
