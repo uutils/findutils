@@ -263,6 +263,74 @@ fn xargs_explicit_size_can_exceed_default_cap() {
 }
 
 #[test]
+#[cfg(unix)]
+fn xargs_explicit_size_accounts_for_argument_pointers() {
+    let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) } as usize;
+    // The strings fit, but their argv pointers push the command over ARG_MAX.
+    let arg_count = arg_max / 4;
+    // A larger inherited environment must also reduce the space available to argv.
+    for env_size in [0, 32 * 1024] {
+        let result = ucmd()
+            .env("XARGS_LIMIT_ENV", "v".repeat(env_size))
+            .args(&["-s", &arg_max.to_string(), "echo"])
+            .pipe_in("x\n".repeat(arg_count))
+            .succeeds();
+        assert!(result.stdout_str().lines().count() > 1);
+        assert_eq!(
+            arg_count,
+            result.stdout_str().split_ascii_whitespace().count()
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn xargs_preserves_exec_failure_for_one_oversized_argument() {
+    // The string budget fits, but one exec argument exceeds Linux's per-argument limit.
+    for (replace, input_size) in [(false, 150_000), (true, 50_000)] {
+        let mut command = ucmd();
+        command.args(&["-s", "1000000"]);
+        if replace {
+            command.args(&["-I", "{}"]);
+        }
+        command.arg("echo");
+        if replace {
+            command.arg("{}{}{}");
+        }
+        command
+            .pipe_in("x".repeat(input_size))
+            .fails_with_code(126)
+            .stderr_contains("Command could not be run")
+            .no_stdout();
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn xargs_replacement_size_uses_the_actual_argv() {
+    // The input buffer and the expanded command each have their own -s limit.
+    for (template, input_size, expected) in [
+        ("{}", 14, Some(format!("{}\n", "x".repeat(14)))),
+        ("fixed", 19, Some("fixed\n".to_owned())),
+        ("{}{}{}", 6, None),
+        ("fixed", 20, None),
+    ] {
+        let mut command = ucmd();
+        command
+            .args(&["-s", "20", "-I", "{}", "echo", template])
+            .pipe_in("x".repeat(input_size));
+        if let Some(expected) = expected {
+            command.succeeds().stdout_only(expected);
+        } else {
+            command
+                .fails_with_code(1)
+                .stderr_contains("Argument too large")
+                .no_stdout();
+        }
+    }
+}
+
+#[test]
 fn xargs_exec() {
     let result = ucmd()
         .args(&[
