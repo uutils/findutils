@@ -271,6 +271,8 @@ impl FormatStringParser<'_> {
         match self.advance_one()? {
             '@' => Ok(TimeFormat::SinceEpoch),
             'S' => Ok(TimeFormat::Strftime("%S.%f0".to_string())),
+            // Like %S, the seconds of %T and %X carry the same fraction.
+            'T' | 'X' => Ok(TimeFormat::Strftime("%H:%M:%S.%f0".to_string())),
             c => {
                 // We can't store the parsed items inside TimeFormat, because the items
                 // take a reference to the full format string, but we still try to parse
@@ -1568,10 +1570,16 @@ mod tests {
         File::create(&file_path).expect("create temp file");
 
         // GNU findutils always prints a dot and ten fractional digits, even
-        // for timestamps that fall on a whole second.
+        // for timestamps that fall on a whole second. %TT and %TX do too.
         for (nanos, expected_time) in [
-            (0, "2000-01-15+09:30:21.0000000000"),
-            (500_000_000, "2000-01-15+09:30:21.5000000000"),
+            (
+                0,
+                "2000-01-15+09:30:21.0000000000 09:30:21.0000000000 09:30:21.0000000000",
+            ),
+            (
+                500_000_000,
+                "2000-01-15+09:30:21.5000000000 09:30:21.5000000000 09:30:21.5000000000",
+            ),
         ] {
             let mtime = chrono::Local
                 .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
@@ -1589,7 +1597,7 @@ mod tests {
             let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
             let deps = FakeDependencies::new();
 
-            let matcher = Printf::new("%T+", None).unwrap();
+            let matcher = Printf::new("%T+ %TT %TX", None).unwrap();
             assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
             assert_eq!(expected_time, deps.get_output_as_string());
         }
