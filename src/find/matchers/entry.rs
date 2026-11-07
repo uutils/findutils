@@ -203,6 +203,43 @@ pub struct WalkEntry {
     follow: Follow,
     /// Cached metadata.
     meta: OnceCell<Result<Metadata, WalkError>>,
+    /// The path respelled for `UUTILS_PATH_SEPARATOR`, when that differs.
+    respelled: OnceCell<Option<PathBuf>>,
+}
+
+/// Whether `UUTILS_PATH_SEPARATOR` asks for `/` between path components:
+/// set to `/`, or to `slash`, which MSYS2 and Git Bash pass through
+/// unchanged where they rewrite a bare `/` into their install folder.
+///
+/// Windows accepts both separators but joins with `\`, which MSYS2, Cygwin
+/// and Git Bash users, and scripts written for them, do not expect. This is
+/// the same opt-in that ripgrep offers as `--path-separator`.
+#[cfg(windows)]
+fn forward_slashes() -> bool {
+    static FORWARD: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FORWARD.get_or_init(|| {
+        std::env::var_os("UUTILS_PATH_SEPARATOR").is_some_and(|v| v == "/" || v == "slash")
+    })
+}
+
+/// `path` with `/` for every separator, when `UUTILS_PATH_SEPARATOR=/` asks
+/// for it and the path has a `\` to replace. Verbatim (`\\?\`) and device
+/// paths keep their spelling, since `/` does not mean the same thing there.
+#[cfg(windows)]
+fn respell(path: &Path) -> Option<PathBuf> {
+    if !forward_slashes() {
+        return None;
+    }
+    let s = path.to_string_lossy();
+    if !s.contains('\\') || s.starts_with("\\\\?\\") || s.starts_with("\\\\.\\") {
+        return None;
+    }
+    Some(PathBuf::from(s.replace('\\', "/")))
+}
+
+#[cfg(not(windows))]
+fn respell(_path: &Path) -> Option<PathBuf> {
+    None
 }
 
 impl WalkEntry {
@@ -212,6 +249,7 @@ impl WalkEntry {
             inner: Entry::Explicit(path.into(), depth),
             follow,
             meta: OnceCell::new(),
+            respelled: OnceCell::new(),
         }
     }
 
@@ -233,6 +271,7 @@ impl WalkEntry {
                         inner: Entry::WalkDir(entry),
                         follow,
                         meta: OnceCell::new(),
+                        respelled: OnceCell::new(),
                     }
                 };
                 Ok(ret)
@@ -245,6 +284,7 @@ impl WalkEntry {
                             inner: Entry::Explicit(path.into(), depth),
                             follow: Follow::Never,
                             meta: Ok(meta).into(),
+                            respelled: OnceCell::new(),
                         });
                     }
                 }
@@ -257,6 +297,14 @@ impl WalkEntry {
 
     /// Get the path to this entry.
     pub fn path(&self) -> &Path {
+        match self.respelled.get_or_init(|| respell(self.walked_path())) {
+            Some(path) => path.as_path(),
+            None => self.walked_path(),
+        }
+    }
+
+    /// Get the path to this entry as the walk spelled it.
+    fn walked_path(&self) -> &Path {
         match &self.inner {
             Entry::Explicit(path, _) => path.as_path(),
             Entry::WalkDir(ent) => ent.path(),
@@ -265,6 +313,9 @@ impl WalkEntry {
 
     /// Get the path to this entry.
     pub fn into_path(self) -> PathBuf {
+        if let Some(path) = respell(self.walked_path()) {
+            return path;
+        }
         match self.inner {
             Entry::Explicit(path, _) => path,
             Entry::WalkDir(ent) => ent.into_path(),
