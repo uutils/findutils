@@ -1679,6 +1679,64 @@ mod tests {
     }
 
     #[test]
+    fn daystart_selects_calendar_days() {
+        use chrono::{Local, TimeZone};
+
+        // A fixed clock avoids depending on the date or crossing midnight.
+        let now: SystemTime = Local
+            .with_ymd_and_hms(2025, 1, 15, 18, 0, 0)
+            .single()
+            .expect("fixed local date is unambiguous")
+            .into();
+        let dir = tempfile::tempdir().expect("create fixture directory");
+        let root = dir.path().to_str().expect("fixture path is UTF-8");
+        // Yesterday at 22:00 is less than 24 hours old, so -daystart
+        // must change which day it matches.
+        for (name, hours) in [
+            ("today", 6),
+            ("yesterday", 30),
+            ("yesterday_late", 20),
+            ("two_days_ago", 54),
+        ] {
+            let path = dir.path().join(name);
+            fs::File::create(&path).expect("create fixture file");
+            let stamp =
+                filetime::FileTime::from_system_time(now - Duration::from_secs(hours * 3600));
+            filetime::set_file_times(&path, stamp, stamp).expect("set fixture timestamps");
+        }
+
+        for predicate in ["-mtime", "-atime"] {
+            for (expression, expected) in [
+                (vec!["-daystart", predicate, "0"], "today\n"),
+                (
+                    vec!["-daystart", predicate, "1"],
+                    "yesterday\nyesterday_late\n",
+                ),
+                (vec!["-daystart", predicate, "2"], "two_days_ago\n"),
+                (
+                    vec!["-daystart", predicate, "+0"],
+                    "two_days_ago\nyesterday\nyesterday_late\n",
+                ),
+                (vec!["-daystart", predicate, "-1"], "today\n"),
+                (vec![predicate, "1", "-daystart"], "yesterday\n"),
+                (vec![predicate, "1"], "yesterday\n"),
+                (
+                    vec!["-daystart", "(", predicate, "1", ")"],
+                    "yesterday\nyesterday_late\n",
+                ),
+            ] {
+                let mut deps = FakeDependencies::new();
+                deps.set_time(now);
+                let mut args = vec!["find", root, "-sorted", "-type", "f"];
+                args.extend_from_slice(&expression);
+                args.extend_from_slice(&["-printf", "%f\n"]);
+                assert_eq!(find_main(&args, &deps), 0, "{expression:?}");
+                assert_eq!(deps.get_output_as_string(), expected, "{expression:?}");
+            }
+        }
+    }
+
+    #[test]
     fn find_fprinter() {
         let printer = ["fprint", "fprint0"];
 
