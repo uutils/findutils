@@ -456,11 +456,27 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
     }
 }
 
-/// Creates a file if it doesn't exist.
-/// If it does exist, it will be overwritten.
-fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
-    let file = File::create(path)?;
-    Ok(file)
+/// Opens (creating or truncating) the output file of `-fprint` and friends.
+/// `/dev/stdout` and `/dev/stderr` reuse the real streams, `None` means stdout.
+fn get_or_create_file(path: &str) -> Result<Option<File>, Box<dyn Error>> {
+    if path == "/dev/stdout" {
+        return Ok(None);
+    }
+    if path == "/dev/stderr" {
+        #[cfg(unix)]
+        let handle = {
+            use std::os::fd::AsFd;
+            std::io::stderr().as_fd().try_clone_to_owned()?
+        };
+        #[cfg(windows)]
+        let handle = {
+            use std::os::windows::io::AsHandle;
+            std::io::stderr().as_handle().try_clone_to_owned()?
+        };
+        #[cfg(any(unix, windows))]
+        return Ok(Some(handle.into()));
+    }
+    Ok(Some(File::create(path)?))
 }
 
 /// What a predicate or operator on the command line resolves to. The parser
@@ -708,7 +724,11 @@ fn build_matcher_tree(
                 i += 1;
 
                 let file = get_or_create_file(args[i])?;
-                Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
+                Some(
+                    Printer::new(PrintDelimiter::Newline, file)
+                        .with_stdout_errors(config.stdout_errors.clone())
+                        .into_box(),
+                )
             }
             Predicate::Fprintf => {
                 if i + 2 >= args.len() {
@@ -722,7 +742,11 @@ fn build_matcher_tree(
                 let file = get_or_create_file(args[i])?;
                 let output_path = PathBuf::from(args[i]);
                 i += 1;
-                Some(Printf::new(args[i], Some((file, output_path)))?.into_box())
+                Some(
+                    Printf::new(args[i], file.map(|file| (file, output_path)))?
+                        .with_stdout_errors(config.stdout_errors.clone())
+                        .into_box(),
+                )
             }
             Predicate::Fprint0 => {
                 if i >= args.len() - 1 {
@@ -731,7 +755,11 @@ fn build_matcher_tree(
                 i += 1;
 
                 let file = get_or_create_file(args[i])?;
-                Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
+                Some(
+                    Printer::new(PrintDelimiter::Null, file)
+                        .with_stdout_errors(config.stdout_errors.clone())
+                        .into_box(),
+                )
             }
             Predicate::Ls => Some(
                 Ls::new(None)
@@ -745,7 +773,11 @@ fn build_matcher_tree(
                 i += 1;
 
                 let file = get_or_create_file(args[i])?;
-                Some(Ls::new(Some(file)).into_box())
+                Some(
+                    Ls::new(file)
+                        .with_stdout_errors(config.stdout_errors.clone())
+                        .into_box(),
+                )
             }
             Predicate::True => Some(TrueMatcher.into_box()),
             Predicate::False => Some(FalseMatcher.into_box()),
