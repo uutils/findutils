@@ -26,7 +26,7 @@ nix = { version = "0.31", features = ["fs", "user"] }
 onig = { version = "6.5", default-features = false }
 parse_datetime = "0.17.0"
 regex = "1.12"
-uucore = { version = "0.12.0", features = ["diagnostics", "entries", "fs", "fsext", "mode"] }
+uucore = { version = "0.12.0", features = ["diagnostics", "entries", "fs", "fsext", "mode", "quoting-style"] }
 walkdir = "2.5"
 itertools = "0.15.0"
 thiserror = "2.0.12"

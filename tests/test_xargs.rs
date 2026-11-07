@@ -403,6 +403,17 @@ fn xargs_exec_verbose() {
 }
 
 #[test]
+#[cfg(unix)]
+fn xargs_verbose_prints_the_command_line() {
+    ucmd()
+        .args(&["-t", "echo"])
+        .pipe_in("\"a b\" c\n")
+        .succeeds()
+        .stderr_is("echo 'a b' c\n")
+        .stdout_is("a b c\n");
+}
+
+#[test]
 fn xargs_unterminated_quote() {
     ucmd()
         .args(&[

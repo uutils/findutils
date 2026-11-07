@@ -16,6 +16,7 @@ use std::{
 
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
 use uucore::error::strip_errno;
+use uucore::quoting_style::{locale_aware_escape_name, QuotingStyle};
 
 mod options {
     pub const COMMAND: &str = "COMMAND";
@@ -499,7 +500,16 @@ impl CommandBuilder<'_> {
         }
 
         if self.options.verbose {
-            eprintln!("{command:?}");
+            // As GNU prints it: the words a shell would need, quoted where needed
+            let words: Vec<String> = std::iter::once(command.get_program())
+                .chain(command.get_args())
+                .map(|word| {
+                    locale_aware_escape_name(word, QuotingStyle::SHELL_ESCAPE)
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect();
+            eprintln!("{}", words.join(" "));
         }
 
         match &self.options.action {
