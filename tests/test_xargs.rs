@@ -596,6 +596,18 @@ fn xargs_eof() {
 }
 
 #[test]
+fn xargs_empty_eof() {
+    for option_style in [vec!["-E", ""], vec!["-e", ""], vec!["--eof="]] {
+        ucmd()
+            .args(option_style.as_slice())
+            .arg("-n1")
+            .pipe_in("a\n''\nb\nc\n")
+            .succeeds()
+            .stdout_only("a\n\nb\nc\n");
+    }
+}
+
+#[test]
 fn xargs_eof_with_delimiter() {
     ucmd()
         .args(&["-0", "-Ecd"])
