@@ -613,6 +613,12 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 .iter()
                 .filter_map(|p| DbReader::new(p.as_path()).ok())
             {
+                // --limit applies to the whole output, not to each database
+                let remaining = config.limit.map_or(usize::MAX, |l| l.saturating_sub(count));
+                if remaining == 0 && config.mode != Mode::Statistics {
+                    break;
+                }
+
                 // if we can get the mtime of the file, check it against the current time
                 if let Ok(metadata) = fs::metadata(&dbreader.path) {
                     if let Ok(time) = metadata.modified() {
@@ -641,7 +647,7 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 let mut write_result = Ok(());
                 let db_count = dbreader.by_ref().process_results(|iter| {
                     iter.filter(|s| match_entry(s.as_c_str(), &config, &patterns))
-                        .take(config.limit.unwrap_or(usize::MAX))
+                        .take(remaining)
                         .inspect(|s| {
                             if (config.mode == Mode::Normal || config.print) && write_result.is_ok()
                             {

@@ -393,3 +393,31 @@ fn test_locate_split_database_paths() {
         .assert()
         .failure();
 }
+
+#[test]
+fn test_locate_limit_spans_databases() {
+    // --limit caps the whole output, not each database (GNU)
+    let joined_paths =
+        std::env::join_paths(["test_data/db/test_data_db", "test_data/db/test_data_db"]).unwrap();
+    let db_flag = format!("--database={}", joined_paths.to_string_lossy());
+
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["test_data", "--count", "--limit=3", &db_flag])
+        .assert()
+        .success();
+    assert_eq!(String::from_utf8_lossy(&assert.get_output().stdout), "3\n");
+
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["test_data", "--null", "--limit=3", &db_flag])
+        .assert()
+        .success();
+    // --null: one of the test entries has a newline in its name
+    assert_eq!(
+        String::from_utf8_lossy(&assert.get_output().stdout)
+            .split_terminator('\0')
+            .count(),
+        3
+    );
+}
