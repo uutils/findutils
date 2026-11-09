@@ -167,7 +167,14 @@ fn uu_app() -> Command {
             Arg::new("dbformat")
                 .long("dbformat")
                 .require_equals(true)
-                .value_parser(["LOCATE02"])
+                .value_parser(|s: &str| -> Result<DbFormat, String> {
+                    match s {
+                        "LOCATE02" => Ok(DbFormat::Locate02),
+                        other => Err(format!(
+                            "invalid value '{other}' for '--dbformat': [possible values: LOCATE02]"
+                        )),
+                    }
+                })
                 .action(ArgAction::Set),
         )
 }

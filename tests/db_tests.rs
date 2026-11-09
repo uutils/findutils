@@ -409,6 +409,20 @@ fn test_updatedb_non_utf8_argument() {
 }
 
 #[test]
+fn test_updatedb_dbformat_locate02() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.db");
+    Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .arg("--dbformat=LOCATE02")
+        .arg(format!("--localpaths={}", dir.path().display()))
+        .arg(format!("--output={}", out.display()))
+        .assert()
+        .success();
+    assert!(out.is_file(), "expected database file at {}", out.display());
+}
+
+#[test]
 fn test_default_database_paths() {
     assert_eq!(
         findutils::locate::DEFAULT_DB_PATH,
