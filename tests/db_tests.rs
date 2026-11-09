@@ -406,7 +406,7 @@ fn test_updatedb_dbformat_invalid() {
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert_eq!(
         stderr,
-        "Error: error: invalid value 'foo' for '--dbformat=<dbformat>'\n  [possible values: LOCATE02]\n\nFor more information, try '--help'.\n"
+        "Error: error: invalid value 'foo' for '--dbformat=<dbformat>'\n  [possible values: LOCATE02]\n\nFor more information, try '--help'.\n\n"
     );
 }
 
