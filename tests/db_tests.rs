@@ -71,7 +71,7 @@ fn test_locate_non_existing() {
 fn test_locate_statistics() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
-        .args(["", "--statistics", DB_FLAG])
+        .args(["--statistics", DB_FLAG])
         .assert()
         .success();
 }

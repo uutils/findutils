@@ -181,14 +181,15 @@ impl Patterns {
 
     fn any_match(&self, entry: &str) -> bool {
         match self {
+            // no patterns (allowed with --statistics) means match every entry
             Self::String {
                 patterns,
                 ignore_case,
             } => {
                 let entry = fold_case(entry, *ignore_case);
-                patterns.iter().any(|s| entry.contains(s.as_str()))
+                patterns.is_empty() || patterns.iter().any(|s| entry.contains(s.as_str()))
             }
-            Self::Regex(v) => v.iter().any(|r| r.find(entry).is_some()),
+            Self::Regex(v) => v.is_empty() || v.iter().any(|r| r.find(entry).is_some()),
         }
     }
 
@@ -282,7 +283,7 @@ impl TryFrom<ArgMatches> for ParsedInfo {
             null_bytes: value.get_flag("null"),
             print: value.get_flag("print"),
         };
-        // `patterns` is a required argument, so this is normally non-empty
+        // `patterns` is required unless --statistics is given
         let patterns: Vec<String> = value
             .get_many::<String>("patterns")
             .map(|v| v.cloned().collect())
@@ -453,7 +454,7 @@ fn uu_app() -> Command {
                 .num_args(1..)
                 .action(ArgAction::Append)
                 .value_parser(value_parser!(String))
-                .required(true),
+                .required_unless_present("statistics"),
         )
 }
 
