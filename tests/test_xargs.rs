@@ -597,10 +597,12 @@ fn xargs_eof() {
 
 #[test]
 fn xargs_empty_eof_string_disables_eof() {
+    // No command is given, so the option is the last argument and the default
+    // `echo` runs. A bare `-e` takes an optional value, so anything after it
+    // (even `echo` or `--`) would be read as the eof-string instead.
     for option_style in [vec!["-E", ""], vec!["--eof="], vec!["-e"]] {
         ucmd()
             .args(option_style.as_slice())
-            .args(&["echo"])
             .pipe_in("one\n\"\"\ntwo {} three\n")
             .succeeds()
             .stdout_only("one  two {} three\n");
