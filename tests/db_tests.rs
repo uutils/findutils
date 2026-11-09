@@ -76,6 +76,15 @@ fn test_locate_statistics() {
         .success();
 }
 
+#[test]
+fn test_locate_statistics_regex_without_pattern() {
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["--statistics", "--regex", DB_FLAG])
+        .assert()
+        .success();
+}
+
 #[rstest]
 #[case("emacs")]
 #[case("grep")]
