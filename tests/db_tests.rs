@@ -113,6 +113,26 @@ fn test_locate_all_regex() {
 }
 
 #[test]
+fn test_locate_ignore_case_plain() {
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["-i", "-c", "abbbc", DB_FLAG])
+        .assert()
+        .success();
+    assert_eq!(String::from_utf8_lossy(&assert.get_output().stdout), "3\n");
+}
+
+#[test]
+fn test_locate_ignore_case_plain_all() {
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["--ignore-case", "--all", "-c", "ABB", "bbc", DB_FLAG])
+        .assert()
+        .success();
+    assert_eq!(String::from_utf8_lossy(&assert.get_output().stdout), "3\n");
+}
+
+#[test]
 fn test_locate_invalid_db() {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")

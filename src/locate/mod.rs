@@ -157,23 +157,60 @@ impl Statistics {
 
 #[derive(Debug)]
 enum Patterns {
-    String(Vec<String>),
+    /// Plain substring patterns. With `--ignore-case` they are stored lowercased and matched
+    /// against the lowercased entry.
+    String {
+        patterns: Vec<String>,
+        ignore_case: bool,
+    },
     Regex(Vec<Regex>),
 }
 
 impl Patterns {
+    fn string(patterns: Vec<String>, ignore_case: bool) -> Self {
+        let patterns = if ignore_case {
+            patterns.iter().map(|s| s.to_lowercase()).collect()
+        } else {
+            patterns
+        };
+        Self::String {
+            patterns,
+            ignore_case,
+        }
+    }
+
     fn any_match(&self, entry: &str) -> bool {
         match self {
-            Self::String(v) => v.iter().any(|s| entry.contains(s)),
+            Self::String {
+                patterns,
+                ignore_case,
+            } => {
+                let entry = fold_case(entry, *ignore_case);
+                patterns.iter().any(|s| entry.contains(s.as_str()))
+            }
             Self::Regex(v) => v.iter().any(|r| r.find(entry).is_some()),
         }
     }
 
     fn all_match(&self, entry: &str) -> bool {
         match self {
-            Self::String(v) => v.iter().all(|s| entry.contains(s)),
+            Self::String {
+                patterns,
+                ignore_case,
+            } => {
+                let entry = fold_case(entry, *ignore_case);
+                patterns.iter().all(|s| entry.contains(s.as_str()))
+            }
             Self::Regex(v) => v.iter().all(|r| r.find(entry).is_some()),
         }
+    }
+}
+
+fn fold_case(entry: &str, ignore_case: bool) -> Cow<'_, str> {
+    if ignore_case {
+        Cow::Owned(entry.to_lowercase())
+    } else {
+        Cow::Borrowed(entry)
     }
 }
 
@@ -264,7 +301,7 @@ impl TryFrom<ArgMatches> for ParsedInfo {
             }
             Patterns::Regex(compiled)
         } else {
-            Patterns::String(patterns)
+            Patterns::string(patterns, config.ignore_case)
         };
         Ok(Self { patterns, config })
     }
