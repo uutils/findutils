@@ -454,10 +454,17 @@ fn test_locate_limit_statistics_reports_every_database() {
         .args(["test_data", "--statistics", "--limit=1", &db_flag])
         .assert()
         .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert_eq!(
-        String::from_utf8_lossy(&assert.get_output().stdout)
+        stdout
             .matches("Database test_data/db/test_data_db is in the")
             .count(),
         2
     );
+    // the running match count never goes past the limit
+    let matching: Vec<&str> = stdout
+        .lines()
+        .filter(|l| l.starts_with("Matching Filenames:"))
+        .collect();
+    assert_eq!(matching, ["Matching Filenames: 1", "Matching Filenames: 1"]);
 }
