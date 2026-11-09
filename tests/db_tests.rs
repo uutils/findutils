@@ -421,3 +421,23 @@ fn test_locate_limit_spans_databases() {
         3
     );
 }
+
+#[test]
+fn test_locate_limit_statistics_reports_every_database() {
+    // --statistics still describes each database once --limit is used up
+    let joined_paths =
+        std::env::join_paths(["test_data/db/test_data_db", "test_data/db/test_data_db"]).unwrap();
+    let db_flag = format!("--database={}", joined_paths.to_string_lossy());
+
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["test_data", "--statistics", "--limit=1", &db_flag])
+        .assert()
+        .success();
+    assert_eq!(
+        String::from_utf8_lossy(&assert.get_output().stdout)
+            .matches("Database test_data/db/test_data_db is in the")
+            .count(),
+        2
+    );
+}
