@@ -397,6 +397,20 @@ fn test_updatedb_dbformat_locate02() {
 }
 
 #[test]
+fn test_updatedb_dbformat_invalid() {
+    let assert = Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .arg("--dbformat=slocate")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("invalid value 'slocate' for '--dbformat'"),
+        "unexpected stderr: {stderr:?}"
+    );
+}
+
+#[test]
 fn test_default_database_paths() {
     assert_eq!(
         findutils::locate::DEFAULT_DB_PATH,
