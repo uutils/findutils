@@ -608,6 +608,18 @@ fn xargs_empty_eof() {
 }
 
 #[test]
+fn xargs_bare_eof_disables_marker() {
+    // -e and --eof without a value mean "no EOF string", so "{}" is an ordinary item
+    for flag in ["-e", "--eof"] {
+        ucmd()
+            .arg(flag)
+            .pipe_in("ab {} ef")
+            .succeeds()
+            .stdout_only("ab {} ef\n");
+    }
+}
+
+#[test]
 fn xargs_eof_with_delimiter() {
     ucmd()
         .args(&["-0", "-Ecd"])
