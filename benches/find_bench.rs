@@ -14,8 +14,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use findutils::find::{find_main, Dependencies};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use findutils::find::{Dependencies, find_main};
 
 /// `Dependencies` implementation that throws output away. A fixed `now` keeps
 /// time-based matchers (`-newer`, `-mtime`, …) deterministic across runs.

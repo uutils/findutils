@@ -15,7 +15,7 @@ use std::path::Path;
 use tempfile::Builder;
 
 use common::test_helpers::{
-    fix_up_slashes, get_dir_entry_for, path_to_testing_commandline, FakeDependencies,
+    FakeDependencies, fix_up_slashes, get_dir_entry_for, path_to_testing_commandline,
 };
 use findutils::find::matchers::exec::{MultiExecMatcher, SingleExecMatcher};
 use findutils::find::matchers::{Matcher, MatcherIO};

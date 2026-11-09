@@ -9,7 +9,7 @@
 //! even try.
 
 use std::error::Error;
-use std::io::{stderr, Write};
+use std::io::{Write, stderr};
 #[cfg(unix)]
 use uucore::mode::{parse_numeric, parse_symbolic};
 
@@ -40,7 +40,7 @@ impl ComparisonType {
 
 #[cfg(unix)]
 mod parsing {
-    use super::{parse_numeric, parse_symbolic, ComparisonType};
+    use super::{ComparisonType, parse_numeric, parse_symbolic};
 
     pub fn split_comparison_type(pattern: &str) -> (ComparisonType, &str) {
         let mut chars = pattern.chars();

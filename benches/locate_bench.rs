@@ -16,7 +16,7 @@
 mod bench {
     use std::path::{Path, PathBuf};
 
-    use criterion::{black_box, criterion_group, Criterion};
+    use criterion::{Criterion, black_box, criterion_group};
     use findutils::locate::locate_main;
     use findutils::updatedb::updatedb_main;
 

@@ -239,14 +239,14 @@ impl WalkEntry {
             }
             Err(e) if e.is_not_found() => {
                 // Detect broken symlinks and replace them with explicit entries
-                if let (Some(path), Some(depth)) = (e.path(), e.depth()) {
-                    if let Ok(meta) = path.symlink_metadata() {
-                        return Ok(Self {
-                            inner: Entry::Explicit(path.into(), depth),
-                            follow: Follow::Never,
-                            meta: Ok(meta).into(),
-                        });
-                    }
+                if let (Some(path), Some(depth)) = (e.path(), e.depth())
+                    && let Ok(meta) = path.symlink_metadata()
+                {
+                    return Ok(Self {
+                        inner: Entry::Explicit(path.into(), depth),
+                        follow: Follow::Never,
+                        meta: Ok(meta).into(),
+                    });
                 }
 
                 Err(e)
