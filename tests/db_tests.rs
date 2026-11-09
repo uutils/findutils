@@ -105,6 +105,28 @@ fn test_locate_all(#[case] flag: &str) {
         .success();
 }
 
+#[rstest]
+#[case("--all")]
+#[case("-A")]
+fn test_locate_all_requires_every_pattern(#[case] flag: &str) {
+    // only "abb" matches an entry; with --all/-A every pattern has to match
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args([DB_FLAG, flag, "zzzz_nomatch", "abb"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_locate_any_pattern_without_all() {
+    // same patterns as above, but without --all a single matching pattern is enough
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args([DB_FLAG, "zzzz_nomatch", "abb"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn test_locate_reject_lowercase_all() {
     Command::cargo_bin("locate")
