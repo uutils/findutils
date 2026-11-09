@@ -94,13 +94,24 @@ fn test_locate_regex(#[case] input: &str) {
         .success();
 }
 
-#[test]
-fn test_locate_all() {
+#[rstest]
+#[case("--all")]
+#[case("-A")]
+fn test_locate_all(#[case] flag: &str) {
     Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
-        .args(["abb", "bbc", "--all", DB_FLAG])
+        .args([DB_FLAG, flag, "abb", "bbc"])
         .assert()
         .success();
+}
+
+#[test]
+fn test_locate_reject_lowercase_all() {
+    Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args([DB_FLAG, "-a", "abb", "bbc"])
+        .assert()
+        .failure();
 }
 
 #[test]
