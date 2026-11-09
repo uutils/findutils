@@ -276,7 +276,7 @@ fn uu_app() -> Command {
         .args_override_self(true)
         .arg(
             Arg::new("all")
-                .short('a')
+                .short('A')
                 .long("all")
                 .action(ArgAction::SetTrue),
         )
