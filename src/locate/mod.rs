@@ -277,6 +277,7 @@ fn uu_app() -> Command {
         .arg(
             Arg::new("all")
                 .short('A')
+                .short_alias('a')
                 .long("all")
                 .action(ArgAction::SetTrue),
         )
