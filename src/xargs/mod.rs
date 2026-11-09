@@ -1208,13 +1208,14 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 })
             }),
         verbose: matches.get_flag(options::VERBOSE),
-        eof_delimiter: [options::EOF_E, options::EOF].iter().find_map(|&option| {
-            matches.contains_id(option).then(|| {
-                matches
-                    .get_one::<String>(option)
-                    .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
-            })
-        }),
+        // POSIX: an empty eof-string disables the logical end-of-file string,
+        // and GNU treats a bare `-e` (no eof-string) the same way.
+        eof_delimiter: [options::EOF_E, options::EOF]
+            .iter()
+            .find(|&&option| matches.contains_id(option))
+            .and_then(|&option| matches.get_one::<String>(option))
+            .filter(|eof| !eof.is_empty())
+            .cloned(),
     };
 
     let options = normalize_options(options, &matches);
