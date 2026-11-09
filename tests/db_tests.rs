@@ -400,13 +400,13 @@ fn test_updatedb_dbformat_locate02() {
 fn test_updatedb_dbformat_invalid() {
     let assert = Command::cargo_bin("updatedb")
         .expect("couldn't find updatedb binary")
-        .arg("--dbformat=slocate")
+        .arg("--dbformat=foo")
         .assert()
         .failure();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
-    assert!(
-        stderr.contains("invalid value 'slocate' for '--dbformat'"),
-        "unexpected stderr: {stderr:?}"
+    assert_eq!(
+        stderr,
+        "Error: error: invalid value 'foo' for '--dbformat=<dbformat>'\n  [possible values: LOCATE02]\n\nFor more information, try '--help'.\n"
     );
 }
 
