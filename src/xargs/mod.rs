@@ -5,17 +5,21 @@
 // https://opensource.org/licenses/MIT.
 
 use std::{
-    collections::HashMap,
     error::Error,
     ffi::{OsStr, OsString},
     fmt::Display,
     fs,
     io::{self, BufRead, BufReader, Read},
-    process::{Command, Stdio},
+    process::Stdio,
 };
 
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
 use uucore::error::strip_errno;
+
+#[cfg(unix)]
+use argmax::Command as ExecCommand;
+#[cfg(not(unix))]
+use std::process::Command as ExecCommand;
 
 mod options {
     pub const COMMAND: &str = "COMMAND";
@@ -59,6 +63,8 @@ enum ArgumentKind {
     HardTerminated,
     /// An argument that was terminated by non-newline whitespace.
     SoftTerminated,
+    /// A replacement line that is not itself passed as an argv entry.
+    Replacement,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -206,47 +212,26 @@ impl MaxCharsCommandSizeLimiter {
         }
     }
 
-    #[cfg(windows)]
-    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
-        // Taken from the CreateProcess docs. -2 to account for how
-        // std::process unconditionally surrounds the program name with quotes.
-        const MAX_CMDLINE: usize = 32767 - 2;
-        Self::new(MAX_CMDLINE)
-    }
-
-    #[cfg(unix)]
-    fn new_system(env: &HashMap<OsString, OsString>) -> Self {
-        // POSIX requires that we leave 2048 bytes of space so that the child processes
-        // can have room to set their own environment variables.
-        const ARG_HEADROOM: usize = 2048;
-        let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) } as usize;
-
-        let env_size: usize = env
-            .iter()
-            .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
-            .sum();
-
-        Self::new(arg_max.saturating_sub(ARG_HEADROOM + env_size))
-    }
-
-    /// The limiter used when no explicit -s was given. Like GNU xargs, use at
-    /// most 128 KiB per command line by default: sizing command lines all the
-    /// way up to ARG_MAX would make execvp() fail with E2BIG, because the
-    /// kernel additionally charges the argv/envp pointers (since Linux commit
-    /// 98da7d08850f) against the limit, which are not part of the character
-    /// count. An explicit -s can still go beyond this, up to the system limit.
-    fn new_default(env: &HashMap<OsString, OsString>) -> Self {
+    /// The default string budget; the command builder enforces the system limit separately.
+    fn new_default() -> Self {
         const DEFAULT_MAX_CHARS: usize = 128 * 1024;
-        Self::new(Self::new_system(env).max_chars.min(DEFAULT_MAX_CHARS))
+        #[cfg(unix)]
+        let max_chars = DEFAULT_MAX_CHARS;
+        #[cfg(not(unix))]
+        let max_chars = DEFAULT_MAX_CHARS.min(system_arg_max());
+        Self::new(max_chars)
     }
+}
 
-    #[cfg(not(any(unix, windows)))]
-    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
-        // No portable way to query the system limit; fall back to the POSIX
-        // minimum guaranteed value for _POSIX_ARG_MAX.
-        const POSIX_ARG_MAX: usize = 4096;
-        Self::new(POSIX_ARG_MAX)
-    }
+#[cfg(windows)]
+fn system_arg_max() -> usize {
+    // CreateProcess allows 32767 code units; std::process adds quotes around the program name.
+    32767 - 2
+}
+
+#[cfg(not(any(unix, windows)))]
+fn system_arg_max() -> usize {
+    4096
 }
 
 impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
@@ -255,6 +240,9 @@ impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
         arg: Argument,
         cursor: LimiterCursor<'_>,
     ) -> Result<Argument, ExhaustedCommandSpace> {
+        if arg.kind == ArgumentKind::Replacement {
+            return cursor.try_next(arg);
+        }
         let chars = count_osstr_chars_for_exec(&arg.arg);
         if self.current_size + chars <= self.max_chars {
             let arg = cursor.try_next(arg)?;
@@ -404,105 +392,160 @@ enum ExecAction {
 
 struct CommandBuilderOptions {
     action: ExecAction,
-    env: HashMap<OsString, OsString>,
     limiters: LimiterCollection,
     verbose: bool,
     close_stdin: bool,
     replace: Option<String>,
+    max_chars: usize,
 }
 impl CommandBuilderOptions {
     fn new(
         action: ExecAction,
-        env: HashMap<OsString, OsString>,
         mut limiters: LimiterCollection,
         replace: Option<String>,
+        max_chars: usize,
     ) -> Result<Self, ExhaustedCommandSpace> {
         let initial_args = match &action {
             ExecAction::Command(args) => args.iter().map(std::convert::AsRef::as_ref).collect(),
             ExecAction::Echo => vec![OsStr::new("echo")],
         };
 
-        for arg in initial_args {
-            limiters.try_arg(Argument {
-                arg: arg.to_owned(),
-                kind: ArgumentKind::Initial,
-            })?;
+        if replace.is_none() || matches!(&action, ExecAction::Echo) {
+            for arg in initial_args {
+                limiters.try_arg(Argument {
+                    arg: arg.to_owned(),
+                    kind: ArgumentKind::Initial,
+                })?;
+            }
         }
 
         Ok(Self {
             action,
-            env,
             limiters,
             verbose: false,
             close_stdin: false,
             replace,
+            max_chars,
         })
+    }
+
+    fn uses_replacement(&self) -> bool {
+        self.replace.is_some() && matches!(self.action, ExecAction::Command(_))
+    }
+}
+
+impl CommandBuilderOptions {
+    /// Build a fresh command for a batch, with the system budget supplied by argmax on Unix.
+    fn command_for(&self, replacement: Option<&OsStr>) -> Result<ExecCommand, XargsError> {
+        let (program, initial_args): (&OsStr, &[OsString]) = match &self.action {
+            ExecAction::Command(args) => {
+                let (program, args) = args.split_first().ok_or(CommandExecutionError::Unknown)?;
+                (program, args)
+            }
+            ExecAction::Echo => (OsStr::new("echo"), &[]),
+        };
+        let initial_args = if self.uses_replacement() && replacement.is_none() {
+            &[]
+        } else {
+            initial_args
+        };
+        let replaced_args: Option<Vec<OsString>> =
+            self.replace
+                .as_ref()
+                .zip(replacement)
+                .map(|(pattern, replacement)| {
+                    let replacement = replacement.to_string_lossy();
+                    initial_args
+                        .iter()
+                        .map(|arg| {
+                            OsString::from(arg.to_string_lossy().replace(pattern, &replacement))
+                        })
+                        .collect()
+                });
+        let args = replaced_args.as_deref().unwrap_or(initial_args);
+        let chars = args
+            .iter()
+            .fold(count_osstr_chars_for_exec(program), |size, arg| {
+                size.saturating_add(count_osstr_chars_for_exec(arg))
+            });
+        if chars > self.max_chars {
+            return Err(XargsError::ArgumentTooLarge);
+        }
+        #[cfg(not(unix))]
+        if chars > system_arg_max() {
+            return Err(XargsError::ArgumentTooLarge);
+        }
+        let mut command = ExecCommand::new(program);
+        #[cfg(unix)]
+        command
+            .try_args(args)
+            .map_err(CommandExecutionError::CannotRun)?;
+        #[cfg(not(unix))]
+        command.args(args);
+        Ok(command)
     }
 }
 
 struct CommandBuilder<'options> {
     options: &'options CommandBuilderOptions,
-    extra_args: Vec<OsString>,
+    command: ExecCommand,
+    replacement: Option<OsString>,
     limiters: LimiterCollection,
 }
 
 impl CommandBuilder<'_> {
-    fn new(options: &CommandBuilderOptions) -> CommandBuilder<'_> {
-        CommandBuilder {
+    fn new(options: &CommandBuilderOptions) -> Result<CommandBuilder<'_>, XargsError> {
+        Ok(CommandBuilder {
             options,
-            extra_args: vec![],
+            command: options.command_for(None)?,
+            replacement: None,
             limiters: options.limiters.clone(),
-        }
+        })
     }
 
-    fn add_arg(&mut self, arg: Argument) -> Result<(), ExhaustedCommandSpace> {
+    fn add_arg(&mut self, mut arg: Argument) -> Result<(), ExhaustedCommandSpace> {
+        // A failed builder is flushed and replaced by process_input.
+        if self.options.uses_replacement() {
+            if count_osstr_chars_for_exec(&arg.arg) > self.options.max_chars {
+                return Err(ExhaustedCommandSpace {
+                    arg,
+                    out_of_chars: true,
+                });
+            }
+            arg.kind = ArgumentKind::Replacement;
+        }
         let arg = self.limiters.try_arg(arg)?;
-        self.extra_args.push(arg.arg);
+        if self.options.uses_replacement() {
+            self.replacement = Some(arg.arg);
+        } else {
+            #[cfg(unix)]
+            self.command
+                .try_arg(&arg.arg)
+                .map_err(|_| ExhaustedCommandSpace {
+                    arg,
+                    out_of_chars: true,
+                })?;
+            #[cfg(not(unix))]
+            self.command.arg(arg.arg);
+        }
         Ok(())
     }
 
-    fn execute(self) -> Result<CommandResult, CommandExecutionError> {
-        let (entry_point, initial_args): (&OsStr, &[OsString]) = match &self.options.action {
-            ExecAction::Command(args) => (&args[0], &args[1..]),
-            ExecAction::Echo => (OsStr::new("echo"), &[]),
-        };
-
-        let mut command = Command::new(entry_point);
-
-        if let Some(replace_str) = &self.options.replace {
-            // Replace all occurrences in initial args with the extra arg,
-            // Thanks to `MaxArgsCommandSizeLimiter`, we only process a single extra arg here.
-            let replacement = self.extra_args[0].to_string_lossy();
-            let initial_args: Vec<OsString> = initial_args
-                .iter()
-                .map(|arg| {
-                    let arg_str = arg.to_string_lossy();
-                    OsString::from(arg_str.replace(replace_str, &replacement))
-                })
-                .collect();
-
-            command
-                .args(&initial_args)
-                .env_clear()
-                .envs(&self.options.env);
-        } else {
-            // don't do any replacement
-            command
-                .args(initial_args)
-                .args(&self.extra_args)
-                .env_clear()
-                .envs(&self.options.env);
+    fn execute(mut self) -> Result<CommandResult, XargsError> {
+        if let Some(replacement) = self.replacement.as_deref() {
+            self.command = self.options.command_for(Some(replacement))?;
         }
-
+        let command = &mut self.command;
         if self.options.close_stdin {
             command.stdin(Stdio::null());
         }
 
         if self.options.verbose {
+            let command: &std::process::Command = command;
             eprintln!("{command:?}");
         }
 
-        match &self.options.action {
+        let result = match &self.options.action {
             ExecAction::Command(_) => match command.status() {
                 Ok(status) => {
                     if status.success() {
@@ -536,15 +579,16 @@ impl CommandBuilder<'_> {
             ExecAction::Echo => {
                 println!(
                     "{}",
-                    self.extra_args
-                        .iter()
+                    self.command
+                        .get_args()
                         .map(|arg| arg.to_string_lossy())
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
                 Ok(CommandResult::Success)
             }
-        }
+        };
+        result.map_err(XargsError::from)
     }
 }
 
@@ -874,12 +918,15 @@ fn process_input(
     mut args: Box<dyn ArgumentReader>,
     options: &InputProcessOptions,
 ) -> Result<CommandResult, XargsError> {
-    let mut current_builder = CommandBuilder::new(builder_options);
+    let mut current_builder = CommandBuilder::new(builder_options)?;
     let mut have_pending_command = false;
     let mut result = CommandResult::Success;
 
     while let Some(arg) = args.next()? {
         if let Err(ExhaustedCommandSpace { arg, out_of_chars }) = current_builder.add_arg(arg) {
+            if !have_pending_command {
+                return Err(XargsError::ArgumentTooLarge);
+            }
             if out_of_chars
                 && options.exit_if_pass_char_limit
                 && (options.max_args.is_some() || options.max_lines.is_some())
@@ -890,8 +937,8 @@ fn process_input(
                 result.combine(current_builder.execute()?);
             }
 
-            current_builder = CommandBuilder::new(builder_options);
-            if let Err(ExhaustedCommandSpace { .. }) = current_builder.add_arg(arg) {
+            current_builder = CommandBuilder::new(builder_options)?;
+            if current_builder.add_arg(arg).is_err() {
                 return Err(XargsError::ArgumentTooLarge);
             }
         }
@@ -1223,8 +1270,6 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }
         _ => ExecAction::Echo,
     };
-    let env = std::env::vars_os().collect();
-
     let mut limiters = LimiterCollection::new();
     if let Some(max_args) = options.max_args {
         limiters.add(MaxArgsCommandSizeLimiter::new(max_args));
@@ -1232,15 +1277,15 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     if let Some(max_lines) = options.max_lines {
         limiters.add(MaxLinesCommandSizeLimiter::new(max_lines));
     }
-    if let Some(max_chars) = options.max_chars {
-        limiters.add(MaxCharsCommandSizeLimiter::new(max_chars));
-    } else {
-        limiters.add(MaxCharsCommandSizeLimiter::new_default(&env));
-    }
-    limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
+    let max_chars = options
+        .max_chars
+        .unwrap_or_else(|| MaxCharsCommandSizeLimiter::new_default().max_chars);
+    limiters.add(MaxCharsCommandSizeLimiter::new(max_chars));
+    #[cfg(not(unix))]
+    limiters.add(MaxCharsCommandSizeLimiter::new(system_arg_max()));
 
     let mut builder_options =
-        CommandBuilderOptions::new(action, env, limiters, options.replace.clone()).map_err(
+        CommandBuilderOptions::new(action, limiters, options.replace.clone(), max_chars).map_err(
             |_| "Base command and environment are too large to fit into one command execution",
         )?;
 
@@ -1396,7 +1441,7 @@ mod tests {
 
     #[test]
     fn test_chars_limiter() {
-        // Room for exactly "abc" and "a", including terminators and pointers.
+        // Room for exactly "abc" and "a", including terminators.
         let max_chars = count_osstr_chars_for_exec(OsStr::new("abc"))
             + count_osstr_chars_for_exec(OsStr::new("a"));
         let mut limiter = MaxCharsCommandSizeLimiter::new(max_chars);
@@ -1422,13 +1467,11 @@ mod tests {
     }
 
     #[test]
-    fn test_default_chars_limiter_caps_system_limit() {
-        let env = HashMap::new();
-        let system = MaxCharsCommandSizeLimiter::new_system(&env);
-        let default = MaxCharsCommandSizeLimiter::new_default(&env);
-        // The default never exceeds 128 KiB nor what the system allows.
+    fn test_default_chars_limiter_caps_string_budget() {
+        let default = MaxCharsCommandSizeLimiter::new_default();
         assert!(default.max_chars <= 128 * 1024);
-        assert!(default.max_chars <= system.max_chars);
+        #[cfg(not(unix))]
+        assert!(default.max_chars <= system_arg_max());
     }
 
     #[test]
