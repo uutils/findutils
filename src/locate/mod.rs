@@ -556,13 +556,6 @@ fn path_exists(path: &Path, follow_symlinks: bool) -> bool {
 }
 
 fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
-    // glob metacharacters in a stored path aren't handled yet, so such entries are skipped. On
-    // Windows `\` is the path separator (present in every path), so it must not count here.
-    #[cfg(windows)]
-    const GLOB_METACHARS: &str = "*?[]";
-    #[cfg(not(windows))]
-    const GLOB_METACHARS: &str = r"*?[]\";
-
     let buf = crate::bytes_to_path(entry.to_bytes());
     let name = if config.basename {
         let Some(path) = buf.file_name() else {
@@ -587,17 +580,9 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     };
     let entry = name.to_string_lossy();
 
-    let has_metachars = entry.chars().any(|c| GLOB_METACHARS.contains(c));
+    // only metacharacters in the pattern are special; the stored path is plain text
     let patterns_match = if config.all {
-        if has_metachars {
-            // TODO: parse metacharacters
-            false
-        } else {
-            patterns.all_match(entry.as_ref())
-        }
-    } else if has_metachars {
-        // TODO: parse metacharacters
-        false
+        patterns.all_match(entry.as_ref())
     } else {
         patterns.any_match(entry.as_ref())
     };
