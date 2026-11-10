@@ -879,6 +879,17 @@ fn find_printf_backslash_c_runs_the_next_action() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_printf_output_comes_before_exec_output() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0"])
+        .args(&["-printf", "P:%p ", "-exec", "echo", "E:{}", ";"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("P:./test_data/simple E:./test_data/simple\n");
+}
+
+#[test]
 #[cfg(unix)] // %T+ prints local time; TZ only reliably selects it on unix
 fn find_printf_time_plus_fixed_width_fraction() {
     let temp_dir = Builder::new().prefix("find_time_plus_").tempdir().unwrap();
@@ -1933,6 +1944,8 @@ fn find_reports_stdout_write_error_once() {
         &["-print0"],
         &["-ls", "-ls"],
         &["-printf", "%p\n"],
+        &["-printf", "%p\\0"],
+        &["-printf", "%p "],
         &["-ls", "-printf", "%p\n"],
         &["-print", "-ls"],
         &["-print0", "-ls"],
