@@ -485,26 +485,17 @@ impl Iterator for DbReader {
         // read the actual path fragment
         let mut buf = Vec::new();
         self.reader.read_until(b'\0', &mut buf).ok()?;
-        let prefix = self.prev.as_ref().map(|s| {
-            s.to_bytes()
-                .iter()
-                .take(self.prefix as usize)
-                .collect::<Vec<_>>()
-        });
-        if (prefix.as_ref().map_or(0, std::vec::Vec::len) as isize) < size {
+        // the shared prefix count must stay within the previous entry
+        let prev = self.prev.as_ref().map_or(&[][..], |s| s.to_bytes());
+        let Some(prefix) = usize::try_from(self.prefix)
+            .ok()
+            .and_then(|len| prev.get(..len))
+        else {
             return Some(Err(Error::InvalidDb(
                 self.path.to_string_lossy().to_string(),
             )));
-        }
-        let res = CString::from_vec_with_nul(
-            prefix
-                .unwrap_or_default()
-                .into_iter()
-                .copied()
-                .chain(buf)
-                .collect(),
-        )
-        .ok()?;
+        };
+        let res = CString::from_vec_with_nul(prefix.iter().copied().chain(buf).collect()).ok()?;
         self.prev = Some(res.clone());
         Some(Ok(res))
     }
