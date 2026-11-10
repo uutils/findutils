@@ -1867,6 +1867,77 @@ fn find_lname_respects_symlink_following(
         .stdout_only(expected[usize::from(descendants)]);
 }
 
+// Follow expectations are ordered as [command-line roots, descendants].
+#[rstest::rstest]
+#[case::physical(&["-P"], &[], &[], [false; 2])]
+#[case::roots(&["-H"], &[], &[], [true, false])]
+#[case::logical(&["-L"], &[], &[], [true; 2])]
+#[case::follow(&[], &["-follow"], &[], [true; 2])]
+#[case::trailing_follow(&[], &[], &["-follow"], [true; 2])]
+fn find_printf_link_target_respects_symlink_following(
+    #[case] options: &[&str],
+    #[case] before_action: &[&str],
+    #[case] after_action: &[&str],
+    #[case] follows_links: [bool; 2],
+    #[values(false, true)] descendants: bool,
+) {
+    let temp_dir = Builder::new()
+        .prefix("find_printf_link_")
+        .tempdir()
+        .expect("create temp dir");
+    let root = temp_dir.path().join("tree");
+    let output = temp_dir.path().join("output");
+    fs::create_dir(&root).expect("create test tree");
+    File::create(root.join("file-target")).expect("create target file");
+    fs::create_dir(root.join("dir-target")).expect("create target directory");
+    #[cfg(unix)]
+    {
+        symlink("file-target", root.join("file-link")).expect("create file link");
+        symlink("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+    #[cfg(windows)]
+    {
+        symlink_file("file-target", root.join("file-link")).expect("create file link");
+        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+
+    let mut command = ucmd();
+    command.current_dir(&root).env("LC_ALL", "C").args(options);
+    if descendants {
+        command.args(&[".", "-mindepth", "1", "-maxdepth", "1", "-sorted"]);
+    } else {
+        command.args(&[
+            "broken-link",
+            "dir-link",
+            "dir-target",
+            "file-link",
+            "file-target",
+            "-maxdepth",
+            "0",
+        ]);
+    }
+    let expected = if follows_links[usize::from(descendants)] {
+        "<missing-target>\n<>\n<>\n<>\n<>\n"
+    } else {
+        "<missing-target>\n<dir-target>\n<>\n<file-target>\n<>\n"
+    };
+    command
+        .args(before_action)
+        .args(&["-printf", "<%l>\n", "-fprintf"])
+        .arg(&output)
+        .arg("<%l>\n")
+        .args(after_action)
+        .succeeds()
+        .no_stderr()
+        .stdout_only(expected);
+    assert_eq!(
+        fs::read(output).expect("read -fprintf output"),
+        expected.as_bytes()
+    );
+}
+
 #[test]
 fn find_fprintf() {
     let temp_dir = Builder::new().prefix("find_fprintf_").tempdir().unwrap();
