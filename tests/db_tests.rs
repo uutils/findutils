@@ -92,6 +92,36 @@ fn test_locate_statistics_without_pattern(#[case] extra: &[&str]) {
     assert!(count > 1, "{stdout}");
 }
 
+#[rstest]
+#[case::existing("--existing")]
+#[case::non_existing("--non-existing")]
+fn test_locate_statistics_without_pattern_existence(#[case] flag: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("db");
+    let present = dir.path().display().to_string();
+    let missing = dir.path().join("missing").display().to_string();
+    let mut contents = b"\0LOCATE02\0\0".to_vec();
+    for path in [&present, &missing] {
+        contents.extend_from_slice(path.as_bytes());
+        contents.extend_from_slice(b"\0\0");
+    }
+    contents.pop();
+    std::fs::write(&db, contents).unwrap();
+    let output = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args([
+            "--statistics",
+            flag,
+            &format!("--database={}", db.display()),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Matching Filenames: 1\n"), "{stdout}");
+    assert!(!stdout.contains("All Filenames"), "{stdout}");
+}
+
 #[test]
 fn test_locate_statistics_with_pattern_reports_matches() {
     let output = Command::cargo_bin("locate")
