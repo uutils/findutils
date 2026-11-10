@@ -14,6 +14,12 @@ run (it hung, crashed, or was renamed upstream) is reported under its own
 heading rather than being counted as an improvement: "no longer failing" and
 "no longer running" look identical if only the failure lists are compared.
 
+When the results carry a "suite_ref" (the revision of the external test suite
+they were produced from) and it differs from the reference's, the test suite
+itself changed, e.g. because the pinned GNU revision was bumped. Tests may then
+have been added, removed or rewritten, so differences are still reported but
+never fail the job; the reference catches up once the change lands on main.
+
 Adapted from the uutils sed/grep workflow.
 """
 
@@ -36,16 +42,16 @@ def load_ignore_list(ignore_file):
 
 
 def extract_test_results(json_data):
-    """Return (summary, {test_name: status}) from parsed JSON data."""
+    """Return (summary, {test_name: status}, suite_ref) from parsed JSON data."""
     if not json_data or "summary" not in json_data:
-        return {"total": 0, "passed": 0, "failed": 0, "skipped": 0}, {}
+        return {"total": 0, "passed": 0, "failed": 0, "skipped": 0}, {}, None
 
     summary = json_data["summary"]
     statuses = {
         test.get("name", "unknown"): test.get("status", "FAIL")
         for test in json_data.get("tests", [])
     }
-    return summary, statuses
+    return summary, statuses, json_data.get("suite_ref")
 
 
 def compare_results(current_file, reference_file, ignore_file=None, output_file=None):
@@ -54,14 +60,18 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
 
     try:
         with open(current_file, "r") as f:
-            current_summary, current_statuses = extract_test_results(json.load(f))
+            current_summary, current_statuses, current_ref = extract_test_results(
+                json.load(f)
+            )
     except Exception as e:
         print(f"Error loading current results: {e}")
         return 1
 
     try:
         with open(reference_file, "r") as f:
-            reference_summary, reference_statuses = extract_test_results(json.load(f))
+            reference_summary, reference_statuses, reference_ref = (
+                extract_test_results(json.load(f))
+            )
     except Exception as e:
         print(f"Error loading reference results: {e}")
         return 1
@@ -88,6 +98,10 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
 
     non_intermittent_new_failures = new_failures - ignore_set
 
+    # Only suites that record their revision opt into this; a reference
+    # produced before the field existed counts as a different revision.
+    suite_changed = current_ref is not None and current_ref != reference_ref
+
     no_changes = (
         pass_diff == 0
         and fail_diff == 0
@@ -105,6 +119,13 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
         return 0
 
     output_lines = []
+    if suite_changed:
+        output_lines.append(
+            f"Note: the test suite revision changed ({reference_ref or 'unknown'}"
+            f" -> {current_ref}); differences below may come from the test"
+            " suite update and do not fail this job."
+        )
+        output_lines.append("")
     output_lines.append("Test results comparison:")
     output_lines.append(
         f"  Current:   TOTAL: {current_summary.get('total', 0)} / PASSED: {current_summary.get('passed', 0)} / FAILED: {current_summary.get('failed', 0)} / SKIPPED: {current_summary.get('skipped', 0)}"
@@ -152,6 +173,13 @@ def compare_results(current_file, reference_file, ignore_file=None, output_file=
             f.write(output_text)
     else:
         print(output_text)
+
+    if non_intermittent_new_failures and suite_changed:
+        print(
+            f"WARNING: {len(non_intermittent_new_failures)} new test failures,"
+            " but the test suite revision changed; not failing"
+        )
+        return 0
 
     if non_intermittent_new_failures:
         print(

@@ -17,13 +17,18 @@ automake names start with "tests/"), so they can share one flat namespace.
 Output format (consumed by compare_test_results.py):
 
     {
+      "suite_ref": "<git commit of the GNU tree>",
       "summary": {"total": N, "passed": P, "failed": F, "skipped": S},
       "tests": [{"name": "...", "status": "PASS|FAIL|SKIP"}, ...]
     }
+
+"suite_ref" lets compare_test_results.py tell a changed test suite (after a
+bump of the pinned GNU revision) apart from a regression in our code.
 """
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -88,8 +93,10 @@ def collect(root):
             if not m:
                 continue
             status, rest = m.group(1), m.group(2)
-            # FAIL lines carry a trailing ", <reason>"; the name is the head.
-            name = rest.split(",", 1)[0].strip()
+            # The name is the leading token. FAIL lines carry a trailing
+            # ", <reason>", or ": <reason>" for checks done once per .exp file
+            # (fprintf-samefile: "FAIL: fprintf-samefile: expected output:").
+            name = re.split(r"[\s,:]", rest.strip(), maxsplit=1)[0]
             _record(tests, name, DEJAGNU[status])
 
     # automake per-test logs (skip the aggregate test-suite.log)
@@ -105,12 +112,36 @@ def collect(root):
     return tests
 
 
+def suite_ref(root):
+    """Return the revision of the GNU tree at `root`, or None.
+
+    A release tarball records its version in .tarball-version; a git
+    checkout is identified by its commit.
+    """
+    tarball_version = Path(root) / ".tarball-version"
+    if tarball_version.is_file():
+        version = tarball_version.read_text().strip()
+        if version:
+            return version
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return out.stdout.strip() or None
+
+
 def build(root):
     tests = collect(root)
     passed = sum(1 for s in tests.values() if s == "PASS")
     failed = sum(1 for s in tests.values() if s == "FAIL")
     skipped = sum(1 for s in tests.values() if s == "SKIP")
     return {
+        "suite_ref": suite_ref(root),
         "summary": {
             "total": len(tests),
             "passed": passed,
