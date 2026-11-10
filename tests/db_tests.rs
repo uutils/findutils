@@ -134,11 +134,36 @@ fn test_locate_ignore_case_plain_all() {
 
 #[test]
 fn test_locate_invalid_db() {
-    Command::cargo_bin("locate")
+    let assert = Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
         .args(["test_data", INVALID_DB_FLAG])
         .assert()
         .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    // the second record has a shared prefix count of -2, so only the first entry is valid
+    assert_eq!(stdout, "./test_data\n");
+    assert!(stderr.contains("corrupt or invalid"), "{stderr}");
+}
+
+// a LOCATE02 shared prefix count must stay within the previous entry (#967)
+#[rstest]
+#[case::negative(b"\0LOCATE02\0\x00/srv\0\xfe/q\0", "/srv\n")]
+#[case::past_end(b"\0LOCATE02\0\x00/srv\0\x03Q\0\x03R\0", "/srv\n/srQ\n")]
+#[case::past_end_first_entry(b"\0LOCATE02\0\x01/srv\0", "")]
+fn test_locate_rejects_out_of_range_prefix(#[case] db: &[u8], #[case] valid_entries: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bad.db");
+    std::fs::write(&path, db).unwrap();
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["/", &format!("--database={}", path.display())])
+        .assert()
+        .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert_eq!(stdout, valid_entries);
+    assert!(stderr.contains("corrupt or invalid"), "{stderr}");
 }
 
 #[test]
