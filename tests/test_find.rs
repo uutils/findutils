@@ -577,6 +577,65 @@ fn delete_on_dot_dir() {
     assert!(temp_dir.path().exists(), "temp dir should still exist");
 }
 
+/// Creates `keep/f` and `other` in a new temporary directory.
+fn prune_delete_tree() -> tempfile::TempDir {
+    let temp_dir = Builder::new()
+        .prefix("find_prune_delete_")
+        .tempdir()
+        .unwrap();
+    fs::create_dir(temp_dir.path().join("keep")).unwrap();
+    File::create(temp_dir.path().join("keep").join("f")).unwrap();
+    File::create(temp_dir.path().join("other")).unwrap();
+    temp_dir
+}
+
+#[test]
+fn find_prune_with_delete_is_rejected() {
+    for expression in [
+        &["-name", "keep", "-prune", "-o", "-type", "f", "-delete"][..],
+        &["-type", "f", "-delete", "-o", "-name", "keep", "-prune"],
+        &["(", "-prune", ")", "-delete"],
+    ] {
+        let temp_dir = prune_delete_tree();
+        ucmd()
+            .arg(temp_dir.path())
+            .args(expression)
+            .fails_with_code(1)
+            .stderr_only(format!(
+                "{PROGRAM}: The -delete action automatically turns on -depth, but -prune \
+                 does nothing when -depth is in effect.  If you want to carry on anyway, \
+                 just explicitly use the -depth option.\n"
+            ));
+
+        assert!(temp_dir.path().join("keep").join("f").exists());
+        assert!(temp_dir.path().join("other").exists());
+    }
+}
+
+#[test]
+fn find_prune_with_delete_and_explicit_depth_runs() {
+    for expression in [
+        &[
+            "-depth", "-name", "keep", "-prune", "-o", "-type", "f", "-delete",
+        ][..],
+        &[
+            "-name", "keep", "-prune", "-o", "-type", "f", "-delete", "-depth",
+        ],
+    ] {
+        let temp_dir = prune_delete_tree();
+        ucmd()
+            .arg(temp_dir.path())
+            .args(expression)
+            .succeeds()
+            .no_output();
+
+        // -prune does nothing under -depth, so keep/f is deleted too.
+        assert!(!temp_dir.path().join("keep").join("f").exists());
+        assert!(!temp_dir.path().join("other").exists());
+        assert!(temp_dir.path().join("keep").exists());
+    }
+}
+
 #[test]
 fn regex_types() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();

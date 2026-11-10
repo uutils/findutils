@@ -22,6 +22,12 @@ use walkdir::WalkDir;
 pub struct Config {
     same_file_system: bool,
     depth_first: bool,
+    /// Whether -depth (or -d) was given, rather than implied by -delete.
+    explicit_depth: bool,
+    /// Whether the expression uses -prune.
+    uses_prune: bool,
+    /// Whether the expression uses -delete.
+    uses_delete: bool,
     min_depth: usize,
     max_depth: usize,
     sorted_output: bool,
@@ -44,6 +50,9 @@ impl Default for Config {
         Self {
             same_file_system: false,
             depth_first: false,
+            explicit_depth: false,
+            uses_prune: false,
+            uses_delete: false,
             min_depth: 0,
             max_depth: usize::MAX,
             sorted_output: false,
@@ -341,7 +350,10 @@ fn process_dir(
                     *quit = true;
                     break;
                 }
-                if matcher_io.should_skip_current_dir() {
+                // -prune does nothing under -depth: the directory's contents
+                // have already been visited, and skipping now would skip the
+                // rest of its parent instead.
+                if matcher_io.should_skip_current_dir() && !config.depth_first {
                     it.skip_current_dir();
                 }
             }
