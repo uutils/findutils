@@ -2016,6 +2016,21 @@ fn find_ls_shows_allocated_blocks_and_link_target() {
         .stdout_contains(" -> sparse\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn find_ls_shows_device_numbers() {
+    use nix::sys::stat::{major, minor};
+    use std::os::unix::fs::MetadataExt;
+
+    let rdev = fs::metadata("/dev/null").unwrap().rdev();
+    let expected = format!(" {:>3}, {:>3} ", major(rdev), minor(rdev));
+
+    ucmd()
+        .args(&["/dev/null", "-ls"])
+        .succeeds()
+        .stdout_contains(expected);
+}
+
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
 // a file's owning uid/gid had no passwd/group entry; it must fall back to the
 // numeric id like GNU find. Creating such a file needs privilege to chown to an
