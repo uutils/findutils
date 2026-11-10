@@ -64,7 +64,7 @@ impl Ls {
         mut out: impl Write,
         print_error_message: bool,
     ) {
-        use std::os::unix::fs::MetadataExt;
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
         let metadata = file_info.metadata().unwrap();
 
@@ -80,7 +80,18 @@ impl Ls {
             uucore::entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string());
         let group =
             uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
-        let size = metadata.size();
+        // Device nodes have no size: the column holds their "major, minor" numbers.
+        let file_type = metadata.file_type();
+        let size = if file_type.is_char_device() || file_type.is_block_device() {
+            let rdev = metadata.rdev();
+            format!(
+                "{:>3}, {:>3}",
+                nix::sys::stat::major(rdev),
+                nix::sys::stat::minor(rdev)
+            )
+        } else {
+            metadata.size().to_string()
+        };
         let last_modified = {
             let system_time = metadata.modified().unwrap();
             let local: DateTime<chrono::Local> = system_time.into();
