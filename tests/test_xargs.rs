@@ -645,6 +645,39 @@ fn xargs_arg_file_missing_strips_errno() {
         .stderr_str_check(|s| !s.contains("(os error"));
 }
 
+#[test]
+fn xargs_arg_file_leading_dash() {
+    // A filename that starts with '-' is still a valid --arg-file / -a path.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("-foo"), "hello\n").unwrap();
+
+    for args in [
+        vec!["-a", "-foo"],
+        vec!["--arg-file", "-foo"],
+        vec!["--arg-file=-foo"],
+    ] {
+        ucmd()
+            .current_dir(dir.path())
+            .args(&args)
+            .succeeds()
+            .stdout_only("hello\n");
+    }
+}
+
+#[test]
+fn xargs_numeric_option_leading_dash_is_the_value() {
+    // A required value that starts with '-' should be taken as the option
+    // value and then rejected, not reported as an unexpected argument.
+    // Empty stdin: the value is rejected before reading input, so writing
+    // actual content races with xargs exiting and causes a broken pipe.
+    ucmd()
+        .args(&["-n", "-1"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_contains("invalid")
+        .stderr_str_check(|s| !s.contains("unexpected argument"));
+}
+
 #[cfg(unix)]
 #[test]
 fn xargs_non_utf8_argument_is_rejected_gracefully() {
