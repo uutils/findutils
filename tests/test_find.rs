@@ -401,6 +401,19 @@ fn files0_streams_before_invalid_utf8() {
         .stderr_contains("invalid utf-8 sequence");
 }
 
+/// A pending `-exec ... +` batch still runs when reading a later
+/// `-files0-from` entry fails, and the read error is still reported.
+#[cfg(unix)]
+#[test]
+fn files0_read_error_still_runs_exec_plus_batch() {
+    ucmd()
+        .pipe_in(b"./test_data/simple/abbbc\0\xff\0" as &[u8])
+        .args(&["-files0-from", "-", "-exec", "echo", "{}", "+"])
+        .fails()
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_contains("invalid utf-8 sequence");
+}
+
 /// A starting point given on the command line can't be mixed with
 /// -files0-from, even when it is `.`, the same path find uses by default.
 #[test]
