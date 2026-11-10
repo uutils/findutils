@@ -45,6 +45,30 @@ This is most useful when you want reproducible output: comparing two trees,
 generating a manifest, or writing a test whose expected output is a fixed list
 of lines.
 
+## `UUTILS_PATH_SEPARATOR`: `/` on Windows
+
+On Windows, `find` joins the paths it walks with `\`, so `find src -name '*.rs'`
+prints `src\find\mod.rs`. Shells such as MSYS2, Cygwin and Git Bash, and scripts
+written for them, expect `/`, and a `-path` or `-prune` pattern written with `/`
+matches nothing. Setting `UUTILS_PATH_SEPARATOR=/` makes every path `find`
+produces use `/` instead: what it prints, what `-path`, `-wholename` and
+`-regex` match against, the `%p`, `%h` and `%P` directives of `-printf`, and the
+`{}` handed to `-exec` and `-ok`.
+
+```console
+PS> find src -path '*/matchers/*' -name path.rs
+PS> $env:UUTILS_PATH_SEPARATOR = '/'
+PS> find src -path '*/matchers/*' -name path.rs
+src/find/matchers/path.rs
+```
+
+MSYS2 and Git Bash rewrite an environment variable set to a bare `/` into the
+folder they are installed in before `find` sees it, so
+`UUTILS_PATH_SEPARATOR=slash` does the same and survives them. Any other value,
+or none, keeps `\`. Verbatim (`\\?\`) and device (`\\.\`) paths keep their
+spelling. On other platforms the variable has no effect. ripgrep offers the same
+choice as `--path-separator`.
+
 ## Rich expression diagnostics
 
 `find` expressions get long, and a lone error line does not say *where* in the
