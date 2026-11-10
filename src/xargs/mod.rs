@@ -1158,7 +1158,6 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('e')
                 .long(options::EOF)
                 .num_args(0..=1)
-                .allow_hyphen_values(true)
                 .value_name("eof-string")
                 .help("Alias for -E")
                 .overrides_with(options::EOF)

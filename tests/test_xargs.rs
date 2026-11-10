@@ -620,6 +620,20 @@ fn xargs_bare_eof_disables_marker() {
 }
 
 #[test]
+fn xargs_eof_does_not_consume_next_option() {
+    // GNU: -e and --eof take an optional attached or --eof= value, and do not
+    // swallow a following option. `xargs --eof -l` still enables line mode.
+    // `-E` is different: it requires a value, so `-E -l` uses "-l" as the EOF string.
+    for flag in ["-e", "--eof"] {
+        ucmd()
+            .args(&[flag, "-l"])
+            .pipe_in("one\ntwo\n")
+            .succeeds()
+            .stdout_only("one\ntwo\n");
+    }
+}
+
+#[test]
 fn xargs_eof_with_delimiter() {
     ucmd()
         .args(&["-0", "-Ecd"])
