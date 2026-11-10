@@ -63,10 +63,6 @@ impl Matcher for NoGroupMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         use nix::unistd::Gid;
 
-        if file_info.path().is_symlink() {
-            return false;
-        }
-
         let Ok(metadata) = file_info.metadata() else {
             return true;
         };
