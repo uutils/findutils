@@ -528,6 +528,31 @@ fn xargs_replace() {
 }
 
 #[test]
+fn xargs_replace_default_command() {
+    // The default command is echo with no initial arguments, so the replace
+    // token never appears and each input item should produce a blank line.
+    for args in [vec!["-I", "R"], vec!["-i"], vec!["--replace"]] {
+        ucmd()
+            .args(&args)
+            .pipe_in("hello\nworld\n")
+            .succeeds()
+            .stdout_only("\n\n");
+    }
+
+    ucmd()
+        .args(&["-I", "R", "echo"])
+        .pipe_in("hello\nworld\n")
+        .succeeds()
+        .stdout_only("\n\n");
+
+    ucmd()
+        .args(&["-I", "R", "echo", "R"])
+        .pipe_in("hello\nworld\n")
+        .succeeds()
+        .stdout_only("hello\nworld\n");
+}
+
+#[test]
 fn xargs_replace_multiple_lines() {
     ucmd()
         .args(&["-I", "_", "echo", "[_]"])
