@@ -696,7 +696,8 @@ fn format_directive<'entry>(
         FormatDirective::StartingPoint => get_starting_point(file_info).to_string_lossy(),
 
         FormatDirective::SymlinkTarget => {
-            if file_info.path_is_symlink() {
+            // Followed links have their target's type; dangling links remain symlinks.
+            if file_info.file_type().is_symlink() {
                 fs::read_link(file_info.path())?
                     .to_string_lossy()
                     .into_owned()
