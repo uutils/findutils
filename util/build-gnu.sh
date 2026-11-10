@@ -2,13 +2,22 @@
 
 set -e
 
+# GNU findutils release the tests come from. The tarball is an unmodified
+# copy in uutils/thirdparty-artifacts; to upgrade, publish the new release
+# there, then update both values.
+GNU_VERSION="4.11.0"
+GNU_SHA256="bfd19cb06cc71f3352d567e90284d8cdac02ac89774bbeadf0b533b0c11432fd"
+
 # Repository root (where util/ lives), captured before we cd into the GNU tree.
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Download the GNU tree unless one (e.g. a git clone) is already there.
 if test ! -d ../findutils.gnu; then
-    echo "Could not find ../findutils.gnu"
-    echo "git clone https://git.savannah.gnu.org/git/findutils.git findutils.gnu"
-    exit 1
+    tarball="../findutils-${GNU_VERSION}.tar.xz"
+    curl -fsSL -o "${tarball}" "https://github.com/uutils/thirdparty-artifacts/releases/download/findutils-${GNU_VERSION}/findutils-${GNU_VERSION}.tar.xz"
+    echo "${GNU_SHA256}  ${tarball}" | sha256sum -c
+    mkdir ../findutils.gnu
+    tar -xJf "${tarball}" -C ../findutils.gnu --strip-components=1
 fi
 
 # build the rust implementation
@@ -19,9 +28,12 @@ cp target/"${PROFILE}"/xargs ../findutils.gnu/xargs.rust
 
 # Clone and build upstream repo
 cd ../findutils.gnu
+# A git checkout needs bootstrapping; a release tarball ships configure.
 if test ! -f configure; then
     ./bootstrap
-    # The pinned gnulib does not build in C23 mode (default for newer GCC)
+fi
+if test ! -f Makefile; then
+    # Older gnulib does not build in C23 mode (default for newer GCC)
     ./configure --quiet CFLAGS="${CFLAGS:--O2} -std=gnu17"
     make -j "$(nproc)"
 fi
