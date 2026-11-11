@@ -878,6 +878,45 @@ fn find_printf_backslash_c_runs_the_next_action() {
         .stdout_only("simple|\nabbbc|\nsubdir|\nABBBC|\n");
 }
 
+#[rstest::rstest]
+#[case::incomplete_directive(r"%f\c%", "simple", b"")]
+#[case::unknown_directive(r"%f\c%Q", "simple", b"")]
+#[case::unknown_escape(r"%f\c\q", "simple", b"")]
+#[case::octal_escape_after_stop(r"%f\c\377", "simple", b"")]
+#[case::escaped_backslash(r"\\c%f", r"\csimple", b"")]
+#[case::prior_escape_warning(r"\q\c%", r"\q", b"find: warning: unrecognized escape '\\q'\n")]
+#[case::prior_directive_warning(
+    r"%Q\c%",
+    "%Q",
+    b"find: warning: unrecognized format directive '%Q'\n"
+)]
+fn find_printf_and_fprintf_backslash_c_ignores_remaining_format(
+    #[case] format: &str,
+    #[case] expected: &str,
+    #[case] expected_stderr: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let starting_point = fix_up_slashes("test_data/simple");
+    ucmd()
+        .arg(&starting_point)
+        .args(&["-maxdepth", "0", "-printf", format, "-printf", "|next\n"])
+        .succeeds()
+        .stderr_is_bytes(expected_stderr)
+        .stdout_is_bytes(format!("{expected}|next\n").as_bytes());
+
+    let temp_dir = Builder::new().prefix("find_fprintf_stop_").tempdir()?;
+    let output = temp_dir.path().join("out");
+    ucmd()
+        .arg(&starting_point)
+        .args(&["-maxdepth", "0", "-fprintf"])
+        .arg(&output)
+        .args(&[format, "-printf", "|next\n"])
+        .succeeds()
+        .stderr_is_bytes(expected_stderr)
+        .stdout_is_bytes(b"|next\n");
+    assert_eq!(fs::read(output)?, expected.as_bytes());
+    Ok(())
+}
+
 #[test]
 #[cfg(unix)]
 fn find_printf_output_comes_before_exec_output() {
