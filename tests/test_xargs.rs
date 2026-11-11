@@ -670,12 +670,14 @@ fn xargs_numeric_option_leading_dash_is_the_value() {
     // value and then rejected, not reported as an unexpected argument.
     // Empty stdin: the value is rejected before reading input, so writing
     // actual content races with xargs exiting and causes a broken pipe.
-    ucmd()
-        .args(&["-n", "-1"])
-        .pipe_in("")
-        .fails_with_code(1)
-        .stderr_contains("invalid")
-        .stderr_str_check(|s| !s.contains("unexpected argument"));
+    for flag in ["-n", "-d", "-L", "-s", "-P"] {
+        ucmd()
+            .args(&[flag, "-1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("invalid")
+            .stderr_str_check(|s| !s.contains("unexpected argument"));
+    }
 }
 
 #[cfg(unix)]
