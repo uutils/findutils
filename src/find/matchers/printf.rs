@@ -400,7 +400,12 @@ impl FormatStringParser<'_> {
                 '%' => self.parse_format_specifier()?,
                 _ => panic!("{}", "Stopped at unexpected character: {self.string}"),
             };
+            // Stop parsing the format at \c and retain the flush component.
+            let is_flush = component == FormatComponent::Flush;
             components.push(component);
+            if is_flush {
+                return Ok(FormatString { components });
+            }
         }
 
         if !self.string.is_empty() {
@@ -1064,7 +1069,6 @@ mod tests {
                 FormatComponent::Byte(b'a'),
                 FormatComponent::Literal("de".to_owned()),
                 FormatComponent::Flush,
-                FormatComponent::Literal("f".to_owned())
             ]
         );
 
