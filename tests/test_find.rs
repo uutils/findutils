@@ -1807,6 +1807,25 @@ fn find_follow() {
         .no_stderr();
 }
 
+/// Creates file and directory targets with valid and dangling links
+/// for the `-lname`/`-ilname` and `%l` tests.
+fn create_symlink_following_fixture(root: &Path) {
+    File::create(root.join("file-target")).expect("create target file");
+    fs::create_dir(root.join("dir-target")).expect("create target directory");
+    #[cfg(unix)]
+    {
+        symlink("file-target", root.join("file-link")).expect("create file link");
+        symlink("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+    #[cfg(windows)]
+    {
+        symlink_file("file-target", root.join("file-link")).expect("create file link");
+        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+}
+
 // Expected outputs are ordered as [command-line roots, descendants].
 #[rstest::rstest]
 #[case::physical(&["-P"], &[], &[], ["broken-link\ndir-link\nfile-link\n"; 2])]
@@ -1827,20 +1846,7 @@ fn find_lname_respects_symlink_following(
         .tempdir()
         .expect("create temp dir");
     let root = temp_dir.path();
-    File::create(root.join("file-target")).expect("create target file");
-    fs::create_dir(root.join("dir-target")).expect("create target directory");
-    #[cfg(unix)]
-    {
-        symlink("file-target", root.join("file-link")).expect("create file link");
-        symlink("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink("missing-target", root.join("broken-link")).expect("create broken link");
-    }
-    #[cfg(windows)]
-    {
-        symlink_file("file-target", root.join("file-link")).expect("create file link");
-        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
-    }
+    create_symlink_following_fixture(root);
 
     let mut command = ucmd();
     command.current_dir(root).env("LC_ALL", "C").args(options);
@@ -1888,20 +1894,7 @@ fn find_printf_link_target_respects_symlink_following(
     let root = temp_dir.path().join("tree");
     let output = temp_dir.path().join("output");
     fs::create_dir(&root).expect("create test tree");
-    File::create(root.join("file-target")).expect("create target file");
-    fs::create_dir(root.join("dir-target")).expect("create target directory");
-    #[cfg(unix)]
-    {
-        symlink("file-target", root.join("file-link")).expect("create file link");
-        symlink("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink("missing-target", root.join("broken-link")).expect("create broken link");
-    }
-    #[cfg(windows)]
-    {
-        symlink_file("file-target", root.join("file-link")).expect("create file link");
-        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
-    }
+    create_symlink_following_fixture(&root);
 
     let mut command = ucmd();
     command.current_dir(&root).env("LC_ALL", "C").args(options);
