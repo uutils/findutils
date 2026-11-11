@@ -1014,6 +1014,65 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     }
 }
 
+/// Rewrite `-eVALUE` to `-e=VALUE` so clap `require_equals` accepts GNU's
+/// attached short form, while a separate word after `-e`/`--eof` stays the
+/// command. Values of other options (for example `-E -end`) are left alone.
+fn attach_eof_short_equals(args: &[&str]) -> Vec<String> {
+    const TAKES_SEPARATE_VALUE: &[&str] = &[
+        "-a",
+        "--arg-file",
+        "-d",
+        "--delimiter",
+        "-E",
+        "-n",
+        "--max-args",
+        "-s",
+        "--max-chars",
+        "-L",
+        "--max-lines",
+        "-P",
+        "--max-procs",
+        "-I",
+    ];
+
+    let mut out = Vec::with_capacity(args.len());
+    let mut next_is_value = false;
+    let mut seen_double_dash = false;
+    for (i, arg) in args.iter().enumerate() {
+        if i == 0 {
+            out.push((*arg).to_owned());
+            continue;
+        }
+        if next_is_value {
+            out.push((*arg).to_owned());
+            next_is_value = false;
+            continue;
+        }
+        if seen_double_dash || *arg == "--" {
+            if *arg == "--" {
+                seen_double_dash = true;
+            }
+            out.push((*arg).to_owned());
+            continue;
+        }
+        if arg.starts_with("-e")
+            && !arg.starts_with("-e=")
+            && !arg.starts_with("--")
+            && arg.len() > 2
+        {
+            out.push(format!("-e={}", &arg[2..]));
+            continue;
+        }
+        if let Some(name) = arg.split('=').next() {
+            if TAKES_SEPARATE_VALUE.contains(&name) && !arg.contains('=') {
+                next_is_value = true;
+            }
+        }
+        out.push((*arg).to_owned());
+    }
+    out
+}
+
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     let matches = clap::Command::new("xargs")
         .version(crate_version!())
@@ -1158,12 +1217,14 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('e')
                 .long(options::EOF)
                 .num_args(0..=1)
+                .require_equals(true)
+                .allow_hyphen_values(true)
                 .value_name("eof-string")
                 .help("Alias for -E")
                 .overrides_with(options::EOF)
                 .value_parser(clap::value_parser!(String)),
         )
-        .try_get_matches_from(args);
+        .try_get_matches_from(attach_eof_short_equals(args));
 
     let matches = match matches {
         Ok(m) => m,
@@ -1305,6 +1366,34 @@ pub fn xargs_main(args: &[&str]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attach_eof_short_equals_rewrites_attached_values() {
+        assert_eq!(
+            attach_eof_short_equals(&["xargs", "-ecd"]),
+            ["xargs", "-e=cd"]
+        );
+        assert_eq!(
+            attach_eof_short_equals(&["xargs", "-e-end"]),
+            ["xargs", "-e=-end"]
+        );
+        assert_eq!(
+            attach_eof_short_equals(&["xargs", "-E", "-end"]),
+            ["xargs", "-E", "-end"]
+        );
+        assert_eq!(
+            attach_eof_short_equals(&["xargs", "--eof", "cd"]),
+            ["xargs", "--eof", "cd"]
+        );
+        assert_eq!(
+            attach_eof_short_equals(&["xargs", "--arg-file", "-e-file"]),
+            ["xargs", "--arg-file", "-e-file"]
+        );
+        assert_eq!(
+            attach_eof_short_equals(&["xargs", "--", "-ecd"]),
+            ["xargs", "--", "-ecd"]
+        );
+    }
 
     fn make_arg_init(s: &str) -> Argument {
         Argument {

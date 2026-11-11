@@ -580,7 +580,7 @@ fn xargs_version() {
 
 #[test]
 fn xargs_eof() {
-    for option_style in [vec!["-ecd"], vec!["-E", "cd"], vec!["--eof", "cd"]] {
+    for option_style in [vec!["-ecd"], vec!["-E", "cd"], vec!["--eof=cd"]] {
         ucmd()
             .args(option_style.as_slice())
             .pipe_in("ab cd ef")
@@ -597,7 +597,7 @@ fn xargs_eof() {
 
 #[test]
 fn xargs_empty_eof() {
-    for option_style in [vec!["-E", ""], vec!["-e", ""], vec!["--eof="]] {
+    for option_style in [vec!["-E", ""], vec!["-e="], vec!["--eof="]] {
         ucmd()
             .args(option_style.as_slice())
             .arg("-n1")
@@ -630,6 +630,27 @@ fn xargs_eof_does_not_consume_next_option() {
             .pipe_in("one\ntwo\n")
             .succeeds()
             .stdout_only("one\ntwo\n");
+    }
+}
+
+#[test]
+fn xargs_eof_separate_word_is_the_command() {
+    // GNU: a word after --eof is the command, not the EOF string.
+    ucmd()
+        .args(&["--eof", "echo", "X"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_only("X hello\n");
+}
+
+#[test]
+fn xargs_eof_attached_hyphen_value() {
+    for flag in ["-e-end", "--eof=-end"] {
+        ucmd()
+            .arg(flag)
+            .pipe_in("ab -end ef")
+            .succeeds()
+            .stdout_only("ab\n");
     }
 }
 
