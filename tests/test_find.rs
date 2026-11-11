@@ -1230,10 +1230,22 @@ fn first_unmapped_id(start: u32, is_unmapped: impl Fn(u32) -> bool) -> u32 {
         .expect("an unmapped id")
 }
 
+/// Variables that `fakeroot` sets alongside `LD_PRELOAD`. `UCommand` clears
+/// the environment and keeps only `LD_PRELOAD`, so without these `find` would
+/// not reach the fakeroot daemon and would see the real owners.
+#[cfg(unix)]
+const FAKEROOT_ENV: [&str; 3] = ["FAKEROOTKEY", "FAKED_MODE", "LD_LIBRARY_PATH"];
+
 /// Runs `find OPTION DIR TEST` and returns its output lines, sorted.
 #[cfg(unix)]
 fn sorted_find_output(option: &str, dir: &Path, test: &str) -> Vec<String> {
-    let result = ucmd().arg(option).arg(dir).arg(test).succeeds();
+    let mut cmd = ucmd();
+    for key in FAKEROOT_ENV {
+        if let Some(value) = std::env::var_os(key) {
+            cmd.env(key, value);
+        }
+    }
+    let result = cmd.arg(option).arg(dir).arg(test).succeeds();
     let mut lines: Vec<String> = result.stdout_str().lines().map(String::from).collect();
     lines.sort();
     lines
@@ -1245,7 +1257,8 @@ fn find_nouser_nogroup_match_unowned_symlinks() {
     use nix::unistd::{Gid, Group, Uid, User};
     use std::os::unix::fs::lchown;
 
-    // Giving a file an owner without a passwd/group entry needs root.
+    // Giving a file an owner without a passwd/group entry needs root, real or
+    // under `fakeroot` (as CI runs this test).
     if !Uid::effective().is_root() {
         return;
     }
