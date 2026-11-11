@@ -534,19 +534,14 @@ impl CommandBuilder<'_> {
                 Err(e) => Err(CommandExecutionError::CannotRun(e)),
             },
             ExecAction::Echo => {
-                // With -I/-i/--replace, input items are substituted into the
-                // initial arguments, not appended. The built-in echo has no
-                // initial arguments, so each item produces a blank line.
-                let printed = if self.options.replace.is_some() {
-                    String::new()
-                } else {
-                    self.extra_args
-                        .iter()
+                println!(
+                    "{}",
+                    command
+                        .get_args()
                         .map(|arg| arg.to_string_lossy())
                         .collect::<Vec<_>>()
                         .join(" ")
-                };
-                println!("{printed}");
+                );
                 Ok(CommandResult::Success)
             }
         }
