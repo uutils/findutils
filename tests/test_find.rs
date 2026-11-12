@@ -436,6 +436,38 @@ fn files0_stdin_with_ok_is_rejected() {
     }
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn files0_dev_stdin_with_ok_is_rejected() {
+    for action in ["-ok", "-okdir"] {
+        ucmd()
+            .args(&["-files0-from", "/dev/stdin", action, "echo", "{}", ";"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("standard input");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn files0_same_file_as_stdin_is_rejected() {
+    let temp_dir = Builder::new().tempdir().unwrap();
+    let list = temp_dir.path().join("list.txt");
+
+    fs::write(&list, b"test_data/simple\0").unwrap();
+
+    for action in ["-ok", "-okdir"] {
+        ucmd()
+            .arg("-files0-from")
+            .arg(&list)
+            .args(&[action, "echo", "{}", ";"])
+            .set_stdin(File::open(&list).unwrap())
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("standard input");
+    }
+}
+
 /// Reading the starting points from a file leaves stdin free for the prompts,
 /// so the combination is allowed.
 #[test]

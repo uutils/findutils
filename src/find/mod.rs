@@ -14,6 +14,8 @@ use std::error::Error;
 #[cfg(unix)]
 use std::io::IsTerminal;
 use std::io::{self, stderr, stdout, BufRead, BufReader, Write};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -170,12 +172,18 @@ struct Files0Paths {
 
 impl Files0Paths {
     /// Open the source named by `-files0-from`; `-` means standard input.
-    fn open(name: &str) -> Result<Self, Box<dyn Error>> {
+    fn open(name: &str, interactive_exec: bool) -> Result<Self, Box<dyn Error>> {
         let reader: Box<dyn BufRead> = if name == "-" {
             Box::new(BufReader::new(io::stdin()))
         } else {
             let file = std::fs::File::open(name)
                 .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
+
+            #[cfg(unix)]
+            if interactive_exec && is_file_stdin(&file)? {
+                return Err(format!("when -ok or -okdir is in use, the option -files0-from cannot also read from standard input, \
+                    but the file ({}) used for -files0-from appears to refer to the same file as the standard input", name).into());
+            }
             Box::new(BufReader::new(file))
         };
         Ok(Self { reader })
@@ -271,7 +279,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                  with -ok, -okdir",
             ));
         }
-        files0_paths = Some(Files0Paths::open(name)?);
+        files0_paths = Some(Files0Paths::open(name, config.interactive_exec)?);
         paths.clear();
     }
     Ok(ParsedInfo {
@@ -280,6 +288,17 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         files0_paths,
         config,
     })
+}
+
+#[cfg(unix)]
+fn is_file_stdin(file: &std::fs::File) -> std::io::Result<bool> {
+    let file_metadata = file.metadata()?;
+    let stdin_metadata = nix::sys::stat::fstat(io::stdin())?;
+
+    Ok(
+        file_metadata.dev() == stdin_metadata.st_dev
+            && file_metadata.ino() == stdin_metadata.st_ino,
+    )
 }
 
 fn process_dir(
