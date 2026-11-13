@@ -816,6 +816,9 @@ impl Printf {
             }
         }
 
+        // Flush like -print does, so that write errors are reported and the
+        // output comes before that of any later -exec.
+        out.flush()?;
         result
     }
 
@@ -923,6 +926,38 @@ mod tests {
                     .print(&abbbc, FailingWriter(ErrorKind::Other))
                     .map_err(|error| error.kind()),
                 Err(ErrorKind::Other)
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Accepts every write but fails to flush, like a buffered stdout on a
+    /// full disk.
+    struct FailingFlushWriter;
+
+    impl Write for FailingFlushWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(ErrorKind::StorageFull.into())
+        }
+    }
+
+    #[test]
+    fn print_flushes_its_output() -> Result<(), Box<dyn Error>> {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+
+        for format in ["literal", "%p", "%p\\0", "%p\\n", "\\c"] {
+            let printf = Printf::new(format, None)?;
+            assert_eq!(
+                printf
+                    .print(&abbbc, FailingFlushWriter)
+                    .map_err(|error| error.kind()),
+                Err(ErrorKind::StorageFull),
+                "format {format:?}"
             );
         }
 

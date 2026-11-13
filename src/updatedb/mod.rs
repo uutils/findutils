@@ -13,7 +13,10 @@ use std::{
     time::SystemTime,
 };
 
-use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{
+    builder::{PossibleValuesParser, TypedValueParser},
+    crate_version, value_parser, Arg, ArgAction, ArgMatches, Command,
+};
 use uucore::error::{strip_errno, UResult, USimpleError};
 
 use crate::find::{find_main, Dependencies};
@@ -167,7 +170,7 @@ fn uu_app() -> Command {
             Arg::new("dbformat")
                 .long("dbformat")
                 .require_equals(true)
-                .value_parser(["LOCATE02"])
+                .value_parser(PossibleValuesParser::new(["LOCATE02"]).map(|_| DbFormat::Locate02))
                 .action(ArgAction::Set),
         )
 }

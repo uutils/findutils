@@ -536,8 +536,8 @@ impl CommandBuilder<'_> {
             ExecAction::Echo => {
                 println!(
                     "{}",
-                    self.extra_args
-                        .iter()
+                    command
+                        .get_args()
                         .map(|arg| arg.to_string_lossy())
                         .collect::<Vec<_>>()
                         .join(" ")
