@@ -87,7 +87,15 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
                         // matching either byte alone let `+ 2` overshoot a char boundary.
                         let closer = format!("{delim}]");
                         let end = rest.find(closer.as_str())? + 2;
-                        expr.push_str(&rest[..end]);
+                        if delim == ':' && &rest[..end] == "digit:]" {
+                            // POSIX limits [:digit:] to 0-9 in every locale, but
+                            // Oniguruma uses its Unicode table (fullwidth and
+                            // Arabic-Indic digits too), so spell out the range.
+                            expr.truncate(expr.len() - 2);
+                            expr.push_str("0-9");
+                        } else {
+                            expr.push_str(&rest[..end]);
+                        }
                         chars = rest[end..].chars();
                     }
                 }
@@ -178,6 +186,7 @@ impl Pattern {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[track_caller]
     fn assert_glob_regex(glob: &str, regex: &str) {
@@ -215,6 +224,21 @@ mod tests {
             r"[!]!.*[\[.].][=]=][:space:]-]",
             r"[^]!.*[\[.].][=]=][:space:]-]",
         );
+    }
+
+    #[test]
+    fn digit_class_is_ascii_range() {
+        assert_glob_regex(r"[[:digit:]]*", r"[0-9].*");
+        assert_glob_regex(r"[![:digit:]a]", r"[^0-9a]");
+    }
+
+    #[rstest]
+    #[case("7", true)]
+    #[case("\u{ff17}", false)] // FULLWIDTH DIGIT SEVEN
+    #[case("\u{0667}", false)] // ARABIC-INDIC DIGIT SEVEN
+    fn digit_class_is_ascii_only(#[case] name: &str, #[case] expected: bool) {
+        assert_eq!(Pattern::new("[[:digit:]]", false).matches(name), expected);
+        assert_eq!(Pattern::new("[![:digit:]]", false).matches(name), !expected);
     }
 
     #[test]
