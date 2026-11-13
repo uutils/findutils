@@ -968,6 +968,17 @@ fn find_printf_backslash_c_runs_the_next_action() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_printf_output_comes_before_exec_output() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0"])
+        .args(&["-printf", "P:%p ", "-exec", "echo", "E:{}", ";"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("P:./test_data/simple E:./test_data/simple\n");
+}
+
+#[test]
 #[cfg(unix)] // %T+ prints local time; TZ only reliably selects it on unix
 fn find_printf_time_plus_fixed_width_fraction() {
     let temp_dir = Builder::new().prefix("find_time_plus_").tempdir().unwrap();
@@ -1309,6 +1320,77 @@ fn find_inum() {
         .fails()
         .stderr_contains("not available on this platform")
         .no_stdout();
+}
+
+/// Returns the first id from `start` for which `is_unmapped` holds.
+#[cfg(unix)]
+fn first_unmapped_id(start: u32, is_unmapped: impl Fn(u32) -> bool) -> u32 {
+    (start..u32::MAX)
+        .find(|&id| is_unmapped(id))
+        .expect("an unmapped id")
+}
+
+/// Variables that `fakeroot` sets alongside `LD_PRELOAD`. `UCommand` clears
+/// the environment and keeps only `LD_PRELOAD`, so without these `find` would
+/// not reach the fakeroot daemon and would see the real owners.
+#[cfg(unix)]
+const FAKEROOT_ENV: [&str; 3] = ["FAKEROOTKEY", "FAKED_MODE", "LD_LIBRARY_PATH"];
+
+/// Runs `find OPTION DIR TEST` and returns its output lines, sorted.
+#[cfg(unix)]
+fn sorted_find_output(option: &str, dir: &Path, test: &str) -> Vec<String> {
+    let mut cmd = ucmd();
+    for key in FAKEROOT_ENV {
+        if let Some(value) = std::env::var_os(key) {
+            cmd.env(key, value);
+        }
+    }
+    let result = cmd.arg(option).arg(dir).arg(test).succeeds();
+    let mut lines: Vec<String> = result.stdout_str().lines().map(String::from).collect();
+    lines.sort();
+    lines
+}
+
+#[cfg(unix)]
+#[test]
+fn find_nouser_nogroup_match_unowned_symlinks() {
+    use nix::unistd::{Gid, Group, Uid, User};
+    use std::os::unix::fs::lchown;
+
+    // Giving a file an owner without a passwd/group entry needs root, real or
+    // under `fakeroot` (as CI runs this test).
+    if !Uid::effective().is_root() {
+        return;
+    }
+
+    let unmapped_uid = first_unmapped_id(54321, |id| {
+        matches!(User::from_uid(Uid::from_raw(id)), Ok(None))
+    });
+    let unmapped_gid = first_unmapped_id(54321, |id| {
+        matches!(Group::from_gid(Gid::from_raw(id)), Ok(None))
+    });
+
+    let temp_dir = Builder::new().prefix("find_nouser_").tempdir().unwrap();
+    let dir = temp_dir.path();
+    // A link to a file with a known owner, and a dangling link, both unowned.
+    File::create(dir.join("owned")).unwrap();
+    symlink("owned", dir.join("orphan_link")).unwrap();
+    symlink("missing", dir.join("dangling")).unwrap();
+    for link in ["orphan_link", "dangling"] {
+        lchown(dir.join(link), Some(unmapped_uid), Some(unmapped_gid)).unwrap();
+    }
+
+    let path_of = |name: &str| dir.join(name).to_string_lossy().into_owned();
+    let both_links = vec![path_of("dangling"), path_of("orphan_link")];
+    let dangling_only = vec![path_of("dangling")];
+
+    for test in ["-nouser", "-nogroup"] {
+        // Without following, the link's own owner counts.
+        assert_eq!(sorted_find_output("-P", dir, test), both_links, "{test}");
+        assert_eq!(sorted_find_output("-H", dir, test), both_links, "{test}");
+        // With -L, the target's owner counts, except for a dangling link.
+        assert_eq!(sorted_find_output("-L", dir, test), dangling_only, "{test}");
+    }
 }
 
 #[cfg(unix)]
@@ -2022,6 +2104,8 @@ fn find_reports_stdout_write_error_once() {
         &["-print0"],
         &["-ls", "-ls"],
         &["-printf", "%p\n"],
+        &["-printf", "%p\\0"],
+        &["-printf", "%p "],
         &["-ls", "-printf", "%p\n"],
         &["-print", "-ls"],
         &["-print0", "-ls"],
@@ -2425,4 +2509,14 @@ fn find_exits_cleanly_on_broken_pipe() {
         !stderr.contains("panicked"),
         "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn missing_starting_point_is_named_without_os_error() {
+    ucmd()
+        .args(&["./test_data/simple/abbbc", "xyz.nonexistentDir"])
+        .fails()
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: 'xyz.nonexistentDir': No such file or directory\n");
 }

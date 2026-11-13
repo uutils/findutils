@@ -60,6 +60,27 @@ jobs:
         run: |
           cargo test
 
+  fakeroot:
+    # Tests that need files with an unmapped owner skip themselves unless
+    # they run as root, which CI does not; fakeroot lets them run.
+    name: cargo test (fakeroot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install fakeroot
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot
+      - name: Build
+        run: |
+          cargo test --test test_find --no-run
+      - name: Test
+        run: |
+          fakeroot cargo test --test test_find find_nouser_nogroup_match_unowned_symlinks
+
   fmt:
     name: cargo fmt --all -- --check
     runs-on: ubuntu-latest
