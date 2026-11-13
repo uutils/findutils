@@ -597,7 +597,7 @@ fn xargs_eof() {
 
 #[test]
 fn xargs_empty_eof() {
-    for option_style in [vec!["-E", ""], vec!["-e="], vec!["--eof="]] {
+    for option_style in [vec!["-E", ""], vec!["--eof="]] {
         ucmd()
             .args(option_style.as_slice())
             .arg("-n1")
@@ -641,6 +641,33 @@ fn xargs_eof_separate_word_is_the_command() {
         .pipe_in("hello\n")
         .succeeds()
         .stdout_only("X hello\n");
+}
+
+#[test]
+fn xargs_eof_attached_value_keeps_equals() {
+    // GNU: with the short form the attached value is taken as is, so
+    // `-e=cd` sets the EOF string to "=cd" and `-e=` sets it to "=".
+    ucmd()
+        .arg("-e=cd")
+        .pipe_in("ab =cd ef")
+        .succeeds()
+        .stdout_only("ab\n");
+    ucmd()
+        .arg("-e=")
+        .pipe_in("ab = ef")
+        .succeeds()
+        .stdout_only("ab\n");
+}
+
+#[test]
+fn xargs_eof_rewrite_leaves_command_args_alone() {
+    // Option scanning stops at the command, so its own `-e...` words are
+    // passed through unchanged.
+    ucmd()
+        .args(&["echo", "-ecd"])
+        .pipe_in("a b")
+        .succeeds()
+        .stdout_only("-ecd a b\n");
 }
 
 #[test]
