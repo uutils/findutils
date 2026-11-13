@@ -444,7 +444,12 @@ fn files0_dev_stdin_with_ok_is_rejected() {
             .args(&["-files0-from", "/dev/stdin", action, "echo", "{}", ";"])
             .fails_with_code(1)
             .no_stdout()
-            .stderr_contains("standard input");
+            .stderr_contains(
+                "when -ok or -okdir is in use, the option \
+     -files0-from cannot also read from standard input, but the \
+     file ('/dev/stdin') used for -files0-from appears to refer \
+     to the same file as the standard input",
+            );
     }
 }
 
@@ -464,7 +469,13 @@ fn files0_same_file_as_stdin_is_rejected() {
             .set_stdin(File::open(&list).unwrap())
             .fails_with_code(1)
             .no_stdout()
-            .stderr_contains("standard input");
+            .stderr_contains(format!(
+                "when -ok or -okdir is in use, the option \
+     -files0-from cannot also read from standard input, but the \
+     file ('{}') used for -files0-from appears to refer \
+     to the same file as the standard input",
+                list.display()
+            ));
     }
 }
 
