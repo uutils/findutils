@@ -265,8 +265,6 @@ impl FileTimeType {
     }
 }
 
-/// This matcher checks whether a file's accessed|creation|modification time is
-/// {less than | exactly | more than} N days old.
 /// A file's age in whole seconds, negated when the file time is in the future.
 ///
 /// Two `i64` timestamps can be further apart than `i64::MAX` seconds, so the age saturates
@@ -280,6 +278,8 @@ fn signed_age_secs(age: Duration, is_negative: bool) -> i64 {
     }
 }
 
+/// This matcher checks whether a file's accessed|creation|modification time is
+/// {less than | exactly | more than} N days old.
 pub struct FileTimeMatcher {
     days: ComparableValue,
     file_time_type: FileTimeType,
