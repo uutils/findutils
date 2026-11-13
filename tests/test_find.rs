@@ -479,6 +479,26 @@ fn files0_same_file_as_stdin_is_rejected() {
     }
 }
 
+#[test]
+#[cfg(unix)]
+fn files0_with_closed_stdin_is_allowed() {
+    let temp_dir = Builder::new().tempdir().unwrap();
+    let list = temp_dir.path().join("list.txt");
+    fs::write(&list, b"").unwrap();
+
+    for action in ["-ok", "-okdir"] {
+        TestScenario::new("find")
+            .cmd_shell(format!(
+                "exec '{}' -files0-from '{}' {} echo '{{}}' ';' <&-",
+                env!("CARGO_BIN_EXE_find"),
+                list.display(),
+                action,
+            ))
+            .succeeds()
+            .no_output();
+    }
+}
+
 /// Reading the starting points from a file leaves stdin free for the prompts,
 /// so the combination is allowed.
 #[test]
