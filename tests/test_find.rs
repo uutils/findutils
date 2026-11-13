@@ -637,6 +637,36 @@ fn find_prune_with_delete_and_explicit_depth_runs() {
 }
 
 #[test]
+fn find_depth_prune_still_visits_siblings() {
+    // Every sibling matches -prune, so whichever one the walk returns first, the
+    // others come after it. Skipping the rest of the parent there would lose them.
+    let temp_dir = Builder::new()
+        .prefix("find_depth_prune_")
+        .tempdir()
+        .unwrap();
+    let names = ["p1", "p2", "p3", "p4", "p5"];
+    for name in names {
+        fs::create_dir(temp_dir.path().join(name)).unwrap();
+        File::create(temp_dir.path().join(name).join("f")).unwrap();
+    }
+
+    let result = ucmd()
+        .arg(temp_dir.path())
+        .args(&[
+            "-depth", "-name", "p*", "-prune", "-o", "-type", "f", "-print",
+        ])
+        .succeeds();
+
+    let mut printed: Vec<&str> = result.stdout_str().lines().collect();
+    printed.sort_unstable();
+    let expected: Vec<String> = names
+        .iter()
+        .map(|name| temp_dir.path().join(name).join("f").display().to_string())
+        .collect();
+    assert_eq!(printed, expected);
+}
+
+#[test]
 fn regex_types() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
 
