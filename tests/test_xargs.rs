@@ -665,6 +665,23 @@ fn xargs_arg_file_leading_dash() {
 }
 
 #[test]
+fn xargs_delimiter_dash() {
+    // `-d -` takes the dash as the delimiter and splits the input on it.
+    for args in [
+        vec!["-d", "-", "echo"],
+        vec!["-d-", "echo"],
+        vec!["--delimiter", "-", "echo"],
+        vec!["--delimiter=-", "echo"],
+    ] {
+        ucmd()
+            .args(&args)
+            .pipe_in("a-b-c")
+            .succeeds()
+            .stdout_only("a b c\n");
+    }
+}
+
+#[test]
 fn xargs_numeric_option_leading_dash_is_the_value() {
     // A required value that starts with '-' should be taken as the option
     // value and then rejected, not reported as an unexpected argument.
