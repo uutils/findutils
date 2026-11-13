@@ -455,6 +455,9 @@ fn test_locate_entry_with_glob_metachars() {
     assert!(stdout.contains("plain.sh"), "{stdout:?}");
     let stdout = locate(&["--basename", "--all", "plain", "1"]);
     assert!(stdout.contains("plain[1].sh"), "{stdout:?}");
+    // the count must agree with the listing: the directory and the file inside it
+    assert_eq!(locate(&["-c", "archive"]).trim(), "2");
+    assert_eq!(locate(&["-c", "plain"]).trim(), "2");
     #[cfg(unix)]
     {
         let stdout = locate(&["name"]);

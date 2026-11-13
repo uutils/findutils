@@ -580,7 +580,9 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     };
     let entry = name.to_string_lossy();
 
-    // only metacharacters in the pattern are special; the stored path is plain text
+    // the stored path is plain text, so `[`, `*`, `?` and `\` in it never affect matching.
+    // TODO: patterns are always substrings for now; GNU locate treats a pattern containing
+    // `*`, `?` or `[` as a glob that must match the whole path.
     let patterns_match = if config.all {
         patterns.all_match(entry.as_ref())
     } else {
