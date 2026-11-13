@@ -313,7 +313,8 @@ fn uu_app() -> Command {
         .args_override_self(true)
         .arg(
             Arg::new("all")
-                .short('a')
+                .short('A')
+                .short_alias('a')
                 .long("all")
                 .action(ArgAction::SetTrue),
         )
@@ -484,26 +485,17 @@ impl Iterator for DbReader {
         // read the actual path fragment
         let mut buf = Vec::new();
         self.reader.read_until(b'\0', &mut buf).ok()?;
-        let prefix = self.prev.as_ref().map(|s| {
-            s.to_bytes()
-                .iter()
-                .take(self.prefix as usize)
-                .collect::<Vec<_>>()
-        });
-        if (prefix.as_ref().map_or(0, std::vec::Vec::len) as isize) < size {
+        // the shared prefix count must stay within the previous entry
+        let prev = self.prev.as_ref().map_or(&[][..], |s| s.to_bytes());
+        let Some(prefix) = usize::try_from(self.prefix)
+            .ok()
+            .and_then(|len| prev.get(..len))
+        else {
             return Some(Err(Error::InvalidDb(
                 self.path.to_string_lossy().to_string(),
             )));
-        }
-        let res = CString::from_vec_with_nul(
-            prefix
-                .unwrap_or_default()
-                .into_iter()
-                .copied()
-                .chain(buf)
-                .collect(),
-        )
-        .ok()?;
+        };
+        let res = CString::from_vec_with_nul(prefix.iter().copied().chain(buf).collect()).ok()?;
         self.prev = Some(res.clone());
         Some(Ok(res))
     }
@@ -650,6 +642,12 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 .iter()
                 .filter_map(|p| DbReader::new(p.as_path()).ok())
             {
+                // --limit applies to the whole output, not to each database
+                let remaining = config.limit.map_or(usize::MAX, |l| l.saturating_sub(count));
+                if remaining == 0 && config.mode != Mode::Statistics {
+                    break;
+                }
+
                 // if we can get the mtime of the file, check it against the current time
                 if let Ok(metadata) = fs::metadata(&dbreader.path) {
                     if let Ok(time) = metadata.modified() {
@@ -678,7 +676,7 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 let mut write_result = Ok(());
                 let db_count = dbreader.by_ref().process_results(|iter| {
                     iter.filter(|s| match_entry(s.as_c_str(), &config, &patterns))
-                        .take(config.limit.unwrap_or(usize::MAX))
+                        .take(remaining)
                         .inspect(|s| {
                             if (config.mode == Mode::Normal || config.print) && write_result.is_ok()
                             {

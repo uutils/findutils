@@ -61,10 +61,6 @@ impl Matcher for NoUserMatcher {
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
         use nix::unistd::Uid;
 
-        if file_info.path().is_symlink() {
-            return false;
-        }
-
         let Ok(metadata) = file_info.metadata() else {
             return true;
         };
