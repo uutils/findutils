@@ -435,6 +435,8 @@ impl UsedMatcher {
         Ok(match self.days {
             ComparableValue::MoreThan(n) => days > n,
             ComparableValue::EqualTo(n) => days == n,
+            // days is rounded up, so a file used 12 hours after its change
+            // counts as 1 day and must still match -used -1, as in GNU find.
             ComparableValue::LessThan(n) => days <= n,
         })
     }
