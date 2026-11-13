@@ -83,11 +83,11 @@ impl Ls {
         // Device nodes have no size: the column holds their "major, minor" numbers.
         let file_type = metadata.file_type();
         let size = if file_type.is_char_device() || file_type.is_block_device() {
-            let rdev = metadata.rdev();
+            let rdev = metadata.rdev() as uucore::libc::dev_t;
             format!(
                 "{:>3}, {:>3}",
-                nix::sys::stat::major(rdev),
-                nix::sys::stat::minor(rdev)
+                uucore::libc::major(rdev),
+                uucore::libc::minor(rdev)
             )
         } else {
             metadata.size().to_string()
