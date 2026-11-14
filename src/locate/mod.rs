@@ -87,6 +87,8 @@ impl UError for Error {
 }
 
 pub struct Statistics {
+    /// Whether some entries may have been left out, which changes how the total is labelled.
+    filtered: bool,
     matches: usize,
     total_length: usize,
     whitespace: usize,
@@ -95,8 +97,9 @@ pub struct Statistics {
 }
 
 impl Statistics {
-    fn new() -> Self {
+    fn new(filtered: bool) -> Self {
         Self {
+            filtered,
             matches: 0,
             total_length: 0,
             whitespace: 0,
@@ -137,7 +140,12 @@ impl Statistics {
             }
             writeln!(out, "Locate database size: {} bytes", metadata.len())?;
         }
-        writeln!(out, "Matching Filenames: {}", self.matches)?;
+        let label = if self.filtered {
+            "Matching Filenames"
+        } else {
+            "All Filenames"
+        };
+        writeln!(out, "{label}: {}", self.matches)?;
         writeln!(
             out,
             "File names have a cumulative length of {} bytes",
@@ -189,6 +197,14 @@ impl Patterns {
                 patterns.iter().any(|s| entry.contains(s.as_str()))
             }
             Self::Regex(v) => v.iter().any(|r| r.find(entry).is_some()),
+        }
+    }
+
+    /// Whether no pattern was given, which `--statistics` allows: no search is performed then.
+    fn is_empty(&self) -> bool {
+        match self {
+            Self::String { patterns, .. } => patterns.is_empty(),
+            Self::Regex(v) => v.is_empty(),
         }
     }
 
@@ -282,7 +298,7 @@ impl TryFrom<ArgMatches> for ParsedInfo {
             null_bytes: value.get_flag("null"),
             print: value.get_flag("print"),
         };
-        // `patterns` is a required argument, so this is normally non-empty
+        // `patterns` is required unless --statistics is given
         let patterns: Vec<String> = value
             .get_many::<String>("patterns")
             .map(|v| v.cloned().collect())
@@ -453,7 +469,7 @@ fn uu_app() -> Command {
                 .num_args(1..)
                 .action(ArgAction::Append)
                 .value_parser(value_parser!(String))
-                .required(true),
+                .required_unless_present("statistics"),
         )
 }
 
@@ -556,6 +572,17 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     const GLOB_METACHARS: &str = r"*?[]\";
 
     let buf = crate::bytes_to_path(entry.to_bytes());
+    // existence is always checked against the full path, even in `--basename` mode
+    let existence_matches = || match config.existing {
+        ExistenceMode::Any => true,
+        ExistenceMode::Present => path_exists(&buf, config.follow_symlinks),
+        ExistenceMode::NotPresent => !path_exists(&buf, config.follow_symlinks),
+    };
+    // no search is performed without a pattern, so every entry counts
+    if patterns.is_empty() {
+        return existence_matches();
+    }
+
     let name = if config.basename {
         let Some(path) = buf.file_name() else {
             return false;
@@ -594,14 +621,7 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
         patterns.any_match(entry.as_ref())
     };
 
-    // existence is always checked against the full path, even in `--basename` mode
-    let existence_matches = match config.existing {
-        ExistenceMode::Any => true,
-        ExistenceMode::Present => path_exists(&buf, config.follow_symlinks),
-        ExistenceMode::NotPresent => !path_exists(&buf, config.follow_symlinks),
-    };
-
-    patterns_match && existence_matches
+    patterns_match && existence_matches()
 }
 
 /// Whether a database of the given `age` is older than `max_age` days.
@@ -631,7 +651,11 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
         }
         Ok(matches) => {
             let ParsedInfo { patterns, config } = ParsedInfo::try_from(matches)?;
-            let mut stats = Statistics::new();
+            let no_search = patterns.is_empty();
+            let mut stats =
+                Statistics::new(!no_search || !matches!(config.existing, ExistenceMode::Any));
+            // without a search the statistics cover the whole database
+            let limit = config.limit.filter(|_| !no_search);
             let stdout = io::stdout();
             let mut out = stdout.lock();
 
@@ -643,7 +667,7 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 .filter_map(|p| DbReader::new(p.as_path()).ok())
             {
                 // --limit applies to the whole output, not to each database
-                let remaining = config.limit.map_or(usize::MAX, |l| l.saturating_sub(count));
+                let remaining = limit.map_or(usize::MAX, |l| l.saturating_sub(count));
                 if remaining == 0 && config.mode != Mode::Statistics {
                     break;
                 }
@@ -678,7 +702,9 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                     iter.filter(|s| match_entry(s.as_c_str(), &config, &patterns))
                         .take(remaining)
                         .inspect(|s| {
-                            if (config.mode == Mode::Normal || config.print) && write_result.is_ok()
+                            if (config.mode == Mode::Normal || config.print)
+                                && !no_search
+                                && write_result.is_ok()
                             {
                                 write_result = if config.null_bytes {
                                     write!(out, "{}\0", s.to_string_lossy())
@@ -762,7 +788,7 @@ mod tests {
         std::fs::write(&db, b"\0LOCATE02\0\0/foo\0").unwrap();
         let dbreader = DbReader::new(&db).unwrap();
 
-        let stats = Statistics::new();
+        let stats = Statistics::new(false);
         // A failing writer must surface an error rather than panicking, so a
         // full disk or closed pipe exits with a diagnostic instead of exit 101.
         assert!(stats.print_header(&mut FailWriter, &dbreader).is_err());
