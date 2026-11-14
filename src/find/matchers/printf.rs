@@ -413,6 +413,10 @@ impl FormatStringParser<'_> {
                 '%' => self.parse_format_specifier()?,
                 _ => panic!("{}", "Stopped at unexpected character: {self.string}"),
             };
+            // Ignore everything after \c, including invalid directives and escapes.
+            if component == FormatComponent::Flush {
+                self.string = "";
+            }
             components.push(component);
         }
 
@@ -1010,7 +1014,6 @@ mod tests {
                 FormatComponent::Byte(b'a'),
                 FormatComponent::Literal("de".to_owned()),
                 FormatComponent::Flush,
-                FormatComponent::Literal("f".to_owned())
             ]
         );
 
