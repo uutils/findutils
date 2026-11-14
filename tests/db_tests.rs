@@ -493,6 +493,56 @@ fn test_locate_split_database_paths() {
         .failure();
 }
 
+// a stored path containing glob metacharacters is matched as plain text (#964)
+#[test]
+fn test_locate_entry_with_glob_metachars() {
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let archive = dir.path().join("[archive]");
+    std::fs::create_dir(&archive).unwrap();
+    std::fs::write(archive.join("payroll.xls"), b"").unwrap();
+    std::fs::write(dir.path().join("plain.sh"), b"").unwrap();
+    std::fs::write(dir.path().join("plain[1].sh"), b"").unwrap();
+    #[cfg(unix)]
+    std::fs::write(dir.path().join(r"odd*?\name"), b"").unwrap();
+    let db = dir.path().join("db");
+
+    Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .args([
+            format!("--localpaths={}", dir.path().display()),
+            format!("--output={}", db.display()),
+        ])
+        .assert()
+        .success();
+    let db_flag = format!("--database={}", db.display());
+
+    let locate = |args: &[&str]| {
+        let assert = Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .args(args)
+            .arg(&db_flag)
+            .assert()
+            .success();
+        String::from_utf8_lossy(&assert.get_output().stdout).into_owned()
+    };
+
+    let stdout = locate(&["payroll"]);
+    assert!(stdout.contains("[archive]"), "{stdout:?}");
+    let stdout = locate(&["plain"]);
+    assert!(stdout.contains("plain[1].sh"), "{stdout:?}");
+    assert!(stdout.contains("plain.sh"), "{stdout:?}");
+    let stdout = locate(&["--basename", "--all", "plain", "1"]);
+    assert!(stdout.contains("plain[1].sh"), "{stdout:?}");
+    // the count must agree with the listing: the directory and the file inside it
+    assert_eq!(locate(&["-c", "archive"]).trim(), "2");
+    assert_eq!(locate(&["-c", "plain"]).trim(), "2");
+    #[cfg(unix)]
+    {
+        let stdout = locate(&["name"]);
+        assert!(stdout.contains(r"odd*?\name"), "{stdout:?}");
+    }
+}
+
 #[test]
 fn test_locate_limit_spans_databases() {
     // --limit caps the whole output, not each database (GNU)
