@@ -319,6 +319,16 @@ pub fn build_top_level_matcher(
     let mut regex_type = RegexType::default();
     let (_, top_level_matcher) = build_matcher_tree(args, config, &mut regex_type, 0, None)?;
 
+    // -delete turns on -depth, under which -prune does nothing, so a -prune
+    // meant to protect a directory from -delete would silently not.
+    if config.uses_delete && config.uses_prune && !config.explicit_depth {
+        return Err(From::from(
+            "The -delete action automatically turns on -depth, but -prune does nothing when \
+             -depth is in effect.  If you want to carry on anyway, just explicitly use the \
+             -depth option.",
+        ));
+    }
+
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
         let mut new_and_matcher = AndMatcherBuilder::new();
@@ -849,6 +859,7 @@ fn build_matcher_tree(
             Predicate::Delete => {
                 // -delete implicitly requires -depth
                 config.depth_first = true;
+                config.uses_delete = true;
                 Some(DeleteMatcher::new().into_box())
             }
             Predicate::Newer => {
@@ -1071,7 +1082,10 @@ fn build_matcher_tree(
                 i += 1;
                 Some(PermMatcher::new(args[i])?.into_box())
             }
-            Predicate::Prune => Some(PruneMatcher::new().into_box()),
+            Predicate::Prune => {
+                config.uses_prune = true;
+                Some(PruneMatcher::new().into_box())
+            }
             Predicate::Quit => Some(QuitMatcher.into_box()),
             Predicate::Writable => Some(AccessMatcher::Writable.into_box()),
             Predicate::Not => {
@@ -1161,6 +1175,7 @@ fn build_matcher_tree(
             Predicate::Depth => {
                 // TODO add warning if it appears after actual testing criterion
                 config.depth_first = true;
+                config.explicit_depth = true;
                 Some(TrueMatcher.into_box())
             }
             Predicate::Mount => {
