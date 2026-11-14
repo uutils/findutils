@@ -752,8 +752,8 @@ fn empty_files() {
         )));
 }
 
-#[test]
-fn find_printf() {
+/// Creates the links under test_data/links that the -printf tests read.
+fn create_printf_links() {
     #[cfg(unix)]
     {
         if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
@@ -818,7 +818,11 @@ fn find_printf() {
             );
         }
     }
+}
 
+#[test]
+fn find_printf() {
+    create_printf_links();
     ucmd()
         .arg(fix_up_slashes("./test_data/simple"))
         .args(&["-sorted", "-printf", "%f %d %h %H %p %P %y\n"])
@@ -866,6 +870,33 @@ fn find_printf() {
             ]
             .join(""),
         );
+}
+
+#[test]
+fn find_printf_type_of_followed_links() {
+    create_printf_links();
+
+    ucmd()
+        .args(&["-H", &fix_up_slashes("./test_data/links/link-f")])
+        .args(&["-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("f f\n");
+
+    ucmd()
+        .args(&["-L", &fix_up_slashes("./test_data/links/link-d")])
+        .args(&["-maxdepth", "0", "-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("d d\n");
+
+    // A dangling link has nothing to follow, so it is still a link.
+    ucmd()
+        .args(&["-L", &fix_up_slashes("./test_data/links/link-missing")])
+        .args(&["-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("l N\n");
 }
 
 #[test]
