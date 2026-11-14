@@ -2164,6 +2164,31 @@ fn find_ls_shows_allocated_blocks_and_link_target() {
         .stdout_contains(" -> sparse\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn find_ls_shows_device_numbers() {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::libc::{dev_t, major, minor};
+
+    let rdev = fs::metadata("/dev/null").unwrap().rdev() as dev_t;
+    let expected = format!(" {:>3}, {:>3} ", major(rdev), minor(rdev));
+
+    ucmd()
+        .args(&["/dev/null", "-ls"])
+        .succeeds()
+        .stdout_contains(expected);
+}
+
+// /dev/null is character device 1,3 on Linux; check the literal GNU layout.
+#[test]
+#[cfg(target_os = "linux")]
+fn find_ls_shows_dev_null_major_minor() {
+    ucmd()
+        .args(&["/dev/null", "-ls"])
+        .succeeds()
+        .stdout_contains("  1,   3 ");
+}
+
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
 // a file's owning uid/gid had no passwd/group entry; it must fall back to the
 // numeric id like GNU find. Creating such a file needs privilege to chown to an
