@@ -2038,8 +2038,6 @@ fn find_ls() {
 #[test]
 #[cfg(unix)] // TZ only reliably selects the local time zone on unix
 fn find_ls_uses_local_time() {
-    use chrono::{DateTime, FixedOffset};
-
     let temp_dir = Builder::new().prefix("find_ls_time_").tempdir().unwrap();
     let file_path = temp_dir.path().join("stamped");
     File::create(&file_path).expect("create test file");
@@ -2053,10 +2051,10 @@ fn find_ls_uses_local_time() {
         .expect("set test file mtime");
 
     // POSIX TZ "UTC-5" is five hours east of UTC.
-    let expected = DateTime::from_timestamp(secs, 0)
+    let expected = jiff::Timestamp::from_second(secs)
         .unwrap()
-        .with_timezone(&FixedOffset::east_opt(5 * 3600).unwrap())
-        .format("%b %e %H:%M")
+        .to_zoned(jiff::tz::TimeZone::fixed(jiff::tz::offset(5)))
+        .strftime("%b %e %H:%M")
         .to_string();
     let result = ucmd()
         .env("TZ", "UTC-5")
