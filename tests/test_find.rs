@@ -2012,6 +2012,40 @@ fn find_fprintf_reports_write_error() {
     assert!(!stderr.contains("panicked"));
 }
 
+#[cfg(unix)]
+#[test]
+fn find_used() {
+    let temp_dir = Builder::new().prefix("find_used").tempdir().unwrap();
+    let file = temp_dir.path().join("f");
+    File::create(&file).unwrap();
+    // Setting the access time also sets the change time to now.
+    let later = time::SystemTime::now() + time::Duration::from_secs(12 * 3600);
+    filetime::set_file_atime(&file, later.into()).unwrap();
+    let file = file.to_str().unwrap();
+
+    for (arg, expected) in [("1", true), ("-1", true), ("+0", true), ("2", false)] {
+        let out = if expected {
+            format!("{file}\n")
+        } else {
+            String::new()
+        };
+        ucmd()
+            .args(&[file, "-used", arg])
+            .succeeds()
+            .no_stderr()
+            .stdout_only(out);
+    }
+
+    ucmd()
+        .arg("-used")
+        .fails()
+        .stderr_contains("missing argument to `-used'");
+    ucmd()
+        .args(&["-used", "x"])
+        .fails()
+        .stderr_contains("argument to -used, but got `x'");
+}
+
 #[test]
 fn find_fprintf_missing_arguments() {
     // Regression test: `-fprintf` with no file/format argument must report a
