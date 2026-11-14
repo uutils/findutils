@@ -1018,8 +1018,86 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     }
 }
 
-fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
-    let matches = clap::Command::new("xargs")
+/// Find the option of `command` that `is_option` matches, ignoring positionals.
+fn find_option(command: &clap::Command, is_option: impl Fn(&Arg) -> bool) -> Option<&Arg> {
+    command
+        .get_arguments()
+        .filter(|arg| !arg.is_positional())
+        .find(|arg| is_option(arg))
+}
+
+/// Whether `arg` needs a value (`Some(true)`), takes an optional one
+/// (`Some(false)`), or takes none (`None`). Its command must be built.
+fn value_required(arg: &Arg) -> Option<bool> {
+    let range = arg.get_num_args()?;
+    (range.max_values() > 0).then(|| range.min_values() > 0)
+}
+
+/// Rewrite an attached `-e` value to `-e=VALUE` (clap only accepts it with
+/// `=`), so GNU's attached form keeps working while a separate word after
+/// `-e`/`--eof` stays the command. Like GNU getopt for xargs, scanning stops
+/// at `--` or at the first word that is not an option, so the command's own
+/// arguments are left alone. Which options take a value is read from
+/// `command`, which must be built.
+fn attach_eof_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut rest = args.iter();
+    if let Some(name) = rest.next() {
+        out.push((*name).to_owned());
+    }
+    while let Some(&arg) = rest.next() {
+        if arg == "--" || arg == "-" || !arg.starts_with('-') {
+            out.push(arg.to_owned());
+            break;
+        }
+        let mut next_is_value = false;
+        if let Some(long) = arg.strip_prefix("--") {
+            out.push(arg.to_owned());
+            next_is_value = !long.contains('=')
+                && find_option(command, |a| a.get_long() == Some(long)).and_then(value_required)
+                    == Some(true);
+        } else {
+            // A cluster of short options, for example `-tn1` or `-tecd`.
+            let cluster = &arg[1..];
+            let mut rewritten = None;
+            for (i, c) in cluster.char_indices() {
+                let Some(option) = find_option(command, |a| a.get_short() == Some(c)) else {
+                    break;
+                };
+                let value = &cluster[i + c.len_utf8()..];
+                match value_required(option) {
+                    None => continue,
+                    Some(true) => next_is_value = value.is_empty(),
+                    Some(false) => {
+                        if option.get_id() == options::EOF_E && !value.is_empty() {
+                            rewritten = Some((&cluster[..i], c, value));
+                        }
+                    }
+                }
+                break;
+            }
+            match rewritten {
+                Some((flags, c, value)) => {
+                    if !flags.is_empty() {
+                        out.push(format!("-{flags}"));
+                    }
+                    out.push(format!("-{c}={value}"));
+                }
+                None => out.push(arg.to_owned()),
+            }
+        }
+        if next_is_value {
+            if let Some(&value) = rest.next() {
+                out.push(value.to_owned());
+            }
+        }
+    }
+    out.extend(rest.map(|arg| (*arg).to_owned()));
+    out
+}
+
+fn xargs_command() -> clap::Command {
+    clap::Command::new("xargs")
         .version(crate_version!())
         .about("Run commands using arguments derived from standard input")
         .arg(
@@ -1162,13 +1240,20 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('e')
                 .long(options::EOF)
                 .num_args(0..=1)
+                .require_equals(true)
                 .allow_hyphen_values(true)
                 .value_name("eof-string")
                 .help("Alias for -E")
                 .overrides_with(options::EOF)
                 .value_parser(clap::value_parser!(String)),
         )
-        .try_get_matches_from(args);
+}
+
+fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
+    let mut command = xargs_command();
+    command.build();
+    let args = attach_eof_short_equals(&command, args);
+    let matches = command.try_get_matches_from(args);
 
     let matches = match matches {
         Ok(m) => m,
@@ -1310,6 +1395,46 @@ pub fn xargs_main(args: &[&str]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rewrite(args: &[&str]) -> Vec<String> {
+        let mut command = xargs_command();
+        command.build();
+        attach_eof_short_equals(&command, args)
+    }
+
+    #[test]
+    fn attach_eof_short_equals_rewrites_attached_values() {
+        assert_eq!(rewrite(&["xargs", "-ecd"]), ["xargs", "-e=cd"]);
+        assert_eq!(rewrite(&["xargs", "-e=cd"]), ["xargs", "-e==cd"]);
+        assert_eq!(rewrite(&["xargs", "-e-end"]), ["xargs", "-e=-end"]);
+        assert_eq!(rewrite(&["xargs", "-tecd"]), ["xargs", "-t", "-e=cd"]);
+        assert_eq!(rewrite(&["xargs", "-e"]), ["xargs", "-e"]);
+        assert_eq!(rewrite(&["xargs", "-E", "-end"]), ["xargs", "-E", "-end"]);
+        assert_eq!(rewrite(&["xargs", "--eof", "cd"]), ["xargs", "--eof", "cd"]);
+        assert_eq!(rewrite(&["xargs", "-n", "-ecd"]), ["xargs", "-n", "-ecd"]);
+        assert_eq!(
+            rewrite(&["xargs", "--arg-file", "-e-file"]),
+            ["xargs", "--arg-file", "-e-file"]
+        );
+        assert_eq!(rewrite(&["xargs", "--", "-ecd"]), ["xargs", "--", "-ecd"]);
+    }
+
+    #[test]
+    fn attach_eof_short_equals_stops_at_the_command() {
+        assert_eq!(rewrite(&["xargs", "echo", "-en"]), ["xargs", "echo", "-en"]);
+        assert_eq!(
+            rewrite(&["xargs", "-t", "grep", "-efoo"]),
+            ["xargs", "-t", "grep", "-efoo"]
+        );
+        assert_eq!(
+            rewrite(&["xargs", "-n1", "grep", "-efoo"]),
+            ["xargs", "-n1", "grep", "-efoo"]
+        );
+        assert_eq!(
+            rewrite(&["xargs", "-n", "1", "grep", "-efoo"]),
+            ["xargs", "-n", "1", "grep", "-efoo"]
+        );
+    }
 
     fn make_arg_init(s: &str) -> Argument {
         Argument {
