@@ -1021,6 +1021,7 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     let matches = clap::Command::new("xargs")
         .version(crate_version!())
+        .args_override_self(true)
         .about("Run commands using arguments derived from standard input")
         .arg(
             Arg::new(options::COMMAND)
