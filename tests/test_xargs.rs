@@ -102,6 +102,11 @@ fn xargs_if_empty() {
 }
 
 #[test]
+fn xargs_repeated_no_run_if_empty() {
+    ucmd().args(&["-r", "-r"]).succeeds().no_output();
+}
+
+#[test]
 fn xargs_replace_empty_input() {
     ucmd()
         .args(&["-I", "{}", "echo", "hello", "{}"])
@@ -117,6 +122,15 @@ fn xargs_max_args() {
         .pipe_in("ab cd ef\ngh i")
         .succeeds()
         .stdout_only("ab cd\nef gh\ni\n");
+}
+
+#[test]
+fn xargs_repeated_max_args() {
+    ucmd()
+        .args(&["-n", "1", "-n", "2", "echo"])
+        .pipe_in("a b c\n")
+        .succeeds()
+        .stdout_only("a b\nc\n");
 }
 
 #[test]
