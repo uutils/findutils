@@ -962,9 +962,10 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
                 "WARNING: -L, -n and -I/-i are mutually exclusive, but more than one were given; \
                 only the last option will be used"
             );
-                let lines_index = matches
-                    .indices_of(options::MAX_LINES)
-                    .and_then(|mut v| v.next_back());
+                let lines_index = [options::MAX_LINES, options::MAX_LINES_L]
+                    .iter()
+                    .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
+                    .max();
                 let args_index = matches
                     .indices_of(options::MAX_ARGS)
                     .and_then(|mut v| v.next_back());
@@ -1077,6 +1078,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_LINES_L)
                 .short('l')
                 .num_args(0..=1)
+                .default_missing_value("1")
                 .help(
                     "Equivalent to -L, but with a default value of 1 if max-lines \
                     is unspecified",

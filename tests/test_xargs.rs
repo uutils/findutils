@@ -195,6 +195,33 @@ fn xargs_max_args_lines_conflict() {
 }
 
 #[test]
+fn xargs_short_max_lines_conflict() {
+    // -l2 is last, so it should be given priority.
+    ucmd()
+        .args(&["-n1", "-l2"])
+        .pipe_in("k1 k2\nk3\nk4\n")
+        .succeeds()
+        .stderr_contains("WARNING")
+        .stdout_is("k1 k2 k3\nk4\n");
+
+    // -l2 is last, so it should be given priority.
+    ucmd()
+        .args(&["-I", "Z", "-l2", "echo"])
+        .pipe_in("k1 k2\nk3\nk4\n")
+        .succeeds()
+        .stderr_contains("WARNING")
+        .stdout_is("k1 k2 k3\nk4\n");
+
+    // A bare -l is last, so it should be given priority.
+    ucmd()
+        .args(&["-n3", "-l"])
+        .pipe_in("k1 k2\nk3\n")
+        .succeeds()
+        .stderr_contains("WARNING")
+        .stdout_is("k1 k2\nk3\n");
+}
+
+#[test]
 fn xargs_max_chars() {
     for arg in ["-s11", "--max-chars=11"] {
         ucmd()
