@@ -86,6 +86,11 @@ trait CommandSizeLimiter {
         arg: Argument,
         cursor: LimiterCursor<'_>,
     ) -> Result<Argument, ExhaustedCommandSpace>;
+    /// Whether the command line holds everything a limit of -n or -L allows,
+    /// so the command had already been started.
+    fn is_complete(&self) -> bool {
+        false
+    }
     fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter>;
 }
 
@@ -130,6 +135,10 @@ impl LimiterCollection {
             limiters: &mut self.limiters[..],
         };
         cursor.try_next(arg)
+    }
+
+    fn is_complete(&self) -> bool {
+        self.limiters.iter().any(|limiter| limiter.is_complete())
     }
 }
 
@@ -299,6 +308,10 @@ impl CommandSizeLimiter for MaxArgsCommandSizeLimiter {
     fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
         Box::new(self.clone())
     }
+
+    fn is_complete(&self) -> bool {
+        self.current_args >= self.max_args
+    }
 }
 
 #[derive(Clone)]
@@ -342,6 +355,10 @@ impl CommandSizeLimiter for MaxLinesCommandSizeLimiter {
 
     fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
         Box::new(self.clone())
+    }
+
+    fn is_complete(&self) -> bool {
+        self.current_line > self.max_lines
     }
 }
 
@@ -527,6 +544,12 @@ impl CommandBuilder<'_> {
         Ok(())
     }
 
+    /// Whether the command line is full, so that the next argument would
+    /// start a new command.
+    fn is_complete(&self) -> bool {
+        self.limiters.is_complete()
+    }
+
     fn execute(self) -> Result<CommandResult, XargsError> {
         let mut command = match self.command {
             Some(command) => command,
@@ -630,6 +653,31 @@ impl<R: Read> Read for NonFatalPipeReader<R> {
     }
 }
 
+/// An opening quote that was never closed.
+///
+/// It is carried inside an [`io::Error`] so that it can travel through
+/// [`ArgumentReader::next`], which reports errors as [`io::Error`].
+#[derive(Debug)]
+struct UnterminatedQuote(u8);
+
+impl Display for UnterminatedQuote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let quote = if self.0 == b'\'' { "single" } else { "double" };
+        write!(
+            f,
+            "unmatched {quote} quote; by default quotes are special to xargs unless you use the -0 option"
+        )
+    }
+}
+
+impl Error for UnterminatedQuote {}
+
+/// Whether an [`io::Error`] from the input reader is an [`UnterminatedQuote`].
+fn is_unterminated_quote(e: &io::Error) -> bool {
+    e.get_ref()
+        .is_some_and(<dyn Error + Send + Sync>::is::<UnterminatedQuote>)
+}
+
 struct WhitespaceDelimitedArgumentReader<R: Read> {
     rd: NonFatalPipeReader<R>,
     pending: Vec<u8>,
@@ -690,7 +738,7 @@ where
                     if let Some(Escape::Quote(q)) = &escape {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            format!("Unterminated quote: {q}"),
+                            UnterminatedQuote(*q),
                         ));
                     }
                     // Anything we skipped over was a delimiter, not an
@@ -711,7 +759,7 @@ where
                 (Some(Escape::Quote(q)), b'\n') => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        format!("Unterminated quote: {q}"),
+                        UnterminatedQuote(*q),
                     ));
                 }
                 (Some(Escape::Quote(_)), c) => result.push(c),
@@ -918,7 +966,21 @@ fn process_input(
     let mut have_pending_command = false;
     let mut result = CommandResult::Success;
 
-    while let Some(arg) = args.next()? {
+    // An unmatched quote ends the input; it is held until the arguments
+    // already read are used up, and the half-read argument is dropped.
+    let mut quote_error: Option<io::Error> = None;
+
+    loop {
+        let arg = match args.next() {
+            Ok(Some(arg)) => arg,
+            Ok(None) => break,
+            Err(e) if is_unterminated_quote(&e) => {
+                quote_error = Some(e);
+                break;
+            }
+            Err(e) => return Err(e.into()),
+        };
+
         if let Err(ExhaustedCommandSpace { arg, out_of_chars }) = current_builder.add_arg(arg) {
             let mut next_builder = CommandBuilder::new(builder_options)?;
             let arg_fits = next_builder.add_arg(arg).is_ok();
@@ -943,8 +1005,20 @@ fn process_input(
         have_pending_command = true;
     }
 
-    if !options.no_run_if_empty || have_pending_command {
+    // With -x nothing starts after the bad quote, except a batch that is
+    // already complete: GNU starts a full batch as soon as it fills, before
+    // the quote.
+    let run_pending = if quote_error.is_some() {
+        have_pending_command && (!options.exit_if_pass_char_limit || current_builder.is_complete())
+    } else {
+        !options.no_run_if_empty || have_pending_command
+    };
+    if run_pending {
         result.combine(current_builder.execute()?);
+    }
+
+    if let Some(e) = quote_error {
+        return Err(e.into());
     }
 
     Ok(result)
