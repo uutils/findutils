@@ -552,18 +552,75 @@ fn xargs_exec_verbose() {
 
 #[test]
 fn xargs_unterminated_quote() {
+    // The arguments read before the bad quote still reach the command.
     ucmd()
-        .args(&[
-            "-n2",
-            &path_to_testing_commandline(),
-            "-",
-            "--print_stdin",
-            "--no_print_cwd",
-        ])
-        .pipe_in("a \"b c\nd")
+        .arg("echo")
+        .pipe_in("m1 m2\nm3 'm4\n")
         .fails_with_code(1)
-        .stderr_contains("Error: Unterminated quote:")
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1 m2 m3\n");
+
+    ucmd()
+        .args(&["-n1", "echo"])
+        .pipe_in("m1\nm2\nm3 \"m4")
+        .fails_with_code(1)
+        .stderr_contains("unmatched double quote")
+        .stdout_is("m1\nm2\nm3\n");
+
+    // With -x only a batch that is already complete runs: it was started
+    // before the quote. Anything shorter is dropped.
+    ucmd()
+        .args(&["-x", "echo"])
+        .pipe_in("m1 m2\nm3 'm4\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
         .no_stdout();
+
+    // The GNU testsuite's unmatched-n2-x case: one argument is pending, which
+    // is not a full -n2 batch, so nothing is run.
+    ucmd()
+        .args(&["-n2", "-x", "echo"])
+        .pipe_in("one\n\"two\nthree\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched double quote")
+        .no_stdout();
+
+    ucmd()
+        .args(&["-n2", "-x", "echo"])
+        .pipe_in("m1 m2 m3 'm4\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1 m2\n");
+
+    ucmd()
+        .args(&["-n1", "-x", "echo"])
+        .pipe_in("m1 m2 'm3\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1\nm2\n");
+
+    ucmd()
+        .args(&["-L1", "-x", "echo"])
+        .pipe_in("m1 m2\n'm3\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1 m2\n");
+
+    // No argument was read before the quote, so there is nothing to run.
+    ucmd()
+        .arg("echo")
+        .pipe_in("'m4\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .no_stdout();
+
+    // -I runs every line as it is read, so the line before the bad one ran.
+    ucmd()
+        .args(&["-I", "{}", "echo", "[{}]"])
+        .pipe_in("m1\nm2 \"m3\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched double quote")
+        .stdout_is("[m1]\n");
 }
 
 #[test]
@@ -580,7 +637,7 @@ fn xargs_quotes_cannot_span_lines() {
         ucmd()
             .args(&["-a", &temp_file.path().to_string_lossy()])
             .fails_with_code(1)
-            .stderr_contains("Error: Unterminated quote:")
+            .stderr_contains("unmatched")
             .no_stdout();
     }
 }
@@ -870,6 +927,6 @@ fn xargs_replace_unterminated_quote() {
         ])
         .pipe_in("it's\nb\n")
         .fails_with_code(1)
-        .stderr_contains("Error: Unterminated quote:")
+        .stderr_contains("unmatched single quote")
         .no_stdout();
 }
