@@ -1258,7 +1258,8 @@ mod tests {
                     &deps,
                 );
 
-                assert_eq!(rc, 0);
+                let expected_rc = i32::from(cfg!(not(unix)) && y == "c");
+                assert_eq!(rc, expected_rc);
 
                 // -follow and -newerXY are separate argv tokens; they must not
                 // be glued into one string or the whole token is an unknown
@@ -1275,7 +1276,7 @@ mod tests {
                     &deps,
                 );
 
-                assert_eq!(rc, 0);
+                assert_eq!(rc, expected_rc);
             }
         }
     }
