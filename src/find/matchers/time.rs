@@ -265,6 +265,19 @@ impl FileTimeType {
     }
 }
 
+/// A file's age in whole seconds, negated when the file time is in the future.
+///
+/// Two `i64` timestamps can be further apart than `i64::MAX` seconds, so the age saturates
+/// rather than wrapping, which would turn a very old file into a future one.
+fn signed_age_secs(age: Duration, is_negative: bool) -> i64 {
+    let secs = i64::try_from(age.as_secs()).unwrap_or(i64::MAX);
+    if is_negative {
+        -secs
+    } else {
+        secs
+    }
+}
+
 /// This matcher checks whether a file's accessed|creation|modification time is
 /// {less than | exactly | more than} N days old.
 pub struct FileTimeMatcher {
@@ -312,7 +325,7 @@ impl FileTimeMatcher {
                 e.duration()
             }
         };
-        let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+        let age_in_seconds = signed_age_secs(age, is_negative);
 
         // rust division truncates towards zero (see
         // https://github.com/rust-lang/rust/blob/master/src/libcore/ops.rs#L580 )
@@ -381,7 +394,7 @@ impl FileAgeRangeMatcher {
                 e.duration()
             }
         };
-        let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+        let age_in_seconds = signed_age_secs(age, is_negative);
         let age_in_minutes = age_in_seconds / 60 + if is_negative { -1 } else { 0 };
         Ok(self.minutes.imatches(age_in_minutes))
     }
@@ -929,5 +942,18 @@ mod tests {
             !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
             "The correct situation is that the file reading here cannot be successful."
         );
+    }
+
+    #[test]
+    fn signed_age_secs_saturates() {
+        // two i64 timestamps can be up to 2^64 - 1 seconds apart, more than i64 can hold.
+        // Such an age must stay on the right side of zero (#963)
+        let huge = Duration::from_secs(u64::MAX);
+        assert_eq!(signed_age_secs(huge, false), i64::MAX);
+        assert_eq!(signed_age_secs(huge, true), -i64::MAX);
+        let past_i64 = Duration::from_secs(i64::MAX as u64 + 1);
+        assert_eq!(signed_age_secs(past_i64, false), i64::MAX);
+        assert_eq!(signed_age_secs(Duration::from_secs(90), false), 90);
+        assert_eq!(signed_age_secs(Duration::from_secs(90), true), -90);
     }
 }
