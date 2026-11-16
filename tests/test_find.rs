@@ -956,6 +956,48 @@ fn find_printf_epoch_times_before_1970() {
     }
 }
 
+// Regression test for uutils/findutils#963: a file dated near i64::MIN is more
+// than i64::MAX seconds old, and that age used to wrap to a negative (future)
+// one. Only file systems with full 64-bit times can store such a date (tmpfs,
+// hence /dev/shm), so skip when the time doesn't round-trip.
+#[test]
+#[cfg(unix)]
+fn find_time_matches_file_dated_near_i64_min() {
+    use std::os::unix::fs::MetadataExt;
+
+    let builder = Builder::new()
+        .prefix("find_i64_min_")
+        .tempdir_in("/dev/shm");
+    let Ok(temp_dir) = builder else { return };
+    let file_path = temp_dir.path().join("ancient");
+    File::create(&file_path).expect("create test file");
+    // i64::MIN itself overflows inside filetime, and one second later is just as old.
+    let ancient = i64::MIN + 1;
+    let stored =
+        filetime::set_file_mtime(&file_path, filetime::FileTime::from_unix_time(ancient, 0))
+            .and_then(|()| fs::metadata(&file_path));
+    if !matches!(stored, Ok(metadata) if metadata.mtime() == ancient) {
+        return;
+    }
+
+    let dir = temp_dir.path().to_str().unwrap();
+    let expected = format!("{}\n", file_path.to_str().unwrap());
+    for older_than in [["-mtime", "+7"], ["-mmin", "+7"]] {
+        ucmd()
+            .args(&[dir, "-type", "f"])
+            .args(&older_than)
+            .succeeds()
+            .stdout_only(&expected);
+    }
+    for newer_than in [["-mtime", "-1"], ["-mmin", "-1"]] {
+        ucmd()
+            .args(&[dir, "-type", "f"])
+            .args(&newer_than)
+            .succeeds()
+            .no_output();
+    }
+}
+
 #[test]
 #[cfg(unix)] // TZ only reliably selects the local time zone on unix
 fn find_newermt_uses_local_time() {
