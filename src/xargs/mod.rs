@@ -1076,6 +1076,19 @@ impl BatchOption {
     }
 }
 
+/// Of the given options, the one that appears last on the command line.
+fn last_given<'a>(matches: &clap::ArgMatches, ids: &[&'a str]) -> Option<&'a str> {
+    ids.iter()
+        .filter_map(|&id| {
+            matches
+                .indices_of(id)
+                .and_then(|mut indices| indices.next_back())
+                .map(|index| (index, id))
+        })
+        .max()
+        .map(|(_, id)| id)
+}
+
 fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     // -L, -l, -n and -I/-i are mutually exclusive: the last one given wins and
     // each option it overrides is reported, naming both.
@@ -1113,11 +1126,10 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
                 {
                     continue;
                 }
+                let previous = previous.long_name();
                 eprintln!(
-                    "xargs: warning: options {} and {spelling} are mutually exclusive, \
-                    ignoring previous {} value",
-                    previous.long_name(),
-                    previous.long_name(),
+                    "xargs: warning: options {previous} and {spelling} are mutually exclusive, \
+                    ignoring previous {previous} value"
                 );
                 winner = Some(option);
             }
@@ -1349,26 +1361,12 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         exit_if_pass_char_limit: matches.get_flag(options::EXIT),
         max_args: matches.get_one::<usize>(options::MAX_ARGS).copied(),
         max_chars: matches.get_one::<usize>(options::MAX_CHARS).copied(),
-        max_lines: [options::MAX_LINES, options::MAX_LINES_L]
-            .iter()
-            .find_map(|&option| {
-                matches.contains_id(option).then(|| {
-                    matches
-                        .get_one::<usize>(option)
-                        .map_or_else(|| 1, std::borrow::ToOwned::to_owned)
-                })
-            }),
+        max_lines: last_given(&matches, &[options::MAX_LINES, options::MAX_LINES_L])
+            .and_then(|option| matches.get_one::<usize>(option).copied()),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
-        replace: [options::REPLACE_I, options::REPLACE]
-            .iter()
-            .find_map(|&option| {
-                matches.contains_id(option).then(|| {
-                    matches
-                        .get_one::<String>(option)
-                        .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
-                })
-            }),
+        replace: last_given(&matches, &[options::REPLACE_I, options::REPLACE])
+            .and_then(|option| matches.get_one::<String>(option).cloned()),
         verbose: matches.get_flag(options::VERBOSE),
         eof_delimiter: [options::EOF_E, options::EOF]
             .iter()
