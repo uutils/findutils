@@ -474,11 +474,7 @@ fn basename_bytes(bytes: &[u8]) -> &[u8] {
         .iter()
         .rposition(|&b| b == b'/')
         .map_or(0, |i| i + 1);
-    let end = if last + 1 < bytes.len() {
-        last + 2
-    } else {
-        last + 1
-    };
+    let end = (last + 2).min(bytes.len());
     &bytes[start..end]
 }
 
