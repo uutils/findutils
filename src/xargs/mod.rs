@@ -943,44 +943,83 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
     }
 }
 
+/// The options that set how many arguments go into each command.
+#[derive(Clone, Copy, PartialEq)]
+enum BatchOption {
+    MaxLines,
+    MaxArgs,
+    Replace,
+}
+
+impl BatchOption {
+    /// How the option is named when it is the one being overridden.
+    fn long_name(self) -> &'static str {
+        match self {
+            Self::MaxLines => "--max-lines",
+            Self::MaxArgs => "--max-args",
+            Self::Replace => "--replace",
+        }
+    }
+}
+
 fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
-    let (max_args, max_lines, replace) =
-        match (options.max_args, options.max_lines, &options.replace) {
-            // These 3 options are mutually exclusive.
-            // But `max_args=1` and `replace` do not actually conflict, so no warning.
-            (None | Some(1), None, Some(_)) => {
-                // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
-                // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
-                // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
-                (Some(1), None, options.replace)
-            }
-            (Some(_), None, None) | (None, Some(_), None) | (None, None, None) => {
-                (options.max_args, options.max_lines, None)
-            }
-            _ => {
-                eprintln!(
-                "WARNING: -L, -n and -I/-i are mutually exclusive, but more than one were given; \
-                only the last option will be used"
-            );
-                let lines_index = matches
-                    .indices_of(options::MAX_LINES)
-                    .and_then(|mut v| v.next_back());
-                let args_index = matches
-                    .indices_of(options::MAX_ARGS)
-                    .and_then(|mut v| v.next_back());
-                let replace_index = [options::REPLACE, options::REPLACE_I]
-                    .iter()
-                    .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
-                    .max();
-                if lines_index > args_index && lines_index > replace_index {
-                    (None, options.max_lines, None)
-                } else if args_index > lines_index && args_index > replace_index {
-                    (options.max_args, None, None)
-                } else {
-                    (Some(1), None, options.replace)
+    // -L, -l, -n and -I/-i are mutually exclusive: the last one given wins and
+    // each option it overrides is reported, naming both.
+    let mut given: Vec<(usize, BatchOption, &str)> = Vec::new();
+    for (id, option, spelling) in [
+        (options::MAX_LINES, BatchOption::MaxLines, "-L"),
+        (
+            options::MAX_LINES_L,
+            BatchOption::MaxLines,
+            "--max-lines/-l",
+        ),
+        (options::MAX_ARGS, BatchOption::MaxArgs, "--max-args/-n"),
+        (options::REPLACE, BatchOption::Replace, "--replace/-I/-i"),
+        (options::REPLACE_I, BatchOption::Replace, "--replace/-I/-i"),
+    ] {
+        given.extend(
+            matches
+                .indices_of(id)
+                .into_iter()
+                .flatten()
+                .map(|index| (index, option, spelling)),
+        );
+    }
+    given.sort_by_key(|&(index, _, _)| index);
+
+    let mut winner: Option<BatchOption> = None;
+    for (_, option, spelling) in given {
+        match winner {
+            Some(previous) if previous != option => {
+                // -n1 after -I changes nothing, as -I already takes one
+                // argument at a time.
+                if previous == BatchOption::Replace
+                    && option == BatchOption::MaxArgs
+                    && options.max_args == Some(1)
+                {
+                    continue;
                 }
+                eprintln!(
+                    "xargs: warning: options {} and {spelling} are mutually exclusive, \
+                    ignoring previous {} value",
+                    previous.long_name(),
+                    previous.long_name(),
+                );
+                winner = Some(option);
             }
-        };
+            _ => winner = Some(option),
+        }
+    }
+
+    let (max_args, max_lines, replace) = match winner {
+        None => (None, None, None),
+        Some(BatchOption::MaxLines) => (None, options.max_lines, None),
+        Some(BatchOption::MaxArgs) => (options.max_args, None, None),
+        // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
+        // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
+        // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
+        Some(BatchOption::Replace) => (Some(1), None, options.replace),
+    };
 
     let delimiter = match (options.delimiter, options.null) {
         (Some(delimiter), true) => {
@@ -1077,6 +1116,9 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_LINES_L)
                 .short('l')
                 .num_args(0..=1)
+                // Without a value the option still needs an index to be ordered
+                // against -L, -n and -I.
+                .default_missing_value("1")
                 .help(
                     "Equivalent to -L, but with a default value of 1 if max-lines \
                     is unspecified",
@@ -1128,6 +1170,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('i')
                 .num_args(0..=1)
                 .require_equals(true)
+                .default_missing_value("{}")
                 .value_parser(clap::value_parser!(String))
                 .value_name("R")
                 .help("If R is specified, the same as -I R; otherwise, the same as -I {}"),
