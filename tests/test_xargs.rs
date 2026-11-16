@@ -156,7 +156,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-L2", "-n2"])
         .pipe_in("ab cd ef\ngh i")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("ab cd\nef gh\ni\n");
 
     // -n2 is last, so it should be given priority.
@@ -164,7 +164,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-I=_", "-n2", "echo", "_"])
         .pipe_in("ab   cd ef\ngh i\njkl")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("_ ab cd\n_ ef gh\n_ i jkl\n");
 
     // -L2 is last, so it should be given priority.
@@ -172,7 +172,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-n2", "-L2"])
         .pipe_in("ab cd\nef\ngh i\n\njkl\n")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("ab cd ef\ngh i jkl\n");
 
     // -L2 is last, so it should be given priority.
@@ -180,7 +180,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-I=_", "-L2", "echo", "_"])
         .pipe_in("ab cd\nef\ngh i\n\njkl\n")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("_ ab cd ef\n_ gh i jkl\n");
 
     for redundant_arg in ["-L2", "-n2"] {
@@ -189,9 +189,60 @@ fn xargs_max_args_lines_conflict() {
             .args(&[redundant_arg, "-I={}", "echo", "{} bar"])
             .pipe_in("ab  cd ef\ngh i\njkl")
             .succeeds()
-            .stderr_contains("WARNING")
+            .stderr_contains("mutually exclusive")
             .stdout_is("ab  cd ef bar\ngh i bar\njkl bar\n");
     }
+}
+
+#[test]
+fn xargs_conflicting_options_warning_names_options() {
+    ucmd()
+        .args(&["-L3", "-n1"])
+        .pipe_in("u v\nw\n")
+        .succeeds()
+        .stdout_is("u\nv\nw\n")
+        .stderr_is(
+            "xargs: warning: options --max-lines and --max-args/-n are mutually \
+             exclusive, ignoring previous --max-lines value\n",
+        );
+
+    ucmd()
+        .args(&["-n2", "-l1"])
+        .pipe_in("u v\nw\n")
+        .succeeds()
+        .stdout_is("u v\nw\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --max-lines/-l are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    // -n1 given before -I is overridden and reported.
+    ucmd()
+        .args(&["-n1", "-I", "%%", "echo", "<%%>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_is("<w>\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --replace/-I/-i are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    ucmd()
+        .args(&["-I", "%%", "-L2", "echo", "<%%>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_is("<%%> w\n")
+        .stderr_is(
+            "xargs: warning: options --replace and -L are mutually \
+             exclusive, ignoring previous --replace value\n",
+        );
+
+    // -n1 given after -I is silently ignored.
+    ucmd()
+        .args(&["-I", "%%", "-n1", "echo", "<%%>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_only("<w>\n");
 }
 
 #[test]
