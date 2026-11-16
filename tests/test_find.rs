@@ -1998,6 +1998,38 @@ fn find_printf_path_keeps_trailing_slash() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_printf_basename_keeps_spelling_of_starting_point() {
+    ucmd()
+        .args(&[
+            "test_data/simple/subdir/",
+            "test_data/simple/subdir/.",
+            "./.",
+            "///",
+            ".//",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "[%h] [%f]\n",
+        ])
+        .succeeds()
+        .no_stderr()
+        .stdout_is(
+            "[test_data/simple] [subdir/]\n\
+             [test_data/simple/subdir] [.]\n\
+             [.] [.]\n\
+             [//] [/]\n\
+             [./] [./]\n",
+        );
+
+    // Entries below a starting point still print their own name.
+    ucmd()
+        .args(&["test_data/simple/", "-name", "abbbc", "-printf", "%f\n"])
+        .succeeds()
+        .stdout_only("abbbc\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn find_fprintf_reports_write_error() {
     let result = ucmd()
