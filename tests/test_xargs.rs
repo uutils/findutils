@@ -216,6 +216,41 @@ fn xargs_conflicting_options_warning_names_options() {
              exclusive, ignoring previous --max-args value\n",
         );
 
+    // A bare -l is -l1.
+    ucmd()
+        .args(&["-n2", "-l"])
+        .pipe_in("u v\nw\n")
+        .succeeds()
+        .stdout_is("u v\nw\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --max-lines/-l are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    // A bare -i is -i{}.
+    ucmd()
+        .args(&["-n2", "-i", "echo", "<{}>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_is("<w>\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --replace/-I/-i are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    // -L and -l set the same option: the last one wins, with no warning.
+    ucmd()
+        .args(&["-L3", "-l"])
+        .pipe_in("u v\nw\nx\n")
+        .succeeds()
+        .stdout_only("u v\nw\nx\n");
+
+    ucmd()
+        .args(&["-l", "-L3"])
+        .pipe_in("u v\nw\nx\n")
+        .succeeds()
+        .stdout_only("u v w x\n");
+
     // -n1 given before -I is overridden and reported.
     ucmd()
         .args(&["-n1", "-I", "%%", "echo", "<%%>"])
