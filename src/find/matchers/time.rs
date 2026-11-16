@@ -312,6 +312,28 @@ impl FileTimeMatcher {
                 e.duration()
             }
         };
+
+        if self.today_start {
+            // Relative to today's midnight, GNU's n-day interval is
+            // [(n - 1) days, n days). Keep fractions at the boundaries and use
+            // i128 so even u64::MAX days cannot overflow.
+            let age_in_nanos = age.as_nanos() as i128 * if is_negative { -1 } else { 1 };
+            let nanos_per_day = i128::from(SECONDS_PER_DAY) * 1_000_000_000;
+            let boundary = |days| i128::from(days) * nanos_per_day;
+            return Ok(match self.days {
+                ComparableValue::EqualTo(days) => {
+                    let end = boundary(days);
+                    (end - nanos_per_day..end).contains(&age_in_nanos)
+                }
+                ComparableValue::MoreThan(days) => age_in_nanos > boundary(days),
+                // GNU's -n also accepts the fractional second just before
+                // the midnight boundary, but not the preceding whole second.
+                ComparableValue::LessThan(days) => {
+                    age_in_nanos < boundary(days) - nanos_per_day + 1_000_000_000
+                }
+            });
+        }
+
         let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
 
         // rust division truncates towards zero (see
@@ -319,13 +341,7 @@ impl FileTimeMatcher {
         // so a simple age_in_seconds / SECONDS_PER_DAY gives the wrong answer
         // for negative ages: a file whose age is 1 second in the future needs to
         // count as -1 day old, not 0.
-        // If today_start is true, we should count it as 0 days old.
-        // because today is 00:00:00, so we need to subtract 1 day.
-        let negative_offset = if is_negative && !self.today_start {
-            -1
-        } else {
-            0
-        };
+        let negative_offset = if is_negative { -1 } else { 0 };
 
         let age_in_days = age_in_seconds / SECONDS_PER_DAY + negative_offset;
         Ok(self.days.imatches(age_in_days))
@@ -625,6 +641,61 @@ mod tests {
 
         let midnight = DateTime::<Local>::from(midnight);
         assert_eq!(midnight.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+    }
+
+    #[rstest::rstest]
+    #[case::today(ComparableValue::EqualTo(0), 43_200, 0, true)]
+    #[case::yesterday_is_not_today(ComparableValue::EqualTo(0), -43_200, 0, false)]
+    #[case::yesterday(ComparableValue::EqualTo(1), -43_200, 0, true)]
+    #[case::two_days_ago_is_not_yesterday(ComparableValue::EqualTo(1), -129_600, 0, false)]
+    #[case::two_days_ago(ComparableValue::EqualTo(2), -129_600, 0, true)]
+    #[case::midnight_is_not_today(ComparableValue::EqualTo(0), 0, 0, false)]
+    #[case::after_midnight(ComparableValue::EqualTo(0), 0, 500_000_000, true)]
+    #[case::next_midnight(ComparableValue::EqualTo(0), 86_400, 0, true)]
+    #[case::after_next_midnight(ComparableValue::EqualTo(0), 86_400, 500_000_000, false)]
+    #[case::previous_midnight(ComparableValue::EqualTo(1), -86_400, 0, false)]
+    #[case::after_previous_midnight(ComparableValue::EqualTo(1), -86_400, 500_000_000, true)]
+    #[case::midnight_is_yesterday(ComparableValue::EqualTo(1), 0, 0, true)]
+    #[case::after_midnight_is_not_yesterday(ComparableValue::EqualTo(1), 0, 500_000_000, false)]
+    #[case::older_than_today(ComparableValue::MoreThan(0), -43_200, 0, true)]
+    #[case::midnight_is_not_older(ComparableValue::MoreThan(0), 0, 0, false)]
+    #[case::before_midnight_is_older(ComparableValue::MoreThan(0), -1, 500_000_000, true)]
+    #[case::previous_midnight_is_not_older(ComparableValue::MoreThan(1), -86_400, 0, false)]
+    #[case::before_previous_midnight_is_older(ComparableValue::MoreThan(1), -86_401, 500_000_000, true)]
+    #[case::less_than_one_day(ComparableValue::LessThan(1), 43_200, 0, true)]
+    #[case::yesterday_is_not_less_than_one_day(ComparableValue::LessThan(1), -43_200, 0, false)]
+    #[case::last_fractional_second(ComparableValue::LessThan(1), -1, 500_000_000, true)]
+    #[case::one_second_before_midnight(ComparableValue::LessThan(1), -1, 0, false)]
+    #[case::previous_last_fractional_second(ComparableValue::LessThan(2), -86_401, 500_000_000, true)]
+    #[case::before_previous_last_second(ComparableValue::LessThan(2), -86_401, 0, false)]
+    #[case::huge_equal(ComparableValue::EqualTo(u64::MAX), 0, 0, false)]
+    #[case::huge_more(ComparableValue::MoreThan(u64::MAX), 0, 0, false)]
+    #[case::huge_less(ComparableValue::LessThan(u64::MAX), 0, 0, true)]
+    fn daystart_file_time_ranges(
+        #[case] days: ComparableValue,
+        #[case] offset_seconds: i64,
+        #[case] nanos: u32,
+        #[case] expected: bool,
+        #[values(FileTimeType::Accessed, FileTimeType::Modified)] file_time_type: FileTimeType,
+    ) {
+        const MIDNIGHT: i64 = 1_700_006_400;
+        let dir = tempfile::tempdir().expect("create fixture directory");
+        let path = dir.path().join("file");
+        File::create(&path).expect("create fixture file");
+        let stamp = filetime::FileTime::from_unix_time(MIDNIGHT + offset_seconds, nanos);
+        filetime::set_file_times(&path, stamp, stamp).expect("set fixture timestamps");
+        let entry = get_dir_entry_for(&dir.path().to_string_lossy(), "file");
+        let midnight = UNIX_EPOCH + Duration::from_secs(MIDNIGHT as u64);
+
+        // Expectations include GNU's strict +n boundary and the fractional
+        // second accepted by -n just before midnight.
+        let matcher = FileTimeMatcher::new(file_time_type, days, true);
+        assert_eq!(
+            matcher
+                .matches_impl(&entry, midnight)
+                .expect("match file time"),
+            expected
+        );
     }
 
     #[test]
