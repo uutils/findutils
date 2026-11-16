@@ -444,6 +444,44 @@ fn get_starting_point(file_info: &WalkEntry) -> &Path {
         .unwrap()
 }
 
+/// The %f directive: the last element of the path.
+///
+/// A starting point is spelled out as given ("dir/" gives "dir/", "dir/."
+/// gives "."), not by its last normalised component, which `file_name()`
+/// returns for `-name`. Entries found while walking use `file_name()`.
+fn format_basename(file_info: &WalkEntry) -> Cow<'_, str> {
+    #[cfg(unix)]
+    if file_info.depth() == 0 {
+        use std::os::unix::ffi::OsStrExt;
+
+        let bytes = file_info.path().as_os_str().as_bytes();
+        if !bytes.is_empty() {
+            return String::from_utf8_lossy(basename_bytes(bytes));
+        }
+    }
+
+    file_info.file_name().to_string_lossy()
+}
+
+/// The text after the last slash of a path, with one trailing slash kept if
+/// the path had any. A path of only slashes is the root, "/".
+#[cfg(unix)]
+fn basename_bytes(bytes: &[u8]) -> &[u8] {
+    let Some(last) = bytes.iter().rposition(|&b| b != b'/') else {
+        return b"/";
+    };
+    let start = bytes[..last]
+        .iter()
+        .rposition(|&b| b == b'/')
+        .map_or(0, |i| i + 1);
+    let end = if last + 1 < bytes.len() {
+        last + 2
+    } else {
+        last + 1
+    };
+    &bytes[start..end]
+}
+
 /// The %h directive: everything before the last element of the path.
 fn format_dirname(path: &Path) -> Cow<'_, str> {
     // Cut at the last slash of the path as it was spelled, so that "a//b"
@@ -454,6 +492,11 @@ fn format_dirname(path: &Path) -> Cow<'_, str> {
         use std::os::unix::ffi::OsStrExt;
 
         let bytes = path.as_os_str().as_bytes();
+        // One character followed only by two or more slashes (".//", "///") is
+        // cut at its last slash, keeping the others.
+        if bytes.len() > 2 && bytes[1..].iter().all(|&b| b == b'/') {
+            return String::from_utf8_lossy(&bytes[..bytes.len() - 1]);
+        }
         // A path of only slashes (the root) has nothing before it.
         let Some(last) = bytes.iter().rposition(|&b| b != b'/') else {
             return "".into();
@@ -561,7 +604,7 @@ fn format_directive<'entry>(
     let res: Cow<'entry, str> = match directive {
         FormatDirective::AccessTime(tf) => tf.apply(meta()?.accessed()?)?,
 
-        FormatDirective::Basename => file_info.file_name().to_string_lossy(),
+        FormatDirective::Basename => format_basename(file_info),
 
         FormatDirective::Blocks { large_blocks } => {
             #[cfg(unix)]
@@ -911,8 +954,37 @@ mod tests {
             ("a//b//", "a/"),
             ("/a/b", "/a"),
             ("./a/b/c", "./a/b"),
+            ("./", "."),
+            (".//", "./"),
+            ("///", "//"),
         ] {
             assert_eq!(format_dirname(Path::new(path)), expected, "path {path:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_basename_bytes() {
+        for (path, expected) in [
+            ("/", "/"),
+            ("//", "/"),
+            ("///", "/"),
+            (".", "."),
+            ("./", "./"),
+            (".//", "./"),
+            ("a", "a"),
+            ("foo/", "foo/"),
+            ("foo/.", "."),
+            ("./.", "."),
+            ("a/b", "b"),
+            ("a//b//", "b/"),
+            ("/a", "a"),
+        ] {
+            assert_eq!(
+                basename_bytes(path.as_bytes()),
+                expected.as_bytes(),
+                "path {path:?}"
+            );
         }
     }
 
