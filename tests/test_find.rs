@@ -2847,3 +2847,27 @@ fn missing_starting_point_is_named_without_os_error() {
         .stdout_is("./test_data/simple/abbbc\n")
         .stderr_is("find: 'xyz.nonexistentDir': No such file or directory\n");
 }
+
+#[test]
+fn find_leading_close_paren_needs_expression() {
+    for extra in [&[][..], &["-print"][..]] {
+        ucmd()
+            .args(&["-files0-from", "-", ")"])
+            .args(extra)
+            .pipe_in("")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("expected expression before closing parentheses");
+    }
+
+    ucmd()
+        .args(&["-files0-from", "-", "-true", ")"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_contains("you have too many ')'");
+
+    ucmd()
+        .args(&["./test_data/simple", "-true", ")"])
+        .fails_with_code(1)
+        .stderr_contains("you have too many ')'");
+}
