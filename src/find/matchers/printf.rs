@@ -361,6 +361,12 @@ impl FormatStringParser<'_> {
             },
             'Y' => FormatDirective::Type { follow_links: true },
             // TODO: %Z
+            '(' | '{' | '[' => {
+                return Err(format!(
+                    "error: the format directive `%{first}' is reserved for future use"
+                )
+                .into());
+            }
             _ => {
                 eprintln!(
                     "{}: warning: unrecognized format directive '%{first}'",
