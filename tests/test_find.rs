@@ -2890,10 +2890,20 @@ fn find_leading_close_paren_needs_expression() {
     }
 
     ucmd()
-        .args(&["-files0-from", "-", "-true", ")"])
+        .args(&["-files0-from", "-", "-files0-from", "-", ")"])
         .pipe_in("")
         .fails_with_code(1)
-        .stderr_contains("you have too many ')'");
+        .stderr_contains("expected expression before closing parentheses");
+
+    for before in [&["-true"][..], &["-maxdepth", "1"][..], &["-depth"][..]] {
+        ucmd()
+            .args(&["-files0-from", "-"])
+            .args(before)
+            .arg(")")
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("you have too many ')'");
+    }
 
     ucmd()
         .args(&["./test_data/simple", "-true", ")"])
