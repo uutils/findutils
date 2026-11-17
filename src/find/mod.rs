@@ -9,7 +9,7 @@ pub mod matchers;
 
 use error::ParseError;
 use matchers::{Follow, WalkEntry};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::error::Error;
 #[cfg(unix)]
 use std::io::IsTerminal;
@@ -182,7 +182,7 @@ struct Files0Paths {
     /// How many entries have been read, empty ones included.
     position: usize,
     /// Set once an empty entry was skipped, which makes find exit with 1.
-    skipped_empty: Rc<Cell<bool>>,
+    skipped_empty: bool,
 }
 
 impl Files0Paths {
@@ -202,7 +202,7 @@ impl Files0Paths {
             reader,
             source,
             position: 0,
-            skipped_empty: Rc::new(Cell::new(false)),
+            skipped_empty: false,
         })
     }
 }
@@ -231,7 +231,7 @@ impl Iterator for Files0Paths {
                     self.source,
                     self.position
                 );
-                self.skipped_empty.set(true);
+                self.skipped_empty = true;
                 continue;
             }
             return Some(String::from_utf8(buffer).map_err(Into::into));
@@ -426,12 +426,9 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
         return Ok(0);
     }
 
-    let skipped_empty = paths_and_matcher
-        .files0_paths
-        .as_ref()
-        .map(|files0_paths| Rc::clone(&files0_paths.skipped_empty));
+    let mut files0_paths = paths_and_matcher.files0_paths;
     let paths: Box<dyn Iterator<Item = Result<String, Box<dyn Error>>>> =
-        match paths_and_matcher.files0_paths {
+        match files0_paths.as_mut() {
             Some(files0_paths) => Box::new(files0_paths),
             None => Box::new(paths_and_matcher.paths.into_iter().map(Ok)),
         };
@@ -454,7 +451,7 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
             break;
         }
     }
-    if ret == 0 && skipped_empty.is_some_and(|skipped| skipped.get()) {
+    if ret == 0 && files0_paths.is_some_and(|files0_paths| files0_paths.skipped_empty) {
         ret = 1;
     }
 
