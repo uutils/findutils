@@ -3059,3 +3059,48 @@ fn find_leading_close_paren_needs_expression() {
         .fails_with_code(1)
         .stderr_contains("you have too many ')'");
 }
+
+#[test]
+fn find_debug_option() {
+    ucmd()
+        .arg("-D")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("Missing argument after the -D option");
+
+    ucmd()
+        .args(&["-D", "", "./test_data/simple/abbbc"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("Empty argument to the -D option");
+
+    for flags in ["search", "tree,stat", "exec,,all"] {
+        ucmd()
+            .args(&["-D", flags, "./test_data/simple/abbbc", "-maxdepth", "0"])
+            .succeeds()
+            .no_stderr()
+            .stdout_is("./test_data/simple/abbbc\n");
+    }
+
+    ucmd()
+        .args(&[
+            "-L",
+            "-D",
+            "bogus",
+            "./test_data/simple/abbbc",
+            "-maxdepth",
+            "0",
+        ])
+        .succeeds()
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: Ignoring unrecognised debug flag 'bogus'\n");
+
+    // `-D help` lists the flags and searches nothing.
+    ucmd()
+        .args(&["-D", "help,tree", "./test_data/simple"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("Valid arguments for -D:\n")
+        .stdout_contains("tree       Display the expression tree\n")
+        .stdout_does_not_contain("./test_data");
+}
