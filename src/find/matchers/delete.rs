@@ -8,7 +8,7 @@
  */
 
 use std::fs;
-use std::io::{self, stderr, Write};
+use std::io::{self, stderr, ErrorKind, Write};
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -42,6 +42,9 @@ impl Matcher for DeleteMatcher {
 
         match self.delete(file_info) {
             Ok(()) => true,
+            // With -ignore_readdir_race, a file that vanished since its
+            // parent directory was read is not an error, and -delete is true.
+            Err(e) if e.kind() == ErrorKind::NotFound && matcher_io.ignore_readdir_race() => true,
             Err(e) => {
                 matcher_io.set_exit_code(1);
                 writeln!(&mut stderr(), "Failed to delete {path_str}: {e}").unwrap();
@@ -93,5 +96,35 @@ mod tests {
             !temp_dir.path().join("test_dir").exists(),
             "DeleteMatcher should actually delete (empty) directories it matches",
         );
+    }
+
+    #[test]
+    fn delete_matcher_vanished_file() {
+        let matcher = DeleteMatcher::new();
+        let deps = FakeDependencies::new();
+
+        let temp_dir = Builder::new().prefix("test_data").tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_string_lossy();
+        let test_file = temp_dir.path().join("test");
+        File::create(&test_file).expect("created test file");
+        let test_entry = get_dir_entry_for(&temp_dir_path, "test");
+
+        // The file disappears after its entry was read from the directory.
+        fs::remove_file(&test_file).expect("removed test file");
+
+        let mut matcher_io = deps.new_matcher_io();
+        assert!(
+            !matcher.matches(&test_entry, &mut matcher_io),
+            "DeleteMatcher should fail on a vanished file by default",
+        );
+        assert_eq!(matcher_io.exit_code(), 1);
+
+        let mut matcher_io = deps.new_matcher_io();
+        matcher_io.set_ignore_readdir_race(true);
+        assert!(
+            matcher.matches(&test_entry, &mut matcher_io),
+            "DeleteMatcher should be true for a vanished file with -ignore_readdir_race",
+        );
+        assert_eq!(matcher_io.exit_code(), 0);
     }
 }

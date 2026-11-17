@@ -557,6 +557,136 @@ fn matcher_with_side_effects_in_front() {
     assert!(!temp_dir.path().exists(), "temp dir should also be deleted");
 }
 
+// The file is removed by -exec before -delete gets to it, which is what a
+// readdir race looks like to -delete.
+#[test]
+#[cfg(unix)]
+fn delete_vanished_file_is_an_error_by_default() {
+    for args in [
+        &["-name", "test", "-exec", "rm", "{}", ";", "-delete"][..],
+        &[
+            "-ignore_readdir_race",
+            "-noignore_readdir_race",
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+        ][..],
+    ] {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        File::create(temp_dir.path().join("test")).expect("created test file");
+
+        ucmd()
+            .arg(temp_dir.path())
+            .args(args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("No such file or directory");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn delete_vanished_file_with_ignore_readdir_race() {
+    // It is a global option, so its position in the expression is irrelevant.
+    for args in [
+        &[
+            "-ignore_readdir_race",
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+        ][..],
+        &[
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+            "-ignore_readdir_race",
+        ][..],
+    ] {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        let test_file = temp_dir.path().join("test");
+        File::create(&test_file).expect("created test file");
+
+        ucmd()
+            .arg(temp_dir.path())
+            .args(args)
+            .succeeds()
+            .no_output();
+
+        assert!(!test_file.exists(), "test file should be deleted");
+        assert!(temp_dir.path().exists(), "temp dir should NOT be deleted");
+    }
+}
+
+// While "a" is visited, -exec removes the directory "b", which has already
+// been read from "d" but not opened yet.  -sorted makes "a" come first.
+#[cfg(unix)]
+fn vanished_dir_during_walk() -> tempfile::TempDir {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+    File::create(temp_dir.path().join("a")).expect("created test file");
+    fs::create_dir_all(temp_dir.path().join("b").join("inner")).expect("created test dir");
+    temp_dir
+}
+
+#[test]
+#[cfg(unix)]
+fn vanished_dir_during_walk_is_an_error_by_default() {
+    let temp_dir = vanished_dir_during_walk();
+    let b = temp_dir.path().join("b");
+
+    ucmd()
+        .arg(temp_dir.path())
+        .args(&["-sorted", "-name", "a", "-exec", "rm", "-rf"])
+        .arg(&b)
+        .args(&[";", "-print"])
+        .fails_with_code(1)
+        .stdout_is(format!("{}\n", temp_dir.path().join("a").display()))
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn vanished_dir_during_walk_with_ignore_readdir_race() {
+    let temp_dir = vanished_dir_during_walk();
+    let b = temp_dir.path().join("b");
+
+    ucmd()
+        .arg(temp_dir.path())
+        .args(&["-ignore_readdir_race", "-sorted", "-name", "a"])
+        .args(&["-exec", "rm", "-rf"])
+        .arg(&b)
+        .args(&[";", "-print"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("{}\n", temp_dir.path().join("a").display()));
+
+    assert!(!b.exists(), "b should have been removed by -exec");
+}
+
+#[test]
+fn missing_start_point_still_reported_with_ignore_readdir_race() {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+    let missing = temp_dir.path().join("missing");
+
+    ucmd()
+        .arg(&missing)
+        .arg("-ignore_readdir_race")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("missing");
+}
+
 // This could be covered by a unit test in principle... in practice, changing
 // the working dir can't be done safely in unit tests unless `--test-threads=1`
 // or `serial` goes everywhere, and it doesn't seem possible to get an
@@ -1042,6 +1172,48 @@ fn find_printf_epoch_times_before_1970() {
             .succeeds()
             .no_output();
         assert_eq!(fs::read(&output_path).unwrap(), expected.as_bytes());
+    }
+}
+
+// Regression test for uutils/findutils#963: a file dated near i64::MIN is more
+// than i64::MAX seconds old, and that age used to wrap to a negative (future)
+// one. Only file systems with full 64-bit times can store such a date (tmpfs,
+// hence /dev/shm), so skip when the time doesn't round-trip.
+#[test]
+#[cfg(unix)]
+fn find_time_matches_file_dated_near_i64_min() {
+    use std::os::unix::fs::MetadataExt;
+
+    let builder = Builder::new()
+        .prefix("find_i64_min_")
+        .tempdir_in("/dev/shm");
+    let Ok(temp_dir) = builder else { return };
+    let file_path = temp_dir.path().join("ancient");
+    File::create(&file_path).expect("create test file");
+    // i64::MIN itself overflows inside filetime, and one second later is just as old.
+    let ancient = i64::MIN + 1;
+    let stored =
+        filetime::set_file_mtime(&file_path, filetime::FileTime::from_unix_time(ancient, 0))
+            .and_then(|()| fs::metadata(&file_path));
+    if !matches!(stored, Ok(metadata) if metadata.mtime() == ancient) {
+        return;
+    }
+
+    let dir = temp_dir.path().to_str().unwrap();
+    let expected = format!("{}\n", file_path.to_str().unwrap());
+    for older_than in [["-mtime", "+7"], ["-mmin", "+7"]] {
+        ucmd()
+            .args(&[dir, "-type", "f"])
+            .args(&older_than)
+            .succeeds()
+            .stdout_only(&expected);
+    }
+    for newer_than in [["-mtime", "-1"], ["-mmin", "-1"]] {
+        ucmd()
+            .args(&[dir, "-type", "f"])
+            .args(&newer_than)
+            .succeeds()
+            .no_output();
     }
 }
 
@@ -1896,6 +2068,25 @@ fn find_follow() {
         .no_stderr();
 }
 
+/// Creates file and directory targets with valid and dangling links
+/// for the `-lname`/`-ilname` and `%l` tests.
+fn create_symlink_following_fixture(root: &Path) {
+    File::create(root.join("file-target")).expect("create target file");
+    fs::create_dir(root.join("dir-target")).expect("create target directory");
+    #[cfg(unix)]
+    {
+        symlink("file-target", root.join("file-link")).expect("create file link");
+        symlink("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+    #[cfg(windows)]
+    {
+        symlink_file("file-target", root.join("file-link")).expect("create file link");
+        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+}
+
 // Expected outputs are ordered as [command-line roots, descendants].
 #[rstest::rstest]
 #[case::physical(&["-P"], &[], &[], ["broken-link\ndir-link\nfile-link\n"; 2])]
@@ -1916,20 +2107,7 @@ fn find_lname_respects_symlink_following(
         .tempdir()
         .expect("create temp dir");
     let root = temp_dir.path();
-    File::create(root.join("file-target")).expect("create target file");
-    fs::create_dir(root.join("dir-target")).expect("create target directory");
-    #[cfg(unix)]
-    {
-        symlink("file-target", root.join("file-link")).expect("create file link");
-        symlink("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink("missing-target", root.join("broken-link")).expect("create broken link");
-    }
-    #[cfg(windows)]
-    {
-        symlink_file("file-target", root.join("file-link")).expect("create file link");
-        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
-    }
+    create_symlink_following_fixture(root);
 
     let mut command = ucmd();
     command.current_dir(root).env("LC_ALL", "C").args(options);
@@ -1954,6 +2132,64 @@ fn find_lname_respects_symlink_following(
         .succeeds()
         .no_stderr()
         .stdout_only(expected[usize::from(descendants)]);
+}
+
+// Follow expectations are ordered as [command-line roots, descendants].
+#[rstest::rstest]
+#[case::physical(&["-P"], &[], &[], [false; 2])]
+#[case::roots(&["-H"], &[], &[], [true, false])]
+#[case::logical(&["-L"], &[], &[], [true; 2])]
+#[case::follow(&[], &["-follow"], &[], [true; 2])]
+#[case::trailing_follow(&[], &[], &["-follow"], [true; 2])]
+fn find_printf_link_target_respects_symlink_following(
+    #[case] options: &[&str],
+    #[case] before_action: &[&str],
+    #[case] after_action: &[&str],
+    #[case] follows_links: [bool; 2],
+    #[values(false, true)] descendants: bool,
+) {
+    let temp_dir = Builder::new()
+        .prefix("find_printf_link_")
+        .tempdir()
+        .expect("create temp dir");
+    let root = temp_dir.path().join("tree");
+    let output = temp_dir.path().join("output");
+    fs::create_dir(&root).expect("create test tree");
+    create_symlink_following_fixture(&root);
+
+    let mut command = ucmd();
+    command.current_dir(&root).env("LC_ALL", "C").args(options);
+    if descendants {
+        command.args(&[".", "-mindepth", "1", "-maxdepth", "1", "-sorted"]);
+    } else {
+        command.args(&[
+            "broken-link",
+            "dir-link",
+            "dir-target",
+            "file-link",
+            "file-target",
+            "-maxdepth",
+            "0",
+        ]);
+    }
+    let expected = if follows_links[usize::from(descendants)] {
+        "<missing-target>\n<>\n<>\n<>\n<>\n"
+    } else {
+        "<missing-target>\n<dir-target>\n<>\n<file-target>\n<>\n"
+    };
+    command
+        .args(before_action)
+        .args(&["-printf", "<%l>\n", "-fprintf"])
+        .arg(&output)
+        .arg("<%l>\n")
+        .args(after_action)
+        .succeeds()
+        .no_stderr()
+        .stdout_only(expected);
+    assert_eq!(
+        fs::read(output).expect("read -fprintf output"),
+        expected.as_bytes()
+    );
 }
 
 #[test]
@@ -2020,6 +2256,38 @@ fn find_printf_path_keeps_trailing_slash() {
         .args(&["test_data/simple//", "-name", "abbbc", "-printf", "%p|%P\n"])
         .succeeds()
         .stdout_only("test_data/simple//abbbc|abbbc\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn find_printf_basename_keeps_spelling_of_starting_point() {
+    ucmd()
+        .args(&[
+            "test_data/simple/subdir/",
+            "test_data/simple/subdir/.",
+            "./.",
+            "///",
+            ".//",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "[%h] [%f]\n",
+        ])
+        .succeeds()
+        .no_stderr()
+        .stdout_is(
+            "[test_data/simple] [subdir/]\n\
+             [test_data/simple/subdir] [.]\n\
+             [.] [.]\n\
+             [//] [/]\n\
+             [./] [./]\n",
+        );
+
+    // Entries below a starting point still print their own name.
+    ucmd()
+        .args(&["test_data/simple/", "-name", "abbbc", "-printf", "%f\n"])
+        .succeeds()
+        .stdout_only("abbbc\n");
 }
 
 #[test]
@@ -2187,6 +2455,31 @@ fn find_ls_shows_allocated_blocks_and_link_target() {
         .args(&[temp_dir.path().join("link").to_str().unwrap(), "-ls"])
         .succeeds()
         .stdout_contains(" -> sparse\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn find_ls_shows_device_numbers() {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::libc::{dev_t, major, minor};
+
+    let rdev = fs::metadata("/dev/null").unwrap().rdev() as dev_t;
+    let expected = format!(" {:>3}, {:>3} ", major(rdev), minor(rdev));
+
+    ucmd()
+        .args(&["/dev/null", "-ls"])
+        .succeeds()
+        .stdout_contains(expected);
+}
+
+// /dev/null is character device 1,3 on Linux; check the literal GNU layout.
+#[test]
+#[cfg(target_os = "linux")]
+fn find_ls_shows_dev_null_major_minor() {
+    ucmd()
+        .args(&["/dev/null", "-ls"])
+        .succeeds()
+        .stdout_contains("  1,   3 ");
 }
 
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
