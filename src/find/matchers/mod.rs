@@ -1157,6 +1157,19 @@ fn build_matcher_tree(
             }
             Predicate::CloseParen => {
                 let Some(open_bracket_index) = open_bracket else {
+                    // Only possible without starting points (`-files0-from`): GNU
+                    // find wants an expression before a leading `)`.
+                    let nothing_before = args[arg_index..i]
+                        .chunks(2)
+                        .all(|pair| pair.len() == 2 && pair[0] == "-files0-from");
+                    if nothing_before {
+                        return Err(ParseError::new(
+                            "invalid expression: expected expression before closing parentheses ')'.",
+                        )
+                        .at(i)
+                        .with_label("no expression before this")
+                        .into());
+                    }
                     return Err(ParseError::new("you have too many ')'")
                         .at(i)
                         .with_label("no matching '(' before this")
