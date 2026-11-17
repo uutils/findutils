@@ -723,8 +723,16 @@ fn build_matcher_tree(
     // multiple-character flags don't start with a double dash
     let mut i = arg_index;
     let mut invert_next_matcher = false;
+    // Whether a token other than `-files0-from` came before, for GNU's error
+    // on a `)` that starts the expression.
+    let mut seen_expression_token = false;
     while i < args.len() {
-        let possible_submatcher = match lookup_predicate(args[i]) {
+        let predicate = lookup_predicate(args[i]);
+        let starts_expression = !seen_expression_token;
+        if !matches!(predicate, Predicate::Files0From) {
+            seen_expression_token = true;
+        }
+        let possible_submatcher = match predicate {
             Predicate::Print => Some(
                 Printer::new(PrintDelimiter::Newline, None)
                     .with_stdout_errors(config.stdout_errors.clone())
@@ -1159,10 +1167,7 @@ fn build_matcher_tree(
                 let Some(open_bracket_index) = open_bracket else {
                     // Only possible without starting points (`-files0-from`): GNU
                     // find wants an expression before a leading `)`.
-                    let nothing_before = args[arg_index..i]
-                        .chunks(2)
-                        .all(|pair| pair.len() == 2 && pair[0] == "-files0-from");
-                    if nothing_before {
+                    if starts_expression {
                         return Err(ParseError::new(
                             "invalid expression: expected expression before closing parentheses ')'.",
                         )
