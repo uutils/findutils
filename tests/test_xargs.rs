@@ -739,7 +739,7 @@ fn xargs_delimiter_dash() {
 }
 
 #[test]
-fn xargs_numeric_option_leading_dash_is_the_value() {
+fn xargs_option_leading_dash_is_the_value() {
     // A required value that starts with '-' should be taken as the option
     // value and then rejected, not reported as an unexpected argument.
     // Empty stdin: the value is rejected before reading input, so writing
