@@ -7,6 +7,9 @@
 use std::fs::File;
 use std::io::{stderr, Write};
 
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+
 use super::{Matcher, MatcherIO, StdoutErrors, WalkEntry};
 
 pub enum PrintDelimiter {
@@ -45,13 +48,15 @@ impl Printer {
     }
 
     fn print(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO, mut out: impl Write) {
-        let result = write!(
-            out,
-            "{}{}",
-            file_info.path().to_string_lossy(),
-            self.delimiter
-        )
-        .and_then(|()| out.flush());
+        // Unix paths are byte strings: a lossy conversion can name a different file.
+        #[cfg(unix)]
+        let result = out.write_all(file_info.path().as_os_str().as_bytes());
+        #[cfg(not(unix))]
+        let result = write!(out, "{}", file_info.path().to_string_lossy());
+
+        let result = result
+            .and_then(|()| write!(out, "{}", self.delimiter))
+            .and_then(|()| out.flush());
         if let Err(e) = result {
             if self.output_file.is_none() {
                 self.stdout_errors.handle(&e, matcher_io);
@@ -122,6 +127,48 @@ mod tests {
             fix_up_slashes("./test_data/simple/abbbc\0"),
             deps.get_output_as_string()
         );
+    }
+
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::stdout_newline(PrintDelimiter::Newline, b"\n", false)]
+    #[case::stdout_null(PrintDelimiter::Null, b"\0", false)]
+    #[case::file_newline(PrintDelimiter::Newline, b"\n", true)]
+    #[case::file_null(PrintDelimiter::Null, b"\0", true)]
+    fn prints_raw_unix_path_bytes(
+        #[case] delimiter: PrintDelimiter,
+        #[case] suffix: &[u8],
+        #[case] writes_file: bool,
+    ) {
+        use crate::find::matchers::Follow;
+        use std::ffi::OsStr;
+        use tempfile::Builder;
+
+        // The input entry is synthetic because filesystems such as APFS reject
+        // non-UTF-8 filenames. The output file has an ordinary name.
+        let path = b"./caf\xc3\xa9\xff";
+        let entry = WalkEntry::new(OsStr::from_bytes(path), 0, Follow::Never);
+        let temp_dir = Builder::new()
+            .prefix("prints_raw_unix_path_bytes_")
+            .tempdir()
+            .unwrap();
+        let output_path = temp_dir.path().join("out");
+        let output_file = if writes_file {
+            Some(File::create(&output_path).unwrap())
+        } else {
+            None
+        };
+        let matcher = Printer::new(delimiter, output_file);
+        let deps = FakeDependencies::new();
+        assert!(matcher.matches(&entry, &mut deps.new_matcher_io()));
+        let mut expected = path.to_vec();
+        expected.extend_from_slice(suffix);
+        if writes_file {
+            assert_eq!(std::fs::read(output_path).unwrap(), expected);
+            assert_eq!(deps.output.borrow().get_ref().as_slice(), []);
+        } else {
+            assert_eq!(deps.output.borrow().get_ref(), &expected);
+        }
     }
 
     #[test]
