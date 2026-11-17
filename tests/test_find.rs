@@ -2102,6 +2102,65 @@ fn find_fprinter() {
     }
 }
 
+// APFS rejects non-UTF-8 filenames; printer unit tests cover raw bytes there.
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[rstest::rstest]
+#[case::implicit(None, b'\n', false)]
+#[case::print(Some("-print"), b'\n', false)]
+#[case::print0(Some("-print0"), b'\0', false)]
+#[case::fprint(Some("-fprint"), b'\n', true)]
+#[case::fprint0(Some("-fprint0"), b'\0', true)]
+fn find_print_preserves_non_utf8_filenames(
+    #[case] action: Option<&str>,
+    #[case] delimiter: u8,
+    #[case] writes_file: bool,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let temp_dir = Builder::new()
+        .prefix("find_print_bytes_")
+        .tempdir()
+        .unwrap();
+    fs::create_dir(temp_dir.path().join("d")).unwrap();
+    // Byte-sorted names mix valid text with invalid UTF-8. The last two 'a'
+    // names must stay distinct rather than both becoming "a\u{fffd}z".
+    let paths: &[&[u8]] = &[
+        b"d/ascii",
+        b"d/a\x80",
+        b"d/a\xef\xbf\xbdz",
+        b"d/a\xffz",
+        "d/caf\u{e9}".as_bytes(),
+    ];
+    let mut expected = Vec::new();
+    for path in paths {
+        File::create(temp_dir.path().join(OsStr::from_bytes(path))).unwrap();
+        expected.extend_from_slice(path);
+        expected.push(delimiter);
+    }
+
+    // Keep the arguments ASCII: invalid bytes come from directory entries.
+    let mut cmd = ucmd();
+    cmd.current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(&["d", "-sorted", "-type", "f"]);
+    if let Some(action) = action {
+        cmd.arg(action);
+    }
+    if writes_file {
+        cmd.arg("out");
+    }
+
+    let result = cmd.succeeds();
+    result.no_stderr();
+    if writes_file {
+        result.no_stdout();
+        assert_eq!(fs::read(temp_dir.path().join("out")).unwrap(), expected);
+    } else {
+        result.stdout_is_bytes(&expected);
+    }
+}
+
 #[test]
 fn find_fprint_dev_stdout_writes_to_standard_output() {
     // A redirected stdout must not be truncated or overwritten by -fprint,
