@@ -1016,3 +1016,24 @@ fn xargs_replace_unterminated_quote() {
         .stderr_contains("unmatched single quote")
         .no_stdout();
 }
+
+#[test]
+fn xargs_optional_values_must_be_attached() {
+    // Like GNU xargs, `-l` and `-i` only take an attached value, so the next
+    // argument is the command.
+    ucmd()
+        .args(&["-l", "echo"])
+        .pipe_in("a b\nc\n")
+        .succeeds()
+        .stdout_only("a b\nc\n");
+    ucmd()
+        .args(&["-l2", "echo"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a b\nc\n");
+    ucmd()
+        .args(&["-iX", "echo", "<X>"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("<a>\n<b>\n");
+}
