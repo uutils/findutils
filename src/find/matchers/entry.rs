@@ -203,6 +203,45 @@ pub struct WalkEntry {
     follow: Follow,
     /// Cached metadata.
     meta: OnceCell<Result<Metadata, WalkError>>,
+    /// The path respelled for `UUTILS_PATH_SEPARATOR`, when that differs.
+    respelled: OnceCell<Option<PathBuf>>,
+}
+
+/// Whether `UUTILS_PATH_SEPARATOR=slash` asks for `/` between path components.
+#[cfg(windows)]
+fn forward_slashes() -> bool {
+    static FORWARD: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FORWARD.get_or_init(|| std::env::var_os("UUTILS_PATH_SEPARATOR").is_some_and(|v| v == "slash"))
+}
+
+/// `path` with `/` for every `\`, when `UUTILS_PATH_SEPARATOR=slash` asks for
+/// it and the path has a `\` to replace. Only the separators change, so a name
+/// that is not valid UTF-16 keeps its spelling. Verbatim (`\\?\`) and device
+/// (`\\.\`) paths are left alone, since `/` does not mean the same thing there.
+#[cfg(windows)]
+fn respell(path: &Path) -> Option<PathBuf> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    const BACKSLASH: u16 = b'\\' as u16;
+
+    if !forward_slashes() {
+        return None;
+    }
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    let prefixed = |c: u8| wide.starts_with(&[BACKSLASH, BACKSLASH, c.into(), BACKSLASH]);
+    if !wide.contains(&BACKSLASH) || prefixed(b'?') || prefixed(b'.') {
+        return None;
+    }
+    for c in &mut wide {
+        if *c == BACKSLASH {
+            *c = b'/'.into();
+        }
+    }
+    Some(std::ffi::OsString::from_wide(&wide).into())
+}
+
+#[cfg(not(windows))]
+fn respell(_path: &Path) -> Option<PathBuf> {
+    None
 }
 
 impl WalkEntry {
@@ -212,6 +251,7 @@ impl WalkEntry {
             inner: Entry::Explicit(path.into(), depth),
             follow,
             meta: OnceCell::new(),
+            respelled: OnceCell::new(),
         }
     }
 
@@ -233,6 +273,7 @@ impl WalkEntry {
                         inner: Entry::WalkDir(entry),
                         follow,
                         meta: OnceCell::new(),
+                        respelled: OnceCell::new(),
                     }
                 };
                 Ok(ret)
@@ -245,6 +286,7 @@ impl WalkEntry {
                             inner: Entry::Explicit(path.into(), depth),
                             follow: Follow::Never,
                             meta: Ok(meta).into(),
+                            respelled: OnceCell::new(),
                         });
                     }
                 }
@@ -257,6 +299,14 @@ impl WalkEntry {
 
     /// Get the path to this entry.
     pub fn path(&self) -> &Path {
+        match self.respelled.get_or_init(|| respell(self.walked_path())) {
+            Some(path) => path.as_path(),
+            None => self.walked_path(),
+        }
+    }
+
+    /// Get the path to this entry as the walk spelled it.
+    fn walked_path(&self) -> &Path {
         match &self.inner {
             Entry::Explicit(path, _) => path.as_path(),
             Entry::WalkDir(ent) => ent.path(),
@@ -264,7 +314,11 @@ impl WalkEntry {
     }
 
     /// Get the path to this entry.
-    pub fn into_path(self) -> PathBuf {
+    pub fn into_path(mut self) -> PathBuf {
+        self.respelled.get_or_init(|| respell(self.walked_path()));
+        if let Some(path) = self.respelled.take().flatten() {
+            return path;
+        }
         match self.inner {
             Entry::Explicit(path, _) => path,
             Entry::WalkDir(ent) => ent.into_path(),
