@@ -1033,12 +1033,8 @@ fn value_required(arg: &Arg) -> Option<bool> {
     (range.max_values() > 0).then(|| range.min_values() > 0)
 }
 
-/// Rewrite an attached `-e` value to `-e=VALUE` (clap only accepts it with
-/// `=`), so GNU's attached form keeps working while a separate word after
-/// `-e`/`--eof` stays the command. Like GNU getopt for xargs, scanning stops
-/// at `--` or at the first word that is not an option, so the command's own
-/// arguments are left alone. Which options take a value is read from
-/// `command`, which must be built.
+/// Rewrite `-eVALUE` to `-e=VALUE` for clap's `require_equals`.
+/// Stops at the command, like GNU getopt.
 fn attach_eof_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
     let mut rest = args.iter();
