@@ -9,7 +9,7 @@ pub mod matchers;
 
 use error::ParseError;
 use matchers::{Follow, WalkEntry};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 #[cfg(unix)]
 use std::io::IsTerminal;
@@ -177,19 +177,33 @@ struct ParsedInfo {
 /// <https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html>
 struct Files0Paths {
     reader: Box<dyn BufRead>,
+    /// The source as GNU find names it in diagnostics.
+    source: String,
+    /// How many entries have been read, empty ones included.
+    position: usize,
+    /// Set once an empty entry was skipped, which makes find exit with 1.
+    skipped_empty: Rc<Cell<bool>>,
 }
 
 impl Files0Paths {
     /// Open the source named by `-files0-from`; `-` means standard input.
     fn open(name: &str) -> Result<Self, Box<dyn Error>> {
-        let reader: Box<dyn BufRead> = if name == "-" {
-            Box::new(BufReader::new(io::stdin()))
+        let (reader, source): (Box<dyn BufRead>, _) = if name == "-" {
+            (
+                Box::new(BufReader::new(io::stdin())),
+                "(standard input)".to_string(),
+            )
         } else {
             let file = std::fs::File::open(name)
                 .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
-            Box::new(BufReader::new(file))
+            (Box::new(BufReader::new(file)), name.to_string())
         };
-        Ok(Self { reader })
+        Ok(Self {
+            reader,
+            source,
+            position: 0,
+            skipped_empty: Rc::new(Cell::new(false)),
+        })
     }
 }
 
@@ -202,7 +216,7 @@ impl Iterator for Files0Paths {
             match self.reader.read_until(0, &mut buffer) {
                 Err(e) => return Some(Err(e.into())),
                 Ok(0) => return None,
-                Ok(_) => {}
+                Ok(_) => self.position += 1,
             }
             // A trailing separator terminates the name; without one we are at
             // EOF and the bytes read are still a name.
@@ -211,7 +225,13 @@ impl Iterator for Files0Paths {
             }
             if buffer.is_empty() {
                 // Skip it so as to avoid a file not found error.
-                eprintln!("{}: invalid zero-length file name", program_name());
+                eprintln!(
+                    "{}: '{}':{}: invalid zero-length file name",
+                    program_name(),
+                    self.source,
+                    self.position
+                );
+                self.skipped_empty.set(true);
                 continue;
             }
             return Some(String::from_utf8(buffer).map_err(Into::into));
@@ -406,6 +426,10 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
         return Ok(0);
     }
 
+    let skipped_empty = paths_and_matcher
+        .files0_paths
+        .as_ref()
+        .map(|files0_paths| Rc::clone(&files0_paths.skipped_empty));
     let paths: Box<dyn Iterator<Item = Result<String, Box<dyn Error>>>> =
         match paths_and_matcher.files0_paths {
             Some(files0_paths) => Box::new(files0_paths),
@@ -429,6 +453,9 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
         if quit {
             break;
         }
+    }
+    if ret == 0 && skipped_empty.is_some_and(|skipped| skipped.get()) {
+        ret = 1;
     }
 
     Ok(ret)

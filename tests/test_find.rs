@@ -383,8 +383,8 @@ fn files0_pipe_double_nul() {
     ucmd()
         .pipe_in(b"./test_data/simple\0\0./test_data/links" as &[u8])
         .args(&["-files0-from", "-"])
-        .succeeds()
-        .stderr_contains("invalid zero-length file name")
+        .fails_with_code(1)
+        .stderr_contains("'(standard input)':2: invalid zero-length file name")
         .stdout_contains("./test_data/");
 }
 
@@ -2846,4 +2846,22 @@ fn missing_starting_point_is_named_without_os_error() {
         .fails()
         .stdout_is("./test_data/simple/abbbc\n")
         .stderr_is("find: 'xyz.nonexistentDir': No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn files0_zero_length_name_is_reported_with_position() {
+    ucmd()
+        .args(&["-files0-from", "-", "-print"])
+        .pipe_in("./test_data/simple/abbbc\0./test_data/simple/subdir\0\0")
+        .fails_with_code(1)
+        .stdout_contains("./test_data/simple/abbbc\n")
+        .stderr_contains("'(standard input)':3: invalid zero-length file name");
+
+    ucmd()
+        .args(&["-files0-from", "-", "-print"])
+        .pipe_in("\0./test_data/simple/abbbc\0")
+        .fails_with_code(1)
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: '(standard input)':1: invalid zero-length file name\n");
 }
