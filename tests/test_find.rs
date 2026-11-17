@@ -1148,6 +1148,17 @@ fn find_printf_type_of_followed_links() {
 }
 
 #[test]
+fn find_printf_reserved_directives_are_errors() {
+    for format in ["%(", "a%{b", "%[\n", "%-5("] {
+        ucmd()
+            .args(&["./test_data/simple", "-printf", format])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("is reserved for future use");
+    }
+}
+
+#[test]
 fn find_printf_backslash_c_runs_the_next_action() {
     ucmd()
         .arg(fix_up_slashes("./test_data/simple"))
