@@ -383,9 +383,38 @@ fn files0_pipe_double_nul() {
     ucmd()
         .pipe_in(b"./test_data/simple\0\0./test_data/links" as &[u8])
         .args(&["-files0-from", "-"])
-        .succeeds()
-        .stderr_contains("invalid zero-length file name")
+        .fails_with_code(1)
+        .stderr_contains("'(standard input)':2: invalid zero-length file name")
         .stdout_contains("./test_data/");
+}
+
+#[test]
+fn files0_zero_length_name_is_reported_with_position() {
+    ucmd()
+        .args(&["-files0-from", "-", "-print"])
+        .pipe_in("./test_data/simple/abbbc\0./test_data/simple/subdir\0\0")
+        .fails_with_code(1)
+        .stdout_contains("./test_data/simple/abbbc\n")
+        .stderr_contains("'(standard input)':3: invalid zero-length file name");
+
+    ucmd()
+        .args(&["-files0-from", "-", "-print"])
+        .pipe_in("\0./test_data/simple/abbbc\0")
+        .fails_with_code(1)
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: '(standard input)':1: invalid zero-length file name\n");
+
+    let temp_dir = Builder::new().prefix("find_files0_").tempdir().unwrap();
+    let list0 = temp_dir.path().join("list0");
+    fs::write(&list0, b"./test_data/simple/abbbc\0\0").expect("wrote path list");
+    ucmd()
+        .args(&["-files0-from", &list0.display().to_string(), "-print"])
+        .fails_with_code(1)
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is(format!(
+            "find: '{}':2: invalid zero-length file name\n",
+            list0.display()
+        ));
 }
 
 /// The starting points are read incrementally, so output for the earlier ones
