@@ -1029,9 +1029,10 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
         Some(hex) if hex.starts_with('x') => {
             u8::from_str_radix(&hex[1..], 16).map_err(|e| format!("Invalid hex sequence: {e}"))
         }
-        Some(oct) if oct.starts_with('0') => {
-            u8::from_str_radix(&oct[1..], 8).map_err(|e| format!("Invalid octal sequence: {e}"))
-        }
+        Some(oct) if oct.starts_with(|c: char| c.is_digit(8)) => u32::from_str_radix(oct, 8)
+            .ok()
+            .and_then(|value| u8::try_from(value).ok())
+            .ok_or_else(|| format!("Invalid octal sequence: \\{oct}")),
         Some(special) => match special {
             "a" => Ok(b'\x07'),
             "b" => Ok(b'\x08'),
@@ -1041,7 +1042,6 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
             "t" => Ok(b'\t'),
             "v" => Ok(b'\x0B'),
             "\\" => Ok(b'\\'),
-            "0" => Ok(b'\0'),
             _ => Err(format!("Invalid escape sequence: \\{special}")),
         },
         None if s.len() == 1 => Ok(s.as_bytes()[0]),
@@ -1910,8 +1910,15 @@ mod tests {
         assert_eq!(parse_delimiter("\\0141").unwrap(), b'a');
         assert_eq!(parse_delimiter("\\0000141").unwrap(), b'a');
         assert_eq!(parse_delimiter("\\n").unwrap(), b'\n');
+        assert_eq!(parse_delimiter("\\0").unwrap(), b'\0');
+        assert_eq!(parse_delimiter("\\72").unwrap(), b':');
+        assert_eq!(parse_delimiter("\\141").unwrap(), b'a');
+        assert_eq!(parse_delimiter("\\377").unwrap(), 0xff);
 
-        assert!(parse_delimiter("\\0").is_err());
+        assert!(parse_delimiter("\\400").is_err());
+        assert!(parse_delimiter("\\0400").is_err());
+        assert!(parse_delimiter("\\8").is_err());
+        assert!(parse_delimiter("\\09").is_err());
         assert!(parse_delimiter("\\x").is_err());
         assert!(parse_delimiter("\\").is_err());
         assert!(parse_delimiter("abc").is_err());

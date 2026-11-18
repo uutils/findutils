@@ -77,6 +77,24 @@ fn xargs_delim() {
         .stdout_only("a\nb\nd e\nfg\n");
 
     ucmd()
+        .args(&["-d\\0"])
+        .pipe_in("ab\0cd\0ef")
+        .succeeds()
+        .stdout_only("ab cd ef\n");
+
+    ucmd()
+        .args(&["-d\\72"])
+        .pipe_in("ab:cd:ef")
+        .succeeds()
+        .stdout_only("ab cd ef\n");
+
+    ucmd()
+        .args(&["-d\\400"])
+        .fails_with_code(1)
+        .stderr_contains("invalid")
+        .no_stdout();
+
+    ucmd()
         .args(&["-dabc"])
         .fails_with_code(1)
         .stderr_contains("invalid")
