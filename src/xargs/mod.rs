@@ -712,6 +712,7 @@ impl<R> ArgumentReader for WhitespaceDelimitedArgumentReader<R>
 where
     R: Read,
 {
+    #[cfg(unix)]
     fn buffered_bytes(&self) -> usize {
         self.pending.len()
     }
@@ -836,6 +837,7 @@ impl<R> ArgumentReader for ByteDelimitedArgumentReader<R>
 where
     R: Read,
 {
+    #[cfg(unix)]
     fn buffered_bytes(&self) -> usize {
         self.rd.buffer().len()
     }
@@ -884,6 +886,7 @@ impl EofArgumentReader {
 }
 
 impl ArgumentReader for EofArgumentReader {
+    #[cfg(unix)]
     fn buffered_bytes(&self) -> usize {
         self.reader.buffered_bytes()
     }
@@ -1456,10 +1459,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     if options.arg_file.is_none() {
         let pending = args.buffered_bytes();
         if pending > 0 {
-            use std::io::Seek;
-            use std::os::unix::io::FromRawFd;
-            let mut f = std::mem::ManuallyDrop::new(unsafe { fs::File::from_raw_fd(0) });
-            let _ = f.seek(io::SeekFrom::Current(-(pending as i64)));
+            use nix::unistd::{lseek, Whence};
+            let _ = lseek(io::stdin(), -(pending as i64), Whence::SeekCur);
         }
     }
 

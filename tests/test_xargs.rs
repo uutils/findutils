@@ -1038,25 +1038,19 @@ fn xargs_replace_unterminated_quote() {
 #[test]
 #[cfg(unix)]
 fn xargs_eof_seekable_stdin() {
+    use std::io::Write;
     use std::process::{Command, Stdio};
 
-    let dir = std::env::temp_dir().join("xargs_eof_seekable");
-    let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join("eof.in");
-    std::fs::write(&path, b"h1\nSTOP\nh2\nh3\n").unwrap();
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"h1\nSTOP\nh2\nh3\n").unwrap();
 
     let script = format!("{} -E STOP echo; cat", env!("CARGO_BIN_EXE_xargs"));
     let output = Command::new("sh")
         .args(["-c", &script])
-        .stdin(Stdio::from(std::fs::File::open(&path).unwrap()))
+        .stdin(Stdio::from(std::fs::File::open(tmp.path()).unwrap()))
         .output()
         .unwrap();
 
-    let _ = std::fs::remove_dir_all(&dir);
-
     assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "h1\nh2\nh3\n",
-    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "h1\nh2\nh3\n");
 }
