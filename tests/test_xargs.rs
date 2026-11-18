@@ -489,14 +489,21 @@ fn xargs_zero_lines() {
 
 #[test]
 fn xargs_replace() {
+    // Like GNU, an attached `=` is part of the replace string.
     ucmd()
         .args(&["-i={}", "echo", "{} bar"])
         .pipe_in("foo")
         .succeeds()
-        .stdout_contains("foo bar");
+        .stdout_only("{} bar\n");
 
     ucmd()
-        .args(&["-i=_", "echo", "_ bar"])
+        .args(&["-i={}", "echo", "={} bar"])
+        .pipe_in("foo")
+        .succeeds()
+        .stdout_only("foo bar\n");
+
+    ucmd()
+        .args(&["-i_", "echo", "_ bar"])
         .pipe_in("foo")
         .succeeds()
         .stdout_contains("foo bar");
@@ -508,7 +515,7 @@ fn xargs_replace() {
         .stdout_contains("foo foo bar");
 
     ucmd()
-        .args(&["-i=_", "echo", "_ _ bar"])
+        .args(&["-i_", "echo", "_ _ bar"])
         .pipe_in("foo")
         .succeeds()
         .stdout_contains("foo foo bar");

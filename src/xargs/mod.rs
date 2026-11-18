@@ -1033,9 +1033,9 @@ fn value_required(arg: &Arg) -> Option<bool> {
     (range.max_values() > 0).then(|| range.min_values() > 0)
 }
 
-/// Rewrite `-eVALUE` to `-e=VALUE` for clap's `require_equals`.
-/// Stops at the command, like GNU getopt.
-fn attach_eof_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String> {
+/// Rewrite attached values like `-eVALUE` to `-e=VALUE` for options with
+/// clap's `require_equals`. Stops at the command, like GNU getopt.
+fn attach_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
     let mut rest = args.iter();
     if let Some(name) = rest.next() {
@@ -1065,7 +1065,7 @@ fn attach_eof_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String
                     None => continue,
                     Some(true) => next_is_value = value.is_empty(),
                     Some(false) => {
-                        if option.get_id() == options::EOF_E && !value.is_empty() {
+                        if option.is_require_equals_set() && !value.is_empty() {
                             rewritten = Some((&cluster[..i], c, value));
                         }
                     }
@@ -1249,7 +1249,7 @@ fn xargs_command() -> clap::Command {
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     let mut command = xargs_command();
     command.build();
-    let args = attach_eof_short_equals(&command, args);
+    let args = attach_short_equals(&command, args);
     let matches = command.try_get_matches_from(args);
 
     let matches = match matches {
@@ -1396,16 +1396,20 @@ mod tests {
     fn rewrite(args: &[&str]) -> Vec<String> {
         let mut command = xargs_command();
         command.build();
-        attach_eof_short_equals(&command, args)
+        attach_short_equals(&command, args)
     }
 
     #[test]
-    fn attach_eof_short_equals_rewrites_attached_values() {
+    fn attach_short_equals_rewrites_attached_values() {
         assert_eq!(rewrite(&["xargs", "-ecd"]), ["xargs", "-e=cd"]);
         assert_eq!(rewrite(&["xargs", "-e=cd"]), ["xargs", "-e==cd"]);
         assert_eq!(rewrite(&["xargs", "-e-end"]), ["xargs", "-e=-end"]);
         assert_eq!(rewrite(&["xargs", "-tecd"]), ["xargs", "-t", "-e=cd"]);
         assert_eq!(rewrite(&["xargs", "-e"]), ["xargs", "-e"]);
+        assert_eq!(rewrite(&["xargs", "-i_"]), ["xargs", "-i=_"]);
+        assert_eq!(rewrite(&["xargs", "-i={}"]), ["xargs", "-i=={}"]);
+        assert_eq!(rewrite(&["xargs", "-ti_"]), ["xargs", "-t", "-i=_"]);
+        assert_eq!(rewrite(&["xargs", "-i"]), ["xargs", "-i"]);
         assert_eq!(rewrite(&["xargs", "-E", "-end"]), ["xargs", "-E", "-end"]);
         assert_eq!(rewrite(&["xargs", "--eof", "cd"]), ["xargs", "--eof", "cd"]);
         assert_eq!(rewrite(&["xargs", "-n", "-ecd"]), ["xargs", "-n", "-ecd"]);
@@ -1417,7 +1421,7 @@ mod tests {
     }
 
     #[test]
-    fn attach_eof_short_equals_stops_at_the_command() {
+    fn attach_short_equals_stops_at_the_command() {
         assert_eq!(rewrite(&["xargs", "echo", "-en"]), ["xargs", "echo", "-en"]);
         assert_eq!(
             rewrite(&["xargs", "-t", "grep", "-efoo"]),
