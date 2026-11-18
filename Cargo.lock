@@ -259,7 +259,7 @@ dependencies = [
  "getrandom 0.2.17",
  "glob",
  "libc",
- "nix 0.31.3",
+ "nix 0.31.4",
  "serde",
  "serde_json",
  "statrs",
@@ -496,7 +496,7 @@ dependencies = [
  "filetime",
  "itertools 0.15.0",
  "jiff",
- "nix 0.31.3",
+ "nix 0.32.0",
  "onig",
  "parse_datetime",
  "regex",
@@ -825,9 +825,21 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.31.3"
+version = "0.31.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+checksum = "2bc81ce8148d3b4f3274da811f11cdd824ae661ee4ef732cdb229825cf5be7f7"
+dependencies = [
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
 dependencies = [
  "bitflags 2.13.2",
  "cfg-if",
@@ -1516,7 +1528,7 @@ dependencies = [
  "fluent-syntax",
  "jiff",
  "libc",
- "nix 0.31.3",
+ "nix 0.31.4",
  "os_display",
  "rustc-hash",
  "rustix",
@@ -1547,7 +1559,7 @@ checksum = "8c47cf53a889f65f0c96eb4fcaaf29cc3a61ae1cef00860e0ca94e0ed4952ef7"
 dependencies = [
  "ctor",
  "libc",
- "nix 0.31.3",
+ "nix 0.31.4",
  "pretty_assertions",
  "rand",
  "regex",
