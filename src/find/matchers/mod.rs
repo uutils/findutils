@@ -148,17 +148,32 @@ pub struct MatcherIO<'a> {
     exit_code: i32,
     quit: bool,
     ignore_readdir_race: bool,
+    /// The starting point as supplied for this walk.
+    starting_point: Option<&'a Path>,
     deps: &'a dyn Dependencies,
 }
 
-impl MatcherIO<'_> {
-    pub fn new(deps: &dyn Dependencies) -> MatcherIO<'_> {
-        MatcherIO {
+impl<'a> MatcherIO<'a> {
+    pub fn new(deps: &'a dyn Dependencies) -> Self {
+        Self {
             should_skip_dir: false,
             exit_code: 0,
             quit: false,
             ignore_readdir_race: false,
+            starting_point: None,
             deps,
+        }
+    }
+
+    pub(super) fn for_walk(
+        deps: &'a dyn Dependencies,
+        starting_point: &'a Path,
+        config: &Config,
+    ) -> Self {
+        Self {
+            starting_point: Some(starting_point),
+            ignore_readdir_race: config.ignore_readdir_race,
+            ..Self::new(deps)
         }
     }
 

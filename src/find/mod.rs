@@ -370,8 +370,7 @@ fn process_dir(
                 .unwrap();
             }
             Ok(entry) => {
-                let mut matcher_io = matchers::MatcherIO::new(deps);
-                matcher_io.set_ignore_readdir_race(config.ignore_readdir_race);
+                let mut matcher_io = matchers::MatcherIO::for_walk(deps, dir.as_ref(), config);
 
                 let new_dir = entry.path().parent().map(std::path::Path::to_path_buf);
                 if new_dir != current_dir {
@@ -400,8 +399,7 @@ fn process_dir(
         }
     }
 
-    let mut matcher_io = matchers::MatcherIO::new(deps);
-    matcher_io.set_ignore_readdir_race(config.ignore_readdir_race);
+    let mut matcher_io = matchers::MatcherIO::for_walk(deps, dir.as_ref(), config);
     if let Some(dir) = current_dir.take() {
         matcher.finished_dir(dir.as_path(), &mut matcher_io);
     }
