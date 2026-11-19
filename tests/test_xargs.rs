@@ -961,20 +961,16 @@ fn xargs_arg_file_missing_strips_errno() {
         .stderr_str_check(|s| !s.contains("(os error"));
 }
 
-#[test]
-fn xargs_arg_file_starting_with_dash() {
+#[rstest::rstest]
+#[case("-a")]
+#[case("--arg-file")]
+fn xargs_arg_file_starting_with_dash(#[case] opt: &str) {
     let temp_dir = tempfile::tempdir().unwrap();
     std::fs::write(temp_dir.path().join("-foo"), b"hello\n").unwrap();
 
     ucmd()
         .current_dir(temp_dir.path())
-        .args(&["-a", "-foo", "echo"])
-        .succeeds()
-        .stdout_is("hello\n");
-
-    ucmd()
-        .current_dir(temp_dir.path())
-        .args(&["--arg-file", "-foo", "echo"])
+        .args(&[opt, "-foo", "echo"])
         .succeeds()
         .stdout_is("hello\n");
 }
@@ -988,26 +984,21 @@ fn xargs_delimiter_dash() {
         .stdout_is("a b c\n");
 }
 
-#[test]
-fn xargs_negative_numeric_option_rejected_as_value() {
+#[rstest::rstest]
+#[case("-n", "-1", "invalid digit")]
+#[case("-s", "-1", "invalid digit")]
+#[case("--delimiter", "-1", "Delimiter must be one byte")]
+fn xargs_negative_numeric_option_rejected_as_value(
+    #[case] opt: &str,
+    #[case] val: &str,
+    #[case] expected_err: &str,
+) {
     // Required option values starting with '-' must be parsed as the option value
     // rather than reported as unexpected argument flags (issue #985).
     ucmd()
-        .args(&["-n", "-1", "echo"])
+        .args(&[opt, val, "echo"])
         .fails_with_code(1)
-        .stderr_contains("invalid digit")
-        .stderr_str_check(|s| !s.contains("unexpected argument"));
-
-    ucmd()
-        .args(&["-s", "-1", "echo"])
-        .fails_with_code(1)
-        .stderr_contains("invalid digit")
-        .stderr_str_check(|s| !s.contains("unexpected argument"));
-
-    ucmd()
-        .args(&["--delimiter", "-1", "echo"])
-        .fails_with_code(1)
-        .stderr_contains("Delimiter must be one byte")
+        .stderr_contains(expected_err)
         .stderr_str_check(|s| !s.contains("unexpected argument"));
 }
 
