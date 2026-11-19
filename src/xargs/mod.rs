@@ -1323,6 +1323,7 @@ fn xargs_command() -> clap::Command {
                 // Without a value the option still needs an index to be ordered
                 // against -L, -n and -I.
                 .default_missing_value("1")
+                .require_equals(true)
                 .help(
                     "Equivalent to -L, but with a default value of 1 if max-lines \
                     is unspecified",

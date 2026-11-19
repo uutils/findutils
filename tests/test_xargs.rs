@@ -168,6 +168,18 @@ fn xargs_max_lines() {
 }
 
 #[test]
+fn xargs_max_lines_l_value_must_be_attached() {
+    // `-l` only takes an attached value, so `echo` is the command here.
+    ucmd()
+        .args(&["-l", "echo"])
+        .pipe_in("ab cd\nef\n")
+        .succeeds()
+        .stdout_only("ab cd\nef\n");
+    // `-l=2` passes "=2" as the value, which is not a number.
+    ucmd().arg("-l=2").pipe_in("ab\n").fails();
+}
+
+#[test]
 fn xargs_max_args_lines_conflict() {
     // -n2 is last, so it should be given priority.
     ucmd()
