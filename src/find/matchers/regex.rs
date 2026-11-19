@@ -4,9 +4,14 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::{error::Error, fmt, str::FromStr};
+use std::{
+    error::Error,
+    fmt,
+    io::{stderr, Write},
+    str::FromStr,
+};
 
-use onig::{Regex, RegexOptions, Syntax};
+use super::regex_transpile;
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -76,7 +81,7 @@ impl FromStr for RegexType {
 }
 
 pub struct RegexMatcher {
-    regex: Regex,
+    regex: fancy_regex::Regex,
 }
 
 impl RegexMatcher {
@@ -85,30 +90,25 @@ impl RegexMatcher {
         pattern: &str,
         ignore_case: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        let syntax = match regex_type {
-            RegexType::Emacs => Syntax::emacs(),
-            RegexType::Grep => Syntax::grep(),
-            RegexType::PosixBasic => Syntax::posix_basic(),
-            RegexType::PosixExtended => Syntax::posix_extended(),
-        };
-
-        let regex = Regex::with_options(
-            pattern,
-            if ignore_case {
-                RegexOptions::REGEX_OPTION_IGNORECASE
-            } else {
-                RegexOptions::REGEX_OPTION_NONE
-            },
-            syntax,
-        )?;
-        Ok(Self { regex })
+        Ok(Self {
+            regex: regex_transpile::compile(pattern, regex_type, ignore_case, true)?,
+        })
     }
 }
 
 impl Matcher for RegexMatcher {
-    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        self.regex
+    fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
+        match self
+            .regex
             .is_match(file_info.path().to_string_lossy().as_ref())
+        {
+            Ok(matched) => matched,
+            Err(e) => {
+                let _ = writeln!(&mut stderr(), "find: {e}");
+                matcher_io.set_exit_code(1);
+                false
+            }
+        }
     }
 }
 
@@ -221,5 +221,44 @@ mod tests {
         .unwrap();
         let deps = FakeDependencies::new();
         assert!(!matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+    }
+
+    #[test]
+    fn regex_backref() {
+        let abbbc = get_dir_entry_for("test_data/simple", "abbbc");
+        let deps = FakeDependencies::new();
+
+        for regex_type in [RegexType::Emacs, RegexType::PosixBasic, RegexType::Grep] {
+            let matcher =
+                RegexMatcher::new(regex_type, &fix_up_regex_slashes(r".*/a\(b\)b\1c"), false)
+                    .unwrap();
+            assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+
+            let non_matching =
+                RegexMatcher::new(regex_type, &fix_up_regex_slashes(r".*/a\(c\)b\1c"), false)
+                    .unwrap();
+            assert!(!non_matching.matches(&abbbc, &mut deps.new_matcher_io()));
+        }
+
+        let matcher = RegexMatcher::new(
+            RegexType::PosixExtended,
+            &fix_up_regex_slashes(r".*/a(b)b\1c"),
+            false,
+        )
+        .unwrap();
+        assert!(matcher.matches(&abbbc, &mut deps.new_matcher_io()));
+    }
+
+    #[test]
+    fn test_regex_matching_error_sets_exit_code() {
+        let entry = get_dir_entry_for("test_data/simple", "abbbc");
+        let mut builder = fancy_regex::RegexBuilder::new(r"^.*(\w+)\1.*$");
+        builder.backtrack_limit(1);
+        let regex = builder.build().unwrap();
+        let matcher = RegexMatcher { regex };
+        let deps = FakeDependencies::new();
+        let mut matcher_io = deps.new_matcher_io();
+        assert!(!matcher.matches(&entry, &mut matcher_io));
+        assert_eq!(matcher_io.exit_code(), 1);
     }
 }
