@@ -1151,6 +1151,7 @@ fn xargs_command() -> clap::Command {
             Arg::new(options::MAX_LINES_L)
                 .short('l')
                 .num_args(0..=1)
+                .require_equals(true)
                 .help(
                     "Equivalent to -L, but with a default value of 1 if max-lines \
                     is unspecified",
