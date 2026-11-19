@@ -426,7 +426,9 @@ impl FormatString {
     }
 }
 
-fn get_starting_point(file_info: &WalkEntry) -> &Path {
+// This ancestor is a component-wise prefix, so it can lose the original
+// spelling of a starting point such as "dir/" or "dir/.".
+fn root_ancestor(file_info: &WalkEntry) -> &Path {
     file_info
         .path()
         .ancestors()
@@ -579,6 +581,7 @@ fn str_bytes(s: Cow<'_, str>) -> Cow<'_, [u8]> {
 
 fn format_directive<'entry>(
     file_info: &'entry WalkEntry,
+    starting_point: Option<&'entry Path>,
     directive: &FormatDirective,
 ) -> Result<Cow<'entry, str>, Box<dyn Error>> {
     let meta = || file_info.metadata();
@@ -687,7 +690,7 @@ fn format_directive<'entry>(
             strip_starting_point: true,
         } => file_info
             .path()
-            .strip_prefix(get_starting_point(file_info))
+            .strip_prefix(root_ancestor(file_info))
             // safe to unwrap: the prefix is derived *from* the path to begin
             // with, so it cannot be invalid.
             .unwrap()
@@ -724,7 +727,9 @@ fn format_directive<'entry>(
             }
         }
 
-        FormatDirective::StartingPoint => get_starting_point(file_info).to_string_lossy(),
+        FormatDirective::StartingPoint => starting_point
+            .unwrap_or_else(|| root_ancestor(file_info))
+            .to_string_lossy(),
 
         FormatDirective::SymlinkTarget => {
             // Followed links have their target's type; dangling links remain symlinks.
@@ -794,7 +799,12 @@ impl Printf {
         self
     }
 
-    fn print(&self, file_info: &WalkEntry, mut out: impl Write) -> std::io::Result<()> {
+    fn print(
+        &self,
+        file_info: &WalkEntry,
+        starting_point: Option<&Path>,
+        mut out: impl Write,
+    ) -> std::io::Result<()> {
         let mut result = Ok(());
         for component in &self.format.components {
             match component {
@@ -821,7 +831,7 @@ impl Printf {
                     precision,
                     justify,
                     flags,
-                } => match format_directive(file_info, directive) {
+                } => match format_directive(file_info, starting_point, directive) {
                     Ok(content) => {
                         let content = apply_precision_and_flags(
                             directive, content, *precision, flags, *width, justify,
@@ -876,9 +886,13 @@ impl Printf {
 impl Matcher for Printf {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let result = if let Some((file, _)) = &self.output_file {
-            self.print(file_info, file)
+            self.print(file_info, matcher_io.starting_point, file)
         } else {
-            self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut())
+            self.print(
+                file_info,
+                matcher_io.starting_point,
+                &mut *matcher_io.deps.get_output().borrow_mut(),
+            )
         };
 
         if let Err(error) = result {
@@ -983,7 +997,7 @@ mod tests {
             let printf = Printf::new(format, None)?;
             assert_eq!(
                 printf
-                    .print(&abbbc, FailingWriter(ErrorKind::Other))
+                    .print(&abbbc, None, FailingWriter(ErrorKind::Other))
                     .map_err(|error| error.kind()),
                 Err(ErrorKind::Other)
             );
@@ -1014,7 +1028,7 @@ mod tests {
             let printf = Printf::new(format, None)?;
             assert_eq!(
                 printf
-                    .print(&abbbc, FailingFlushWriter)
+                    .print(&abbbc, None, FailingFlushWriter)
                     .map_err(|error| error.kind()),
                 Err(ErrorKind::StorageFull),
                 "format {format:?}"
@@ -1355,7 +1369,7 @@ mod tests {
 
         let matcher = Printf::new("%.3f|%5.2f|%-5.1f|", None).unwrap();
         let mut out = Vec::new();
-        matcher.print(&file_info, &mut out).unwrap();
+        matcher.print(&file_info, None, &mut out).unwrap();
         assert_eq!(b"\xc3\xa9_|   \xc3\xa9|\xc3    |", out.as_slice());
     }
 

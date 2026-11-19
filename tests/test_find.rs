@@ -2358,6 +2358,28 @@ fn find_printf_path_keeps_trailing_slash() {
 }
 
 #[test]
+fn find_printf_keeps_each_starting_point_for_descendants() -> std::io::Result<()> {
+    let temp_dir = Builder::new()
+        .prefix("find_printf_starting_point_")
+        .tempdir()?;
+    let output = temp_dir.path().join("output");
+    let format = "[%H] [%P]\n";
+    let expected = "[subdir/] [ABBBC]\n[subdir/.] [ABBBC]\n";
+
+    ucmd()
+        .current_dir("test_data/simple")
+        .args(&[
+            "subdir/", "subdir/.", "-type", "f", "-printf", format, "-fprintf",
+        ])
+        .arg(&output)
+        .arg(format)
+        .succeeds()
+        .stdout_only(expected);
+    assert_eq!(fs::read(output)?, expected.as_bytes());
+    Ok(())
+}
+
+#[test]
 #[cfg(unix)]
 fn find_printf_basename_keeps_spelling_of_starting_point() {
     ucmd()
