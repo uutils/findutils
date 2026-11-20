@@ -665,13 +665,13 @@ fn lookup_predicate(arg: &str) -> Predicate {
         .map_or(Predicate::Other, |&(_, predicate)| predicate)
 }
 
-/// Turns one of the `logical_matchers` "binary operator with nothing before it"
-/// errors into a diagnostic pointing at the operator.
 /// Starts an error about a file given on the command line with the file's name.
 fn name_file<T>(path: &str, result: Result<T, Box<dyn Error>>) -> Result<T, String> {
     result.map_err(|e| format!("{path}: {e}"))
 }
 
+/// Turns one of the `logical_matchers` "binary operator with nothing before it"
+/// errors into a diagnostic pointing at the operator.
 fn binary_operator_error(err: &dyn Error, arg_index: usize) -> ParseError {
     ParseError::new(err.to_string())
         .at(arg_index)
