@@ -231,6 +231,85 @@ fn find_exec_multi() {
 }
 
 #[test]
+fn find_exec_multi_across_starting_points() {
+    // -exec ... + collects the arguments from every starting point into one
+    // batch, as GNU find does, instead of running once per starting point.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("find_exec_multi_across_starting_points")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let deps = FakeDependencies::new();
+
+    let rc = find_main(
+        &[
+            "find",
+            &fix_up_slashes("./test_data/simple/subdir"),
+            &fix_up_slashes("./test_data/depth/1"),
+            "-type",
+            "f",
+            "-exec",
+            &path_to_testing_commandline(),
+            temp_dir_path.as_ref(),
+            "--sort",
+            "{}",
+            "+",
+        ],
+        &deps,
+    );
+
+    assert_eq!(rc, 0);
+    assert_eq!(deps.get_output_as_string(), "");
+
+    let mut f = File::open(temp_dir.path().join("1.txt")).expect("Failed to open output file");
+    let mut s = String::new();
+    f.read_to_string(&mut s)
+        .expect("failed to read output file");
+    assert_eq!(
+        s,
+        fix_up_slashes(&format!(
+            "cwd={}\nargs=\n--sort\n./test_data/depth/1/2/3/f3\n./test_data/depth/1/2/f2\n./test_data/depth/1/f1\n./test_data/simple/subdir/ABBBC\n",
+            env::current_dir().unwrap().to_string_lossy()
+        ))
+    );
+    // The command ran only once.
+    assert!(!temp_dir.path().join("2.txt").exists());
+}
+
+#[test]
+fn find_exec_multi_failure_sets_exit_code() {
+    // A failing -exec ... + batch, which now runs after all the starting
+    // points, still makes find exit with status 1.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("find_exec_multi_failure_sets_exit_code")
+        .tempdir()
+        .unwrap();
+    let temp_dir_path = temp_dir.path().to_string_lossy();
+    let deps = FakeDependencies::new();
+
+    let rc = find_main(
+        &[
+            "find",
+            &fix_up_slashes("./test_data/simple/subdir"),
+            &fix_up_slashes("./test_data/depth/1"),
+            "-type",
+            "f",
+            "-exec",
+            &path_to_testing_commandline(),
+            temp_dir_path.as_ref(),
+            "--exit_with_failure",
+            "{}",
+            "+",
+        ],
+        &deps,
+    );
+
+    assert_eq!(rc, 1);
+    assert!(temp_dir.path().join("1.txt").exists());
+    assert!(!temp_dir.path().join("2.txt").exists());
+}
+
+#[test]
 fn find_execdir_multi() {
     let temp_dir = Builder::new()
         .prefix("find_execdir_multi")
