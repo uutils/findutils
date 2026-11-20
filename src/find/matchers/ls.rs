@@ -84,13 +84,10 @@ impl Ls {
         let number_of_blocks = metadata.blocks().div_ceil(2);
         let permission = uucore::fs::display_permissions(metadata, true);
         let hard_links = metadata.nlink();
-        // Fall back to the numeric id when the uid/gid has no passwd/group entry
-        // (unmapped owner) — matching GNU find, which never crashes. uucore::entries
-        // serializes the non-thread-safe getpwuid/getgrgid behind a mutex.
-        let user =
-            uucore::entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string());
-        let group =
-            uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
+        // The numeric id is shown when the uid/gid has no passwd/group entry
+        // (unmapped owner), matching GNU find, which never crashes.
+        let user = super::names::user_name(metadata.uid());
+        let group = super::names::group_name(metadata.gid());
         // Device nodes have no size: the column holds their "major, minor" numbers.
         let file_type = metadata.file_type();
         let size = if file_type.is_char_device() || file_type.is_block_device() {

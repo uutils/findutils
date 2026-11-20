@@ -16,6 +16,8 @@ mod lname;
 mod logical_matchers;
 mod ls;
 mod name;
+#[cfg(unix)]
+mod names;
 mod path;
 mod perm;
 mod printer;
