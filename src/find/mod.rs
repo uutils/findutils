@@ -33,6 +33,7 @@ pub struct Config {
     sorted_output: bool,
     help_requested: bool,
     version_requested: bool,
+    debug_help_requested: bool,
     today_start: bool,
     no_leaf_dirs: bool,
     ignore_readdir_race: bool,
@@ -59,6 +60,7 @@ impl Default for Config {
             sorted_output: false,
             help_requested: false,
             version_requested: false,
+            debug_help_requested: false,
             today_start: false,
             // Directory information and traversal are done by walkdir,
             // and this configuration field will exist as
@@ -239,6 +241,28 @@ impl Iterator for Files0Paths {
     }
 }
 
+/// The flags of `-D`, as GNU find lists them for `-D help`.
+const DEBUG_FLAGS: &[(&str, &str)] = &[
+    (
+        "exec",
+        "Show diagnostic information relating to -exec, -execdir, -ok and -okdir",
+    ),
+    (
+        "opt",
+        "Show diagnostic information relating to optimisation",
+    ),
+    ("rates", "Indicate how often each predicate succeeded"),
+    ("search", "Navigate the directory tree verbosely"),
+    ("stat", "Trace calls to stat(2) and lstat(2)"),
+    (
+        "time",
+        "Show diagnostic information relating to time-of-day and timestamp comparisons",
+    ),
+    ("tree", "Display the expression tree"),
+    ("all", "Set all of the debug flags (but help)"),
+    ("help", "Explain the various -D options"),
+];
+
 /// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut paths = vec![];
@@ -249,6 +273,31 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         match args[i] {
             "-O0" | "-O1" | "-O2" | "-O3" => {
                 // GNU find optimization level flag (ignored)
+            }
+            "-D" => {
+                // GNU find's debug flags. The flags are checked but no debug
+                // output is produced.
+                let Some(flags) = args.get(i + 1) else {
+                    return Err(ParseError::new("Missing argument after the -D option.")
+                        .at(i)
+                        .into());
+                };
+                if flags.is_empty() {
+                    return Err(ParseError::new("Empty argument to the -D option.")
+                        .at(i + 1)
+                        .into());
+                }
+                for flag in flags.split(',').filter(|flag| !flag.is_empty()) {
+                    if flag == "help" {
+                        config.debug_help_requested = true;
+                    } else if !DEBUG_FLAGS.iter().any(|(name, _)| *name == flag) {
+                        eprintln!(
+                            "{}: Ignoring unrecognised debug flag '{flag}'",
+                            program_name()
+                        );
+                    }
+                }
+                i += 1;
             }
             "-H" => config.follow = Follow::Roots,
             "-L" => config.follow = Follow::Always,
@@ -415,6 +464,14 @@ fn process_dir(
 
 fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
+    if paths_and_matcher.config.debug_help_requested {
+        let mut output = deps.get_output().borrow_mut();
+        writeln!(output, "Valid arguments for -D:")?;
+        for (name, help) in DEBUG_FLAGS {
+            writeln!(output, "{name:<10} {help}")?;
+        }
+        return Ok(0);
+    }
     if paths_and_matcher.config.help_requested {
         print_help(deps)?;
         return Ok(0);
@@ -468,6 +525,7 @@ Options (before paths):
  -L                       Follow symbolic links
  -H                       Follow symbolic links on the command line only
  -Olevel                  Optimization level (0-3, currently ignored)
+ -D debugopts             Debug flags (checked, currently ignored); -D help lists them
 
 Operators:
  ( EXPR )                 Force precedence
