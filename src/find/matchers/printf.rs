@@ -661,7 +661,7 @@ fn format_directive<'entry>(
         FormatDirective::Group { as_name } => {
             let gid = meta()?.gid();
             if *as_name {
-                uucore::entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
+                super::names::group_name(gid)
             } else {
                 gid.to_string()
             }
@@ -765,7 +765,7 @@ fn format_directive<'entry>(
         FormatDirective::User { as_name } => {
             let uid = meta()?.uid();
             if *as_name {
-                uucore::entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string())
+                super::names::user_name(uid)
             } else {
                 uid.to_string()
             }
