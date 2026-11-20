@@ -1183,7 +1183,54 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     }
 }
 
+/// Short options of xargs that take their value as the next argument.
+const SHORT_OPTIONS_WITH_VALUE: &[&str] = &["-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s"];
+/// Long options of xargs that can take their value as the next argument.
+const LONG_OPTIONS_WITH_VALUE: &[&str] = &[
+    "--arg-file",
+    "--delimiter",
+    "--max-lines",
+    "--max-args",
+    "--max-procs",
+    "--max-chars",
+    "--process-slot-var",
+];
+
+/// `-l` and `-i` take an optional value that, as with GNU getopt, must be
+/// attached: `-l2`, `-iX`. clap would either take the next argument as that
+/// value (`xargs -l echo`) or read the attached one as more short options
+/// (`-iX` as `-i -X`), so spell the attached form with `=` before parsing.
+fn attach_optional_values(args: &[&str]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::with_capacity(args.len());
+    let mut iter = args.iter();
+    if let Some(program) = iter.next() {
+        out.push((*program).to_owned());
+    }
+    while let Some(&arg) = iter.next() {
+        if arg == "--" || !arg.starts_with('-') || arg == "-" {
+            // The command starts here; copy it unchanged.
+            out.push(arg.to_owned());
+            out.extend(iter.map(|&a| a.to_owned()));
+            break;
+        }
+        if SHORT_OPTIONS_WITH_VALUE.contains(&arg) || LONG_OPTIONS_WITH_VALUE.contains(&arg) {
+            out.push(arg.to_owned());
+            if let Some(&value) = iter.next() {
+                out.push(value.to_owned());
+            }
+            continue;
+        }
+        let rewritten = ["-l", "-i"].iter().find_map(|&opt| {
+            let rest = arg.strip_prefix(opt)?;
+            (!rest.is_empty() && !rest.starts_with('=')).then(|| format!("{opt}={rest}"))
+        });
+        out.push(rewritten.unwrap_or_else(|| arg.to_owned()));
+    }
+    out
+}
+
 fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
+    let args = attach_optional_values(args);
     let matches = clap::Command::new("xargs")
         .version(crate_version!())
         .args_override_self(true)
@@ -1242,6 +1289,8 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_LINES_L)
                 .short('l')
                 .num_args(0..=1)
+                // The value must be attached, see `attach_optional_values`.
+                .require_equals(true)
                 // Without a value the option still needs an index to be ordered
                 // against -L, -n and -I.
                 .default_missing_value("1")
@@ -1464,6 +1513,25 @@ pub fn xargs_main(args: &[&str]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn optional_values_are_attached_with_equals() {
+        let to_vec = |args: &[&str]| attach_optional_values(args);
+        assert_eq!(to_vec(&["xargs", "-l2", "echo"]), ["xargs", "-l=2", "echo"]);
+        assert_eq!(to_vec(&["xargs", "-l", "echo"]), ["xargs", "-l", "echo"]);
+        assert_eq!(
+            to_vec(&["xargs", "-iX", "echo", "X"]),
+            ["xargs", "-i=X", "echo", "X"]
+        );
+        // The value of an option that takes the next argument is not rewritten.
+        assert_eq!(
+            to_vec(&["xargs", "-I", "-l1", "echo"]),
+            ["xargs", "-I", "-l1", "echo"]
+        );
+        // Nor is anything in the command.
+        assert_eq!(to_vec(&["xargs", "echo", "-l2"]), ["xargs", "echo", "-l2"]);
+        assert_eq!(to_vec(&["xargs", "--", "-l2"]), ["xargs", "--", "-l2"]);
+    }
 
     fn make_arg_init(s: &str) -> Argument {
         Argument {
