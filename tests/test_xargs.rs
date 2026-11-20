@@ -1034,3 +1034,23 @@ fn xargs_replace_unterminated_quote() {
         .stderr_contains("unmatched single quote")
         .no_stdout();
 }
+
+#[test]
+#[cfg(unix)]
+fn xargs_eof_seekable_stdin() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"h1\nSTOP\nh2\nh3\n").unwrap();
+
+    let script = format!("{} -E STOP echo; cat", env!("CARGO_BIN_EXE_xargs"));
+    let output = Command::new("sh")
+        .args(["-c", &script])
+        .stdin(Stdio::from(std::fs::File::open(tmp.path()).unwrap()))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "h1\nh2\nh3\n");
+}
