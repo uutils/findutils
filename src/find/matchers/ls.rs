@@ -84,8 +84,6 @@ impl Ls {
         let number_of_blocks = metadata.blocks().div_ceil(2);
         let permission = uucore::fs::display_permissions(metadata, true);
         let hard_links = metadata.nlink();
-        // The numeric id is shown when the uid/gid has no passwd/group entry
-        // (unmapped owner), matching GNU find, which never crashes.
         let user = super::names::user_name(metadata.uid());
         let group = super::names::group_name(metadata.gid());
         // Device nodes have no size: the column holds their "major, minor" numbers.
