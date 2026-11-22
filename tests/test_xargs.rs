@@ -1005,6 +1005,8 @@ fn xargs_delimiter_dash() {
 #[rstest::rstest]
 #[case("-n", "-1", "invalid digit")]
 #[case("-s", "-1", "invalid digit")]
+#[case("-L", "-1", "invalid digit")]
+#[case("-P", "-1", "invalid digit")]
 #[case("--delimiter", "-1", "Delimiter must be one byte")]
 fn xargs_negative_numeric_option_rejected_as_value(
     #[case] opt: &str,
