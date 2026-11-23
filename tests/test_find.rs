@@ -1149,12 +1149,17 @@ fn find_printf_type_of_followed_links() {
 
 #[test]
 fn find_printf_reserved_directives_are_errors() {
-    for format in ["%(", "a%{b", "%[\n", "%-5("] {
+    for (format, directive) in [
+        ("%(", "`%(' is reserved"),
+        ("a%{b", "`%{' is reserved"),
+        ("%[\n", "`%[' is reserved"),
+        ("%-5(", "`%(' is reserved"),
+    ] {
         ucmd()
             .args(&["./test_data/simple", "-printf", format])
             .fails_with_code(1)
             .no_stdout()
-            .stderr_contains("is reserved for future use");
+            .stderr_contains(directive);
     }
 }
 
