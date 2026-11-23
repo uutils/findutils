@@ -3103,4 +3103,13 @@ fn find_debug_option() {
         .stdout_contains("Valid arguments for -D:\n")
         .stdout_contains("tree       Display the expression tree\n")
         .stdout_does_not_contain("./test_data");
+
+    // Help is printed as soon as `-D` is parsed, so a later unknown
+    // option is not an error.
+    ucmd()
+        .args(&["-D", "help", "-bogus"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("Valid arguments for -D:\n")
+        .stdout_does_not_contain("bogus");
 }

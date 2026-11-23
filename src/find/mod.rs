@@ -298,6 +298,16 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                     }
                 }
                 i += 1;
+                // GNU find lists the flags and exits 0 even if later
+                // arguments would be invalid (`find -D help -bogus`).
+                if config.debug_help_requested {
+                    return Ok(ParsedInfo {
+                        matcher: matchers::build_top_level_matcher(&[], &mut config)?,
+                        paths: vec![],
+                        files0_paths: None,
+                        config,
+                    });
+                }
             }
             "-H" => config.follow = Follow::Roots,
             "-L" => config.follow = Follow::Always,
