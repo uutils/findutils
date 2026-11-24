@@ -232,15 +232,18 @@ fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Result<Regex, on
         RegexType::PosixExtended => Syntax::posix_extended(),
     };
 
-    Regex::with_options(
-        pattern,
-        if config.ignore_case {
-            RegexOptions::REGEX_OPTION_IGNORECASE
-        } else {
-            RegexOptions::REGEX_OPTION_NONE
-        },
-        syntax,
-    )
+    let mut options = if config.ignore_case {
+        RegexOptions::REGEX_OPTION_IGNORECASE
+    } else {
+        RegexOptions::REGEX_OPTION_NONE
+    };
+    // Match GNU's "grep" regex type: let '.' match newline and clear
+    // SINGLELINE so negated brackets match newline too.
+    if ty == RegexType::Grep {
+        options.insert(RegexOptions::REGEX_OPTION_MULTILINE);
+        options.insert(RegexOptions::REGEX_OPTION_NEGATE_SINGLELINE);
+    }
+    Regex::with_options(pattern, options, syntax)
 }
 
 impl TryFrom<ArgMatches> for ParsedInfo {
@@ -734,7 +737,26 @@ mod tests {
     use std::io::{self, Write};
     use std::path::Path;
 
-    use super::{is_db_too_old, path_exists, DbReader, Statistics};
+    use super::{is_db_too_old, make_regex, path_exists, Config, DbReader, RegexType, Statistics};
+
+    #[test]
+    fn grep_regex_matches_newline_in_path() {
+        let config = Config {
+            all: false,
+            basename: false,
+            mode: Mode::Normal,
+            db: vec![],
+            existing: ExistenceMode::default(),
+            follow_symlinks: false,
+            ignore_case: false,
+            limit: None,
+            max_age: 0,
+            null_bytes: false,
+            print: false,
+        };
+        let re = make_regex(RegexType::Grep, &config, r".*/new[^a]line\.php").unwrap();
+        assert!(re.find("up/new\nline.php").is_some());
+    }
 
     /// A writer that always fails, to emulate stdout with no space left
     /// (`> /dev/full`) or a closed pipe.
