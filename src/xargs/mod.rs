@@ -11,10 +11,10 @@ use std::{
     fmt::Display,
     fs,
     io::{self, BufRead, BufReader, Read},
-    process::Stdio,
+    process::{ExitStatus, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc,
+        mpsc, Condvar, Mutex, MutexGuard, PoisonError,
     },
     thread::ScopedJoinHandle,
 };
@@ -502,6 +502,77 @@ impl CommandBuilderOptions {
     }
 }
 
+/// Counts the commands that are starting or running, so that a command that
+/// cannot start because the system has no process to spare (`EAGAIN`) waits for
+/// another command to end and tries again, instead of failing.
+#[derive(Default)]
+struct RunningCommands {
+    state: Mutex<RunningState>,
+    ended: Condvar,
+}
+
+#[derive(Default)]
+struct RunningState {
+    /// Commands that are starting, running, or waiting to try again.
+    active: usize,
+    /// Commands waiting for another command to end before they try again.
+    waiting: usize,
+    /// Grows each time a command ends or gives up.
+    ended: u64,
+}
+
+impl RunningCommands {
+    fn lock(&self) -> MutexGuard<'_, RunningState> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn status(&self, command: &mut ExecCommand) -> io::Result<ExitStatus> {
+        self.run(|| command.spawn(), |mut child| child.wait())
+    }
+
+    fn run<C, R>(
+        &self,
+        mut spawn: impl FnMut() -> io::Result<C>,
+        wait: impl FnOnce(C) -> io::Result<R>,
+    ) -> io::Result<R> {
+        let mut state = self.lock();
+        state.active += 1;
+        let result = loop {
+            let ended = state.ended;
+            drop(state);
+            let spawned = spawn();
+            state = self.lock();
+            match spawned {
+                Ok(child) => {
+                    drop(state);
+                    let result = wait(child);
+                    state = self.lock();
+                    break result;
+                }
+                // Only wait if another command can still end and wake us up.
+                Err(e)
+                    if e.kind() == io::ErrorKind::WouldBlock
+                        && state.active > state.waiting + 1 =>
+                {
+                    state.waiting += 1;
+                    while state.ended == ended {
+                        state = self
+                            .ended
+                            .wait(state)
+                            .unwrap_or_else(PoisonError::into_inner);
+                    }
+                    state.waiting -= 1;
+                }
+                Err(e) => break Err(e),
+            }
+        };
+        state.active -= 1;
+        state.ended += 1;
+        self.ended.notify_all();
+        result
+    }
+}
+
 struct CommandBuilder<'options> {
     options: &'options CommandBuilderOptions,
     command: Option<ExecCommand>,
@@ -557,7 +628,7 @@ impl CommandBuilder<'_> {
         self.limiters.is_complete()
     }
 
-    fn execute(self) -> Result<CommandResult, XargsError> {
+    fn execute(self, running: &RunningCommands) -> Result<CommandResult, XargsError> {
         let mut command = match self.command {
             Some(command) => command,
             None => self.options.command_for(self.replacement.as_deref())?,
@@ -572,7 +643,7 @@ impl CommandBuilder<'_> {
         }
 
         let result = match &self.options.action {
-            ExecAction::Command(_) => match command.status() {
+            ExecAction::Command(_) => match running.status(&mut command) {
                 Ok(status) => {
                     if status.success() {
                         Ok(CommandResult::Success)
@@ -1100,6 +1171,7 @@ impl<'a> Iterator for CommandBatchIter<'a> {
 fn run_parallel_batch(
     batch: Result<CommandBuilder<'_>, XargsError>,
     stop: &AtomicBool,
+    running: &RunningCommands,
 ) -> Result<CommandResult, XargsError> {
     // An input error ends the batch iterator, so it doesn't need to stop the
     // commands that were read before it.
@@ -1107,7 +1179,7 @@ fn run_parallel_batch(
     if stop.load(Ordering::Relaxed) {
         return Ok(CommandResult::Success);
     }
-    let result = builder.execute();
+    let result = builder.execute(running);
     if result.is_err() {
         stop.store(true, Ordering::Relaxed);
     }
@@ -1132,9 +1204,10 @@ fn process_input(
 
     match options.max_procs {
         1 => {
+            let running = RunningCommands::default();
             let mut result = CommandResult::Success;
             for batch in batches {
-                result.combine(batch?.execute()?);
+                result.combine(batch?.execute(&running)?);
             }
             Ok(result)
         }
@@ -1155,12 +1228,13 @@ fn process_input_pooled(
         .build()
         .map_err(|e| format!("Failed to start {capacity} worker threads: {e}"))?;
     let stop = AtomicBool::new(false);
+    let running = RunningCommands::default();
 
     pool.install(|| {
         batches
             .take_while(|_| !stop.load(Ordering::Relaxed))
             .par_bridge()
-            .map(|batch| run_parallel_batch(batch, &stop))
+            .map(|batch| run_parallel_batch(batch, &stop, &running))
             .reduce(|| Ok(CommandResult::Success), combine_results)
     })
 }
@@ -1196,6 +1270,7 @@ fn join_workers(
 /// tries again.
 fn process_input_unbounded(batches: CommandBatchIter<'_>) -> Result<CommandResult, XargsError> {
     let stop = AtomicBool::new(false);
+    let running = RunningCommands::default();
 
     std::thread::scope(|scope| {
         let mut workers = VecDeque::new();
@@ -1219,10 +1294,11 @@ fn process_input_unbounded(batches: CommandBatchIter<'_>) -> Result<CommandResul
             let job = loop {
                 let (job, next_job) = mpsc::channel();
                 let stop = &stop;
+                let running = &running;
                 let spawned =
                     std::thread::Builder::new().spawn_scoped(scope, move || {
                         match next_job.recv() {
-                            Ok(builder) => run_parallel_batch(Ok(builder), stop),
+                            Ok(builder) => run_parallel_batch(Ok(builder), stop, running),
                             Err(_) => Ok(CommandResult::Success),
                         }
                     });
@@ -2291,5 +2367,53 @@ mod tests {
         assert!(parse_delimiter("\\x").is_err());
         assert!(parse_delimiter("\\").is_err());
         assert!(parse_delimiter("abc").is_err());
+    }
+
+    fn out_of_processes() -> io::Error {
+        io::Error::from(io::ErrorKind::WouldBlock)
+    }
+
+    #[test]
+    fn test_running_commands_retries_once_another_command_ends() {
+        let running = &RunningCommands::default();
+        let (started, first_started) = mpsc::channel();
+        let (end_first, first_ends) = mpsc::channel::<()>();
+        std::thread::scope(|scope| {
+            let first = scope.spawn(move || {
+                running.run(
+                    || {
+                        started.send(()).unwrap();
+                        Ok(())
+                    },
+                    |()| first_ends.recv().map_err(io::Error::other),
+                )
+            });
+            first_started.recv().unwrap();
+
+            let mut attempts = 0;
+            let second = scope.spawn(move || {
+                running.run(
+                    || {
+                        attempts += 1;
+                        if attempts == 1 {
+                            end_first.send(()).unwrap();
+                            Err(out_of_processes())
+                        } else {
+                            Ok(())
+                        }
+                    },
+                    Ok,
+                )
+            });
+            assert!(first.join().unwrap().is_ok());
+            assert!(second.join().unwrap().is_ok());
+        });
+    }
+
+    #[test]
+    fn test_running_commands_fails_when_nothing_else_runs() {
+        let running = RunningCommands::default();
+        let result = running.run(|| Err::<(), _>(out_of_processes()), Ok);
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::WouldBlock);
     }
 }
