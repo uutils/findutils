@@ -20,7 +20,7 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 
-use common::test_helpers::fix_up_slashes;
+use common::test_helpers::{fix_up_slashes, path_to_testing_commandline};
 
 mod common;
 
@@ -3058,4 +3058,71 @@ fn find_leading_close_paren_needs_expression() {
         .args(&["./test_data/simple", "-true", ")"])
         .fails_with_code(1)
         .stderr_contains("you have too many ')'");
+}
+
+#[test]
+fn path_separator_slash_prints_slashes() {
+    // A no-op where `/` is already the separator; on Windows it replaces `\`.
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "slash")
+        .args(&["test_data/depth/1", "-name", "f2"])
+        .succeeds()
+        .stdout_only("test_data/depth/1/2/f2\n");
+}
+
+#[test]
+fn path_separator_slash_matches_slash_patterns() {
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "slash")
+        .args(&[
+            "test_data/depth",
+            "-sorted",
+            "-path",
+            "*/2/*",
+            "-prune",
+            "-o",
+            "-type",
+            "f",
+            "-print",
+        ])
+        .succeeds()
+        .stdout_only("test_data/depth/1/f1\ntest_data/depth/f0\n");
+}
+
+#[test]
+fn path_separator_slash_reaches_printf() {
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "slash")
+        .args(&["test_data/depth", "-name", "f2", "-printf", "%p %h %P\n"])
+        .succeeds()
+        .stdout_only("test_data/depth/1/2/f2 test_data/depth/1/2 1/2/f2\n");
+}
+
+#[test]
+fn path_separator_slash_reaches_exec() {
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "slash")
+        .args(&[
+            "test_data/depth/1",
+            "-name",
+            "f2",
+            "-exec",
+            &path_to_testing_commandline(),
+            "-",
+            "--no_print_cwd",
+            "{}",
+            ";",
+        ])
+        .succeeds()
+        .stdout_only("args=\n--no_print_cwd\ntest_data/depth/1/2/f2\n");
+}
+
+#[test]
+fn path_separator_other_values_keep_the_native_separator() {
+    let root = fix_up_slashes("test_data/depth/1");
+    ucmd()
+        .env("UUTILS_PATH_SEPARATOR", "/")
+        .args(&[root.as_str(), "-name", "f2"])
+        .succeeds()
+        .stdout_only(fix_up_slashes("test_data/depth/1/2/f2\n"));
 }
