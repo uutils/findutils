@@ -1213,6 +1213,20 @@ fn find_printf_and_fprintf_backslash_c_ignores_remaining_format(
 }
 
 #[test]
+fn find_printf_reserved_directives_are_errors() {
+    // GNU find reserves the `%(`, `%{` and `%[` directives for future use.
+    // Using one is a fatal error (exit 1, empty stdout) rather than being
+    // printed literally with an "unrecognized format directive" warning.
+    for format in ["%(", "a%{b", "%[\n"] {
+        ucmd()
+            .args(&["./test_data/simple", "-printf", format])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("reserved for future use");
+    }
+}
+
+#[test]
 #[cfg(unix)]
 fn find_printf_output_comes_before_exec_output() {
     ucmd()
