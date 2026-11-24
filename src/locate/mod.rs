@@ -773,14 +773,14 @@ mod tests {
             .at(9, 30, 21, 2_000_000)
             .to_zoned(jiff::tz::TimeZone::system())
             .unwrap();
-        filetime::set_file_mtime(
-            &db,
-            filetime::FileTime::from_unix_time(
-                mtime.timestamp().as_second(),
+
+        let modified = std::time::UNIX_EPOCH
+            + std::time::Duration::new(
+                mtime.timestamp().as_second() as u64,
                 mtime.timestamp().subsec_nanosecond() as u32,
-            ),
-        )
-        .unwrap();
+            );
+        let times = std::fs::FileTimes::new().set_modified(modified);
+        std::fs::set_times(&db, times).unwrap();
 
         let dbreader = DbReader::new(&db).unwrap();
 
