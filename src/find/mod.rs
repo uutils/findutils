@@ -372,6 +372,44 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     })
 }
 
+/// Whether `entry` lives on the same file system as the walk's root `dir`.
+///
+/// This mirrors walkdir's own `is_same_file_system` check: a directory is only
+/// pushed onto walkdir's internal stack (and therefore only becomes a candidate
+/// for `skip_current_dir()`) when it is on the same device as the root. When
+/// `-xdev`/`-mount` is not in effect, every entry is considered on the same
+/// file system (walkdir always pushes directories in that case).
+///
+/// If the device number cannot be determined, we conservatively report `true`
+/// so that the previous behaviour (calling `skip_current_dir()`) is preserved.
+fn entry_is_on_same_file_system(
+    entry: &WalkEntry,
+    dir: &str,
+    config: &Config,
+) -> bool {
+    if !config.same_file_system {
+        return true;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match (entry.metadata(), std::fs::metadata(dir)) {
+            (Ok(entry_meta), Ok(root_meta)) => {
+                entry_meta.dev() == root_meta.dev()
+            }
+            // If either stat fails, fall back to the old behaviour.
+            _ => true,
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = (entry, dir);
+        true
+    }
+}
+
 fn process_dir(
     dir: &str,
     config: &Config,
@@ -451,7 +489,21 @@ fn process_dir(
                 // -prune does nothing under -depth: the directory's contents
                 // have already been visited, and skipping now would skip the
                 // rest of its parent instead.
-                if matcher_io.should_skip_current_dir() && !config.depth_first {
+                //
+                // Under -xdev (-same_file_system), walkdir does not push a
+                // directory that lives on a different file system onto its
+                // stack (see walkdir's handle_entry: it only pushes when
+                // is_same_file_system() is true). Such a directory is a mount
+                // point: walkdir already refuses to descend into it, so
+                // calling skip_current_dir() here would pop the *parent*
+                // instead of the pruned directory, silently dropping every
+                // sibling that follows the mount point in readdir order
+                // (issue #1045). Only skip when the entry was actually pushed
+                // — i.e. a real directory on the same file system.
+                if matcher_io.should_skip_current_dir()
+                    && !config.depth_first
+                    && entry_is_on_same_file_system(&entry, dir, config)
+                {
                     it.skip_current_dir();
                 }
             }
