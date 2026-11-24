@@ -2751,6 +2751,28 @@ fn find_ls_unmapped_owner_renders_numeric_id() {
         .stdout_contains(unmapped.to_string());
 }
 
+// Regression test for uutils/findutils#1044: `-ls` / `-fls` used to panic
+// (abort, exit 134) when an entry could no longer be stat'ed — e.g. it was
+// removed between the directory read and `-ls`. GNU find prints one diagnostic
+// for that entry, sets the exit status to 1 and carries on. We must do the
+// same instead of aborting the whole run.
+#[test]
+#[cfg(unix)]
+fn find_ls_reports_vanished_file_and_continues() {
+    let temp_dir = Builder::new().prefix("find_ls_vanish_").tempdir().unwrap();
+    let dir = temp_dir.path().join("t");
+    fs::create_dir(&dir).unwrap();
+    File::create(dir.join("a")).unwrap();
+    File::create(dir.join("b")).unwrap();
+
+    // -exec rm removes each file before -ls stats it.
+    ucmd()
+        .arg(&dir)
+        .args(&["-type", "f", "-exec", "rm", "{}", ";", "-ls"])
+        .fails_with_code(1)
+        .stderr_contains("No such file or directory");
+}
+
 #[test]
 #[cfg(unix)]
 fn find_slashes() {
