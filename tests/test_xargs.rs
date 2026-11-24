@@ -979,6 +979,49 @@ fn xargs_arg_file_missing_strips_errno() {
         .stderr_str_check(|s| !s.contains("(os error"));
 }
 
+#[rstest::rstest]
+#[case("-a")]
+#[case("--arg-file")]
+fn xargs_arg_file_starting_with_dash(#[case] opt: &str) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    std::fs::write(temp_dir.path().join("-foo"), b"hello\n").unwrap();
+
+    ucmd()
+        .current_dir(temp_dir.path())
+        .args(&[opt, "-foo", "echo"])
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
+#[test]
+fn xargs_delimiter_dash() {
+    ucmd()
+        .args(&["-d", "-", "echo"])
+        .pipe_in("a-b-c")
+        .succeeds()
+        .stdout_is("a b c\n");
+}
+
+#[rstest::rstest]
+#[case("-n", "-1", "invalid digit")]
+#[case("-s", "-1", "invalid digit")]
+#[case("-L", "-1", "invalid digit")]
+#[case("-P", "-1", "invalid digit")]
+#[case("--delimiter", "-1", "Delimiter must be one byte")]
+fn xargs_negative_numeric_option_rejected_as_value(
+    #[case] opt: &str,
+    #[case] val: &str,
+    #[case] expected_err: &str,
+) {
+    // Required option values starting with '-' must be parsed as the option value
+    // rather than reported as unexpected argument flags (issue #985).
+    ucmd()
+        .args(&[opt, val, "echo"])
+        .fails_with_code(1)
+        .stderr_contains(expected_err)
+        .stderr_str_check(|s| !s.contains("unexpected argument"));
+}
+
 #[cfg(unix)]
 #[test]
 fn xargs_non_utf8_argument_is_rejected_gracefully() {

@@ -1199,12 +1199,14 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::ARG_FILE)
                 .short('a')
                 .long(options::ARG_FILE)
+                .allow_hyphen_values(true)
                 .help("Read arguments from the given file instead of stdin"),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .short('d')
                 .long(options::DELIMITER)
+                .allow_hyphen_values(true)
                 .help("Use the given delimiter to split the input")
                 .value_parser(parse_delimiter),
         )
@@ -1222,6 +1224,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_ARGS)
                 .short('n')
                 .long(options::MAX_ARGS)
+                .allow_hyphen_values(true)
                 .help(
                     "Set the max number of arguments read from stdin to be passed \
                     to each command invocation (mutually exclusive with -L and -I/-i)",
@@ -1232,6 +1235,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_LINES)
                 .short('L')
                 .long(options::MAX_LINES)
+                .allow_hyphen_values(true)
                 .help(
                     "Set the max number of lines from stdin to be passed to each \
                     command invocation (mutually exclusive with -n and -I/-i)",
@@ -1256,6 +1260,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_PROCS)
                 .short('P')
                 .long(options::MAX_PROCS)
+                .allow_hyphen_values(true)
                 .help("Run up to this many commands in parallel [NOT IMPLEMENTED]")
                 .value_parser(clap::value_parser!(usize)),
         )
@@ -1277,6 +1282,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_CHARS)
                 .short('s')
                 .long(options::MAX_CHARS)
+                .allow_hyphen_values(true)
                 .help(
                     "Set the max number of characters to be passed to each \
                     invocation",
