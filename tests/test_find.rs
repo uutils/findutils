@@ -150,6 +150,24 @@ fn non_utf8_argument_is_rejected_gracefully() {
 }
 
 #[test]
+fn find_debug_option() {
+    // The global `-D debugopts` option must be recognised before the starting
+    // points, like -H/-L/-P/-Olevel (issue #1013). A bare `-D` is a fatal
+    // error; a valid debug list is accepted (and otherwise ignored).
+    ucmd()
+        .arg("-D")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Missing argument after the -D option.")
+        .no_stdout();
+
+    ucmd()
+        .args(&["-D", "search", ".", "-maxdepth", "0"])
+        .succeeds()
+        .stdout_contains(".");
+}
+
+#[test]
 fn size_rejects_non_numeric_prefix() {
     // A non-numeric prefix or an invalid double sign is rejected, matching GNU.
     for bad in ["x5c", "abc5c", "+-5c", "--5c", "+++5c"] {

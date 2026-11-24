@@ -239,6 +239,45 @@ impl Iterator for Files0Paths {
     }
 }
 
+/// Recognised tokens for the global `-D debugopts` option. GNU find accepts a
+/// comma-separated list of these; unknown names are reported but otherwise
+/// ignored (the option still succeeds). `help` prints the list and exits 0.
+const KNOWN_DEBUGOPTS: &[&str] = &[
+    "exec", "opt", "rates", "search", "stat", "time", "tree", "all", "help",
+];
+
+/// Handles the global `-D debugopts` option, mirroring GNU find.
+///
+/// Returns `Ok(true)` when the option consumed the following argument (so the
+/// caller must advance its index by one extra), or `Err(...)` for the bare
+/// `-D` / empty-argument error cases that GNU find rejects with exit status 1.
+/// Valid debug flags are accepted and otherwise ignored; unrecognised names are
+/// reported on stderr but do not fail the parse, matching GNU find.
+fn handle_debug_option(args: &[&str], i: usize) -> Result<bool, Box<dyn Error>> {
+    // `i` points at "-D"; the debug list is the next argument.
+    let Some(list) = args.get(i + 1) else {
+        return Err(From::from("Missing argument after the -D option."));
+    };
+    if list.is_empty() {
+        return Err(From::from("Empty argument to the -D option."));
+    }
+    for name in list.split(',') {
+        if KNOWN_DEBUGOPTS.contains(&name) {
+            // Recognised debug flag: accepted and ignored.
+        } else {
+            // GNU find warns about unrecognised flags but keeps going.
+            writeln!(
+                &mut stderr(),
+                "{}: Ignoring unrecognised debug flag `{}'",
+                program_name(),
+                name
+            )
+            .unwrap();
+        }
+    }
+    Ok(true)
+}
+
 /// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut paths = vec![];
@@ -253,6 +292,13 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             "-H" => config.follow = Follow::Roots,
             "-L" => config.follow = Follow::Always,
             "-P" => config.follow = Follow::Never,
+            "-D" => {
+                // GNU find global `-D debugopts` option. The debug list is the
+                // following argument; a missing one is a fatal error.
+                if handle_debug_option(args, i)? {
+                    i += 1;
+                }
+            }
             "--" => {
                 // End of flags
                 i += 1;
