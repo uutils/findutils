@@ -263,6 +263,41 @@ const DEBUG_FLAGS: &[(&str, &str)] = &[
     ("help", "Explain the various -D options"),
 ];
 
+/// Whether the file named by `-files0-from` is the same file as standard input.
+///
+/// GNU find rejects `-files0-from <file>` together with `-ok`/`-okdir` whenever
+/// `<file>` refers to the same file as standard input, however it is spelled
+/// (`/dev/stdin`, `/dev/fd/0`, `/proc/self/fd/0`, or the list file itself when
+/// it is also redirected onto stdin).  It decides this by comparing the file
+/// with standard input by identity, which we mirror by comparing the device and
+/// inode numbers of `name` with those of file descriptor 0.
+#[cfg(unix)]
+fn refers_to_stdin(name: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::io::AsRawFd;
+
+    let Ok(file) = std::fs::metadata(name) else {
+        return false;
+    };
+    let Ok(stdin) = std::fs::metadata("/dev/stdin") else {
+        return false;
+    };
+    // Compare against the actual open descriptor 0 rather than /dev/stdin's own
+    // metadata, so a redirected regular file (`find ... < list`) is caught too.
+    let stdin_fd = io::stdin().as_raw_fd();
+    let Ok(stdin_fd_meta) = std::fs::metadata(format!("/proc/self/fd/{stdin_fd}")) else {
+        // Fall back to /dev/stdin if the procfs alias is unavailable.
+        return file.dev() == stdin.dev() && file.ino() == stdin.ino();
+    };
+    file.dev() == stdin_fd_meta.dev() && file.ino() == stdin_fd_meta.ino()
+}
+
+/// Non-Unix fallback: only the literal `-` is recognised as standard input.
+#[cfg(not(unix))]
+fn refers_to_stdin(_name: &str) -> bool {
+    false
+}
+
 /// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut paths = vec![];
@@ -355,11 +390,24 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         // Both would read stdin, so the starting points and the answers to
         // the prompts would compete for the same bytes.  GNU find rejects
         // the combination rather than producing arbitrary results.
-        if name == "-" && config.interactive_exec {
-            return Err(From::from(
-                "option -files0-from reading from standard input cannot be combined \
-                 with -ok, -okdir",
-            ));
+        if config.interactive_exec {
+            if name == "-" {
+                return Err(From::from(
+                    "option -files0-from reading from standard input cannot be combined \
+                     with -ok, -okdir",
+                ));
+            }
+            // `-files0-from` can name standard input without using the literal
+            // `-`: `/dev/stdin`, `/dev/fd/0`, `/proc/self/fd/0`, or the list
+            // file itself when it is also redirected onto stdin (`< list`).  GNU
+            // find compares the file with standard input by identity and rejects
+            // every such spelling, so match that by comparing device/inode.
+            if refers_to_stdin(name) {
+                return Err(From::from(format!(
+                    "option -files0-from: standard input must not refer to the same \
+                     file when combined with -ok, -okdir: '{name}'",
+                )));
+            }
         }
         files0_paths = Some(Files0Paths::open(name)?);
         paths.clear();
