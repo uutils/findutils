@@ -77,7 +77,25 @@ impl Ls {
     ) {
         use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
-        let metadata = file_info.metadata().unwrap();
+        // The entry may have vanished between the directory read and -ls (or
+        // lstat may fail for another reason). Report it like GNU find and
+        // carry on, instead of panicking and aborting the whole traversal.
+        let metadata = match file_info.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                // Match the traversal's diagnostic format: "find: 'path': message"
+                // with the errno text stripped, like process_dir does.
+                let message = uucore::error::strip_errno(&std::io::Error::from(e));
+                let _ = writeln!(
+                    &mut stderr(),
+                    "{}: '{}': {message}",
+                    crate::find::program_name(),
+                    file_info.path().display()
+                );
+                matcher_io.set_exit_code(1);
+                return;
+            }
+        };
 
         let inode_number = metadata.ino();
         // st_blocks counts 512-byte units; -ls shows 1 KiB ones
@@ -148,7 +166,25 @@ impl Ls {
     ) {
         // Non-Unix targets (Windows, wasm, ...) don't expose inode, owner,
         // group or Unix permission bits, so those columns are left blank.
-        let metadata = file_info.metadata().unwrap();
+        // The entry may have vanished between the directory read and -ls (or
+        // lstat may fail for another reason). Report it like GNU find and
+        // carry on, instead of panicking and aborting the whole traversal.
+        let metadata = match file_info.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                // Match the traversal's diagnostic format: "find: 'path': message"
+                // with the errno text stripped, like process_dir does.
+                let message = uucore::error::strip_errno(&std::io::Error::from(e));
+                let _ = writeln!(
+                    &mut stderr(),
+                    "{}: '{}': {message}",
+                    crate::find::program_name(),
+                    file_info.path().display()
+                );
+                matcher_io.set_exit_code(1);
+                return;
+            }
+        };
 
         let inode_number = 0;
         let size = metadata.len();
