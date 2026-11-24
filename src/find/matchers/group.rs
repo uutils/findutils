@@ -61,21 +61,11 @@ pub struct NoGroupMatcher {}
 impl Matcher for NoGroupMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        use nix::unistd::Gid;
-
         let Ok(metadata) = file_info.metadata() else {
             return true;
         };
 
-        let Ok(gid) = Group::from_gid(Gid::from_raw(metadata.gid())) else {
-            return true;
-        };
-
-        let Some(_group) = gid else {
-            return true;
-        };
-
-        false
+        !super::names::group_exists(metadata.gid())
     }
 
     #[cfg(not(unix))]

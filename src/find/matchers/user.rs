@@ -59,21 +59,11 @@ pub struct NoUserMatcher {}
 impl Matcher for NoUserMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        use nix::unistd::Uid;
-
         let Ok(metadata) = file_info.metadata() else {
             return true;
         };
 
-        let Ok(uid) = User::from_uid(Uid::from_raw(metadata.uid())) else {
-            return true;
-        };
-
-        let Some(_user) = uid else {
-            return true;
-        };
-
-        false
+        !super::names::user_exists(metadata.uid())
     }
 
     #[cfg(not(unix))]
