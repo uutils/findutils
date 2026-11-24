@@ -9,9 +9,7 @@
 //! can feed a fixed corpus without touching the process's stdin, and the
 //! command is `true` so the measurement is dominated by `xargs`'s own work
 //! (reading, splitting and batching arguments) rather than the child.
-//!
-//! Both the serial and the parallel (`-P`) paths are covered so the rayon-based
-//! dispatch introduced for `xargs -P` is measured alongside the serial one.
+//! Covers both the serial and the parallel (`-P`) paths.
 
 use std::path::PathBuf;
 
@@ -50,7 +48,7 @@ fn bench_e2e(c: &mut Criterion) {
     let ws_path = ws.to_str().unwrap();
     let nul_path = nul.to_str().unwrap();
 
-    // Each -P batch spawns a real child, so keep the parallel corpus small.
+    // Smaller corpus for -P: each batch spawns a child.
     let ws_small = build_input(400, " ", "ws_small");
     let ws_small_path = ws_small.to_str().unwrap();
 
@@ -74,7 +72,7 @@ fn bench_e2e(c: &mut Criterion) {
         b.iter(|| run(black_box(&["-a", ws_path, "-s", "4096", "true"])));
     });
 
-    // -P through the parallel path, with low and high parallelism.
+    // -P with low and high parallelism.
     for (name, max_args, max_procs) in [
         ("parallel_p2", "10", "2"),
         ("parallel_p8", "10", "8"),
