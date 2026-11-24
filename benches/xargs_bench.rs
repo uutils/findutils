@@ -9,6 +9,9 @@
 //! can feed a fixed corpus without touching the process's stdin, and the
 //! command is `true` so the measurement is dominated by `xargs`'s own work
 //! (reading, splitting and batching arguments) rather than the child.
+//!
+//! Both the serial and the parallel (`-P`) paths are covered so the rayon-based
+//! dispatch introduced for `xargs -P` is measured alongside the serial one.
 
 use std::path::PathBuf;
 
@@ -47,6 +50,10 @@ fn bench_e2e(c: &mut Criterion) {
     let ws_path = ws.to_str().unwrap();
     let nul_path = nul.to_str().unwrap();
 
+    // Each -P batch spawns a real child, so keep the parallel corpus small.
+    let ws_small = build_input(400, " ", "ws_small");
+    let ws_small_path = ws_small.to_str().unwrap();
+
     let mut group = c.benchmark_group("xargs");
 
     // Default whitespace splitting, single batch (fits one command line).
@@ -67,8 +74,30 @@ fn bench_e2e(c: &mut Criterion) {
         b.iter(|| run(black_box(&["-a", ws_path, "-s", "4096", "true"])));
     });
 
+    // -P through the parallel path, with low and high parallelism.
+    for (name, max_args, max_procs) in [
+        ("parallel_p2", "10", "2"),
+        ("parallel_p8", "10", "8"),
+        ("parallel_p8_batched_n", "50", "8"),
+    ] {
+        group.bench_function(name, |b| {
+            b.iter(|| {
+                run(black_box(&[
+                    "-a",
+                    ws_small_path,
+                    "-n",
+                    max_args,
+                    "-P",
+                    max_procs,
+                    "true",
+                ]));
+            });
+        });
+    }
+
     group.finish();
 
+    let _ = std::fs::remove_file(&ws_small);
     let _ = std::fs::remove_file(&ws);
     let _ = std::fs::remove_file(&nul);
 }

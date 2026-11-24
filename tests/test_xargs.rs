@@ -7,7 +7,7 @@
 // Integration tests for the xargs command using the uutests framework.
 // These are integration tests (rather than unit tests) so that the
 // testing-commandline binary is guaranteed to be built first.
-use uutests::util::TestScenario;
+use uutests::util::{CmdResult, TestScenario};
 
 use common::test_helpers::path_to_testing_commandline;
 
@@ -51,6 +51,32 @@ fn xargs_quoted_empty_argument() {
         .pipe_in("'' aaa \"\"\n")
         .succeeds()
         .stdout_only("\naaa\n\n");
+}
+
+/// The output lines of a successful parallel run, which come in any order.
+fn sorted_lines(result: &CmdResult) -> Vec<&str> {
+    result.no_stderr();
+    let mut lines: Vec<_> = result.stdout_str().lines().collect();
+    lines.sort_unstable();
+    lines
+}
+
+#[test]
+fn xargs_parallel_one() {
+    ucmd()
+        .args(&["-P1", "-n1"])
+        .pipe_in("abc\ndef g\\hi  'i  j \"k'")
+        .succeeds()
+        .stdout_only("abc\ndef\nghi\ni  j \"k\n");
+}
+
+#[test]
+fn xargs_parallel_many() {
+    let result = ucmd()
+        .args(&["-P3", "-n1"])
+        .pipe_in("abc\ndef g\\hi  'i  j \"k'")
+        .succeeds();
+    assert_eq!(sorted_lines(&result), ["abc", "def", "ghi", "i  j \"k"]);
 }
 
 #[test]
@@ -322,6 +348,20 @@ fn xargs_max_chars() {
         .fails_with_code(1)
         .stderr_contains("Error:")
         .no_stdout();
+}
+
+#[test]
+fn xargs_max_chars_runs_pending_command_before_error() {
+    // An argument that can never fit must not discard the command built so
+    // far: it still runs before xargs reports the error.
+    for procs in ["-P1", "-P2", "-P0"] {
+        ucmd()
+            .args(&["-s11", procs])
+            .pipe_in("ab cd abcdefghijkl ef")
+            .fails_with_code(1)
+            .stderr_contains("Error:")
+            .stdout_is("ab cd\n");
+    }
 }
 
 #[test]
@@ -623,6 +663,81 @@ fn xargs_exec_with_signal() {
         result.stdout_str(),
         "args=\n--no_print_cwd\n--exit_with_signal\na\n"
     );
+}
+
+#[test]
+fn xargs_exec_urgent_failure_parallel() {
+    // When a command exits with 255, no new command is launched: each of the
+    // two workers runs at most the command it already started.
+    let result = ucmd()
+        .args(&[
+            "-n1",
+            "-P2",
+            &path_to_testing_commandline(),
+            "-",
+            "--no_print_cwd",
+            "--exit_with_urgent_failure",
+        ])
+        .pipe_in("a b c d e f g h i j")
+        .run();
+    result.code_is(124);
+    assert!(
+        !result.stderr_str().is_empty(),
+        "stderr should not be empty"
+    );
+    let runs = result.stdout_str().matches("args=").count();
+    assert!(
+        (1..=2).contains(&runs),
+        "expected at most 2 commands to run, got {runs}"
+    );
+}
+
+#[test]
+fn xargs_parallel_zero() {
+    // `-P 0` runs as many commands at once as possible.
+    for arg in ["-P0", "--max-procs=0"] {
+        let result = ucmd().args(&[arg, "-n1"]).pipe_in("a b c d e").succeeds();
+        assert_eq!(sorted_lines(&result), ["a", "b", "c", "d", "e"]);
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn xargs_parallel_zero_waits_at_thread_limit() {
+    // With 64 MiB thread stacks in 1 GB of address space only a few threads
+    // fit, so -P0 has to wait for running commands before starting others.
+    let mut numbers: Vec<_> = (1..=100).map(|i| i.to_string()).collect();
+    let result = TestScenario::new("xargs")
+        .cmd("sh")
+        .env("RUST_MIN_STACK", "67108864")
+        .env("MALLOC_ARENA_MAX", "1")
+        .args(&[
+            "-c",
+            "ulimit -v 1000000 && exec \"$0\" -P0 -n1 sh -c 'sleep 0.1; echo \"$0\"'",
+            env!("CARGO_BIN_EXE_xargs"),
+        ])
+        .pipe_in(numbers.join("\n"))
+        .succeeds();
+    numbers.sort_unstable();
+    assert_eq!(sorted_lines(&result), numbers);
+}
+
+#[test]
+fn xargs_parallel_more_procs_than_cpus() {
+    let result = ucmd()
+        .args(&["-P64", "-n1"])
+        .pipe_in("a b c d e")
+        .succeeds();
+    assert_eq!(sorted_lines(&result), ["a", "b", "c", "d", "e"]);
+}
+
+#[test]
+fn xargs_exec_negative_parallel() {
+    ucmd()
+        .args(&["-P=-1"])
+        .fails_with_code(1)
+        .stderr_contains("Error:")
+        .no_stdout();
 }
 
 #[test]

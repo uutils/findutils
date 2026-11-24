@@ -5,15 +5,22 @@
 // https://opensource.org/licenses/MIT.
 
 use std::{
+    collections::VecDeque,
     error::Error,
     ffi::{OsStr, OsString},
     fmt::Display,
     fs,
     io::{self, BufRead, BufReader, Read},
     process::Stdio,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    thread::ScopedJoinHandle,
 };
 
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
+use rayon::iter::{ParallelBridge as _, ParallelIterator as _};
 use uucore::error::strip_errno;
 
 #[cfg(unix)]
@@ -91,14 +98,14 @@ trait CommandSizeLimiter {
     fn is_complete(&self) -> bool {
         false
     }
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter>;
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync>;
 }
 
 /// A pointer to the next limiter. A limiter should *always* call the cursor's
 /// `try_next` *before* updating its own state, to ensure that all other limiters
 /// are okay with the argument first.
 struct LimiterCursor<'collection> {
-    limiters: &'collection mut [Box<dyn CommandSizeLimiter>],
+    limiters: &'collection mut [Box<dyn CommandSizeLimiter + Send + Sync>],
 }
 
 impl LimiterCursor<'_> {
@@ -118,7 +125,7 @@ impl LimiterCursor<'_> {
 }
 
 struct LimiterCollection {
-    limiters: Vec<Box<dyn CommandSizeLimiter>>,
+    limiters: Vec<Box<dyn CommandSizeLimiter + Send + Sync>>,
 }
 
 impl LimiterCollection {
@@ -126,7 +133,7 @@ impl LimiterCollection {
         Self { limiters: vec![] }
     }
 
-    fn add(&mut self, limiter: impl CommandSizeLimiter + 'static) {
+    fn add(&mut self, limiter: impl CommandSizeLimiter + Send + Sync + 'static) {
         self.limiters.push(Box::new(limiter));
     }
 
@@ -265,7 +272,7 @@ impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
         }
     }
 
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
         Box::new(self.clone())
     }
 }
@@ -305,7 +312,7 @@ impl CommandSizeLimiter for MaxArgsCommandSizeLimiter {
         }
     }
 
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
         Box::new(self.clone())
     }
 
@@ -353,7 +360,7 @@ impl CommandSizeLimiter for MaxLinesCommandSizeLimiter {
         }
     }
 
-    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+    fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
         Box::new(self.clone())
     }
 
@@ -857,13 +864,13 @@ where
 }
 
 struct EofArgumentReader {
-    reader: Box<dyn ArgumentReader>,
+    reader: Box<dyn ArgumentReader + Send>,
     eof_delimiter: OsString,
     eof_found: bool,
 }
 
 impl EofArgumentReader {
-    fn new(reader: Box<dyn ArgumentReader>, eof_delimiter: &String) -> Self {
+    fn new(reader: Box<dyn ArgumentReader + Send>, eof_delimiter: &String) -> Self {
         Self {
             reader,
             eof_delimiter: eof_delimiter.into(),
@@ -939,6 +946,8 @@ struct InputProcessOptions {
     max_args: Option<usize>,
     max_lines: Option<usize>,
     no_run_if_empty: bool,
+    /// Maximum number of commands run at once; `0` means as many as possible.
+    max_procs: usize,
 }
 
 impl InputProcessOptions {
@@ -947,81 +956,305 @@ impl InputProcessOptions {
         max_args: Option<usize>,
         max_lines: Option<usize>,
         no_run_if_empty: bool,
+        max_procs: usize,
     ) -> Self {
         Self {
             exit_if_pass_char_limit,
             max_args,
             max_lines,
             no_run_if_empty,
+            max_procs,
         }
     }
 }
 
+/// Groups the input arguments into ready-to-run commands.
+///
+/// Errors are yielded in input order: when the input ends with an error, the
+/// command built so far is yielded first, if it should run, and the error
+/// right after it.
+struct CommandBatchIter<'a> {
+    builder_options: &'a CommandBuilderOptions,
+    args: Box<dyn ArgumentReader + Send>,
+    options: &'a InputProcessOptions,
+    /// Taken when the input ends.
+    current_builder: Option<CommandBuilder<'a>>,
+    have_pending_command: bool,
+    pending_error: Option<XargsError>,
+    done: bool,
+}
+
+impl<'a> CommandBatchIter<'a> {
+    fn new(
+        builder_options: &'a CommandBuilderOptions,
+        args: Box<dyn ArgumentReader + Send>,
+        options: &'a InputProcessOptions,
+    ) -> Result<Self, XargsError> {
+        Ok(Self {
+            current_builder: Some(CommandBuilder::new(builder_options)?),
+            builder_options,
+            args,
+            options,
+            have_pending_command: false,
+            pending_error: None,
+            done: false,
+        })
+    }
+
+    fn current_builder(&mut self) -> &mut CommandBuilder<'a> {
+        self.current_builder
+            .as_mut()
+            .expect("the builder is only taken when the input ends")
+    }
+
+    /// Ends the iteration: yields `last` if given, then `error` if given.
+    fn finish(
+        &mut self,
+        last: Option<CommandBuilder<'a>>,
+        error: Option<XargsError>,
+    ) -> Option<Result<CommandBuilder<'a>, XargsError>> {
+        self.done = true;
+        match last {
+            Some(builder) => {
+                self.pending_error = error;
+                Some(Ok(builder))
+            }
+            None => error.map(Err),
+        }
+    }
+}
+
+impl<'a> Iterator for CommandBatchIter<'a> {
+    type Item = Result<CommandBuilder<'a>, XargsError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(e) = self.pending_error.take() {
+            return Some(Err(e));
+        }
+        if self.done {
+            return None;
+        }
+        loop {
+            let arg = match self.args.next() {
+                Ok(Some(arg)) => arg,
+                Ok(None) => {
+                    let run = !self.options.no_run_if_empty || self.have_pending_command;
+                    let last = self.current_builder.take().filter(|_| run);
+                    return self.finish(last, None);
+                }
+                // An unmatched quote ends the input; the arguments already
+                // read are used up, and the half-read argument is dropped.
+                // With -x nothing starts after the bad quote, except a batch
+                // that is already complete: GNU starts a full batch as soon
+                // as it fills, before the quote.
+                Err(e) if is_unterminated_quote(&e) => {
+                    let run = self.have_pending_command
+                        && (!self.options.exit_if_pass_char_limit
+                            || self.current_builder().is_complete());
+                    let last = self.current_builder.take().filter(|_| run);
+                    return self.finish(last, Some(e.into()));
+                }
+                Err(e) => return self.finish(None, Some(e.into())),
+            };
+
+            if let Err(ExhaustedCommandSpace { arg, out_of_chars }) =
+                self.current_builder().add_arg(arg)
+            {
+                let mut next_builder = match CommandBuilder::new(self.builder_options) {
+                    Ok(builder) => builder,
+                    Err(e) => return self.finish(None, Some(e)),
+                };
+                let arg_fits = next_builder.add_arg(arg).is_ok();
+                // -x exits without running the pending command: with -L or -n
+                // once the command is too long, otherwise only if the argument alone does not fit.
+                if out_of_chars
+                    && self.options.exit_if_pass_char_limit
+                    && (!arg_fits
+                        || self.options.max_args.is_some()
+                        || self.options.max_lines.is_some())
+                {
+                    return self.finish(None, Some(XargsError::ArgumentTooLarge));
+                }
+                let ready = std::mem::replace(self.current_builder(), next_builder);
+                let ready = self.have_pending_command.then_some(ready);
+                if !arg_fits {
+                    return self.finish(ready, Some(XargsError::ArgumentTooLarge));
+                }
+                self.have_pending_command = true;
+                if ready.is_some() {
+                    return ready.map(Ok);
+                }
+                continue;
+            }
+
+            self.have_pending_command = true;
+        }
+    }
+}
+
+/// Runs one command in parallel mode.
+///
+/// Once any command fails in a way that aborts xargs (e.g. it exits with 255),
+/// `stop` is set and commands that have not started yet are skipped, so no new
+/// command is launched, as in GNU xargs.
+fn run_parallel_batch(
+    batch: Result<CommandBuilder<'_>, XargsError>,
+    stop: &AtomicBool,
+) -> Result<CommandResult, XargsError> {
+    // An input error ends the batch iterator, so it doesn't need to stop the
+    // commands that were read before it.
+    let builder = batch?;
+    if stop.load(Ordering::Relaxed) {
+        return Ok(CommandResult::Success);
+    }
+    let result = builder.execute();
+    if result.is_err() {
+        stop.store(true, Ordering::Relaxed);
+    }
+    result
+}
+
+fn combine_results(
+    first: Result<CommandResult, XargsError>,
+    second: Result<CommandResult, XargsError>,
+) -> Result<CommandResult, XargsError> {
+    let mut result = first?;
+    result.combine(second?);
+    Ok(result)
+}
+
 fn process_input(
     builder_options: &CommandBuilderOptions,
-    mut args: Box<dyn ArgumentReader>,
+    args: Box<dyn ArgumentReader + Send>,
     options: &InputProcessOptions,
 ) -> Result<CommandResult, XargsError> {
-    let mut current_builder = CommandBuilder::new(builder_options)?;
-    let mut have_pending_command = false;
-    let mut result = CommandResult::Success;
+    let batches = CommandBatchIter::new(builder_options, args, options)?;
 
-    // An unmatched quote ends the input; it is held until the arguments
-    // already read are used up, and the half-read argument is dropped.
-    let mut quote_error: Option<io::Error> = None;
+    match options.max_procs {
+        1 => {
+            let mut result = CommandResult::Success;
+            for batch in batches {
+                result.combine(batch?.execute()?);
+            }
+            Ok(result)
+        }
+        0 => process_input_unbounded(batches),
+        capacity => process_input_pooled(batches, capacity),
+    }
+}
 
-    loop {
-        let arg = match args.next() {
-            Ok(Some(arg)) => arg,
-            Ok(None) => break,
-            Err(e) if is_unterminated_quote(&e) => {
-                quote_error = Some(e);
+/// `-P N`: run up to `capacity` commands at once on a dedicated thread pool.
+/// Each worker blocks while its child runs, and `par_bridge` only pulls the
+/// next command when a worker is free, so input is read lazily.
+fn process_input_pooled(
+    batches: CommandBatchIter<'_>,
+    capacity: usize,
+) -> Result<CommandResult, XargsError> {
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(capacity)
+        .build()
+        .map_err(|e| format!("Failed to start {capacity} worker threads: {e}"))?;
+    let stop = AtomicBool::new(false);
+
+    pool.install(|| {
+        batches
+            .take_while(|_| !stop.load(Ordering::Relaxed))
+            .par_bridge()
+            .map(|batch| run_parallel_batch(batch, &stop))
+            .reduce(|| Ok(CommandResult::Success), combine_results)
+    })
+}
+
+type Worker<'scope> = ScopedJoinHandle<'scope, Result<CommandResult, XargsError>>;
+
+/// Joins the workers whose command has finished. If none has and `wait` is
+/// set, waits for the oldest one instead.
+fn join_workers(
+    workers: &mut VecDeque<Worker<'_>>,
+    result: &mut Result<CommandResult, XargsError>,
+    wait: bool,
+) {
+    let (finished, running) = std::mem::take(workers)
+        .into_iter()
+        .partition::<VecDeque<_>, _>(ScopedJoinHandle::is_finished);
+    *workers = running;
+    let mut finished = finished;
+    if finished.is_empty() && wait {
+        finished.extend(workers.pop_front());
+    }
+    for worker in finished {
+        let worker_result = worker
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+        let so_far = std::mem::replace(result, Ok(CommandResult::Success));
+        *result = combine_results(so_far, worker_result);
+    }
+}
+
+/// `-P 0`: run as many commands at once as possible, one thread per command.
+/// When no more threads can be started, waits for a command to finish and
+/// tries again.
+fn process_input_unbounded(batches: CommandBatchIter<'_>) -> Result<CommandResult, XargsError> {
+    let stop = AtomicBool::new(false);
+
+    std::thread::scope(|scope| {
+        let mut workers = VecDeque::new();
+        let mut result = Ok(CommandResult::Success);
+
+        for batch in batches {
+            if stop.load(Ordering::Relaxed) {
                 break;
             }
-            Err(e) => return Err(e.into()),
-        };
-
-        if let Err(ExhaustedCommandSpace { arg, out_of_chars }) = current_builder.add_arg(arg) {
-            let mut next_builder = CommandBuilder::new(builder_options)?;
-            let arg_fits = next_builder.add_arg(arg).is_ok();
-            // -x exits without running the pending command: with -L or -n
-            // once the command is too long, otherwise only if the argument alone does not fit.
-            if out_of_chars
-                && options.exit_if_pass_char_limit
-                && (!arg_fits || options.max_args.is_some() || options.max_lines.is_some())
-            {
-                return Err(XargsError::ArgumentTooLarge);
+            let builder = match batch {
+                Ok(builder) => builder,
+                Err(e) => {
+                    result = combine_results(result, Err(e));
+                    break;
+                }
+            };
+            // A finished thread keeps its resources until it is joined.
+            join_workers(&mut workers, &mut result, false);
+            // The command is sent once the thread runs, so that it is kept
+            // if the thread cannot be started.
+            let job = loop {
+                let (job, next_job) = mpsc::channel();
+                let stop = &stop;
+                let spawned =
+                    std::thread::Builder::new().spawn_scoped(scope, move || {
+                        match next_job.recv() {
+                            Ok(builder) => run_parallel_batch(Ok(builder), stop),
+                            Err(_) => Ok(CommandResult::Success),
+                        }
+                    });
+                match spawned {
+                    Ok(worker) => {
+                        workers.push_back(worker);
+                        break Ok(job);
+                    }
+                    Err(e) if workers.is_empty() => break Err(e),
+                    Err(_) => join_workers(&mut workers, &mut result, true),
+                }
+            };
+            match job {
+                Ok(job) => {
+                    // The worker only stops receiving once it has the command.
+                    let _ = job.send(builder);
+                }
+                Err(e) => {
+                    result = combine_results(
+                        result,
+                        Err(XargsError::from(format!("Failed to start a thread: {e}"))),
+                    );
+                    break;
+                }
             }
-            if have_pending_command {
-                result.combine(current_builder.execute()?);
-            }
-
-            if !arg_fits {
-                return Err(XargsError::ArgumentTooLarge);
-            }
-            current_builder = next_builder;
         }
 
-        have_pending_command = true;
-    }
-
-    // With -x nothing starts after the bad quote, except a batch that is
-    // already complete: GNU starts a full batch as soon as it fills, before
-    // the quote.
-    let run_pending = if quote_error.is_some() {
-        have_pending_command && (!options.exit_if_pass_char_limit || current_builder.is_complete())
-    } else {
-        !options.no_run_if_empty || have_pending_command
-    };
-    if run_pending {
-        result.combine(current_builder.execute()?);
-    }
-
-    if let Some(e) = quote_error {
-        return Err(e.into());
-    }
-
-    Ok(result)
+        while !workers.is_empty() {
+            join_workers(&mut workers, &mut result, true);
+        }
+        result
+    })
 }
 
 fn parse_delimiter(s: &str) -> Result<u8, String> {
@@ -1335,8 +1568,9 @@ fn xargs_command() -> clap::Command {
                 .short('P')
                 .long(options::MAX_PROCS)
                 .allow_hyphen_values(true)
-                .help("Run up to this many commands in parallel [NOT IMPLEMENTED]")
-                .value_parser(clap::value_parser!(usize)),
+                .help("Run up to this many commands in parallel (0: as many as possible)")
+                .value_parser(clap::value_parser!(usize))
+                .default_value("1"),
         )
         .arg(
             Arg::new(options::NO_RUN_IF_EMPTY)
@@ -1492,7 +1726,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     builder_options.verbose = options.verbose;
     builder_options.close_stdin = options.arg_file.is_none();
 
-    let args_file: Box<dyn Read> = if let Some(path) = &options.arg_file {
+    let args_file: Box<dyn Read + Send> = if let Some(path) = &options.arg_file {
         Box::new(
             fs::File::open(path)
                 .map_err(|e| format!("Failed to open {path}: {}", strip_errno(&e)))?,
@@ -1501,7 +1735,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         Box::new(io::stdin())
     };
 
-    let mut args: Box<dyn ArgumentReader> = if let Some(delimiter) = options.delimiter {
+    let mut args: Box<dyn ArgumentReader + Send> = if let Some(delimiter) = options.delimiter {
         Box::new(ByteDelimitedArgumentReader::new(args_file, delimiter))
     } else if options.replace.is_some() {
         Box::new(WhitespaceDelimitedArgumentReader::whole_lines(args_file))
@@ -1513,6 +1747,10 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         args = Box::new(EofArgumentReader::new(args, &eof_delimiter));
     }
 
+    let max_procs = *matches
+        .get_one::<usize>(options::MAX_PROCS)
+        .expect("-P has a default value");
+
     let result = process_input(
         &builder_options,
         args,
@@ -1521,6 +1759,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             options.max_args,
             options.max_lines,
             options.no_run_if_empty || options.replace.is_some(),
+            max_procs,
         ),
     )?;
     Ok(result)
@@ -1628,7 +1867,7 @@ mod tests {
             })
         }
 
-        fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
+        fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter + Send + Sync> {
             Box::new(self.clone())
         }
     }
@@ -1716,7 +1955,8 @@ mod tests {
 
     #[test]
     fn test_chars_limiter_asks_cursor() {
-        let mut rejects: [Box<dyn CommandSizeLimiter>; 1] = [Box::new(AlwaysRejectLimiter)];
+        let mut rejects: [Box<dyn CommandSizeLimiter + Send + Sync>; 1] =
+            [Box::new(AlwaysRejectLimiter)];
         let reject_cursor = LimiterCursor {
             limiters: &mut rejects,
         };
@@ -1754,7 +1994,8 @@ mod tests {
 
     #[test]
     fn test_args_limiter_asks_cursor() {
-        let mut rejects: [Box<dyn CommandSizeLimiter>; 1] = [Box::new(AlwaysRejectLimiter)];
+        let mut rejects: [Box<dyn CommandSizeLimiter + Send + Sync>; 1] =
+            [Box::new(AlwaysRejectLimiter)];
         let reject_cursor = LimiterCursor {
             limiters: &mut rejects,
         };
@@ -1800,7 +2041,8 @@ mod tests {
 
     #[test]
     fn test_lines_limiter_asks_cursor() {
-        let mut rejects: [Box<dyn CommandSizeLimiter>; 1] = [Box::new(AlwaysRejectLimiter)];
+        let mut rejects: [Box<dyn CommandSizeLimiter + Send + Sync>; 1] =
+            [Box::new(AlwaysRejectLimiter)];
         let reject_cursor = LimiterCursor {
             limiters: &mut rejects,
         };
