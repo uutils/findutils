@@ -881,6 +881,26 @@ fn regex_types() {
         .stdout_contains("teeest");
 }
 
+#[test]
+#[cfg(unix)]
+fn find_grep_regex_matches_newline_in_path() {
+    let temp_dir = Builder::new().prefix("find_grep_nl_").tempdir().unwrap();
+    File::create(temp_dir.path().join("plain.php")).expect("create plain file");
+    File::create(temp_dir.path().join("new\nline.php")).expect("create newline file");
+
+    ucmd()
+        .args(&[
+            temp_dir.path().to_str().unwrap(),
+            "-regextype",
+            "grep",
+            "-regex",
+            r".*\.php",
+        ])
+        .succeeds()
+        .stdout_contains("plain.php")
+        .stdout_contains("new\nline.php");
+}
+
 #[rstest::rstest]
 #[case::inherited(
     &["-regextype", "posix-basic", "("],

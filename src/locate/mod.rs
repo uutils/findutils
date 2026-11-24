@@ -232,15 +232,18 @@ fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Result<Regex, on
         RegexType::PosixExtended => Syntax::posix_extended(),
     };
 
-    Regex::with_options(
-        pattern,
-        if config.ignore_case {
-            RegexOptions::REGEX_OPTION_IGNORECASE
-        } else {
-            RegexOptions::REGEX_OPTION_NONE
-        },
-        syntax,
-    )
+    let mut options = if config.ignore_case {
+        RegexOptions::REGEX_OPTION_IGNORECASE
+    } else {
+        RegexOptions::REGEX_OPTION_NONE
+    };
+    // Match GNU's "grep" regex type: let '.' match newline and clear
+    // SINGLELINE so negated brackets match newline too.
+    if ty == RegexType::Grep {
+        options.insert(RegexOptions::REGEX_OPTION_MULTILINE);
+        options.insert(RegexOptions::REGEX_OPTION_NEGATE_SINGLELINE);
+    }
+    Regex::with_options(pattern, options, syntax)
 }
 
 impl TryFrom<ArgMatches> for ParsedInfo {

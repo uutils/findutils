@@ -92,15 +92,19 @@ impl RegexMatcher {
             RegexType::PosixExtended => Syntax::posix_extended(),
         };
 
-        let regex = Regex::with_options(
-            pattern,
-            if ignore_case {
-                RegexOptions::REGEX_OPTION_IGNORECASE
-            } else {
-                RegexOptions::REGEX_OPTION_NONE
-            },
-            syntax,
-        )?;
+        let mut options = if ignore_case {
+            RegexOptions::REGEX_OPTION_IGNORECASE
+        } else {
+            RegexOptions::REGEX_OPTION_NONE
+        };
+        // GNU's "grep" regex type matches newlines in paths. Oniguruma's grep
+        // syntax is line-oriented by default, so let '.' match newline and
+        // clear SINGLELINE (so negated brackets also match newline).
+        if regex_type == RegexType::Grep {
+            options.insert(RegexOptions::REGEX_OPTION_MULTILINE);
+            options.insert(RegexOptions::REGEX_OPTION_NEGATE_SINGLELINE);
+        }
+        let regex = Regex::with_options(pattern, options, syntax)?;
         Ok(Self { regex })
     }
 }
