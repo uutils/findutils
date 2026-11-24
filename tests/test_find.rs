@@ -2543,6 +2543,29 @@ fn find_ls() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_ls_reports_vanished_file_and_continues() {
+    let temp_dir = Builder::new().prefix("find_ls_vanish_").tempdir().unwrap();
+    File::create(temp_dir.path().join("a")).expect("create test file");
+
+    // -exec removes the file before -ls needs its metadata. The run must
+    // report the error and continue (exit 1), not panic.
+    ucmd()
+        .args(&[
+            temp_dir.path().to_str().unwrap(),
+            "-type",
+            "f",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-ls",
+        ])
+        .fails()
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
 #[cfg(unix)] // TZ only reliably selects the local time zone on unix
 fn find_ls_uses_local_time() {
     let temp_dir = Builder::new().prefix("find_ls_time_").tempdir().unwrap();

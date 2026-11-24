@@ -77,7 +77,27 @@ impl Ls {
     ) {
         use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
-        let metadata = file_info.metadata().unwrap();
+        // The entry may have vanished between the directory read and -ls (or
+        // lstat may fail for another reason). Report it like GNU find and
+        // carry on, instead of panicking and aborting the whole traversal.
+        let metadata = match file_info.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                let io_error = std::io::Error::from(e);
+                if print_error_message {
+                    let _ = writeln!(
+                        &mut stderr(),
+                        "{}: {}",
+                        file_info.path().to_string_lossy(),
+                        io_error
+                    );
+                } else {
+                    self.stdout_errors.handle(&io_error, matcher_io);
+                }
+                matcher_io.set_exit_code(1);
+                return;
+            }
+        };
 
         let inode_number = metadata.ino();
         // st_blocks counts 512-byte units; -ls shows 1 KiB ones
@@ -148,7 +168,27 @@ impl Ls {
     ) {
         // Non-Unix targets (Windows, wasm, ...) don't expose inode, owner,
         // group or Unix permission bits, so those columns are left blank.
-        let metadata = file_info.metadata().unwrap();
+        // The entry may have vanished between the directory read and -ls (or
+        // lstat may fail for another reason). Report it like GNU find and
+        // carry on, instead of panicking and aborting the whole traversal.
+        let metadata = match file_info.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                let io_error = std::io::Error::from(e);
+                if print_error_message {
+                    let _ = writeln!(
+                        &mut stderr(),
+                        "{}: {}",
+                        file_info.path().to_string_lossy(),
+                        io_error
+                    );
+                } else {
+                    self.stdout_errors.handle(&io_error, matcher_io);
+                }
+                matcher_io.set_exit_code(1);
+                return;
+            }
+        };
 
         let inode_number = 0;
         let size = metadata.len();
