@@ -2605,8 +2605,14 @@ fn find_ls_reports_vanished_file_and_continues() {
         ])
         .fails_with_code(1);
     let stderr = result.stderr_str();
-    assert!(stderr.contains("'a': No such file or directory"), "{stderr:?}");
-    assert!(stderr.contains("'b': No such file or directory"), "{stderr:?}");
+    assert!(
+        stderr.contains("'a': No such file or directory"),
+        "{stderr:?}"
+    );
+    assert!(
+        stderr.contains("'b': No such file or directory"),
+        "{stderr:?}"
+    );
     assert!(!stderr.contains("os error"), "{stderr:?}");
 }
 
