@@ -227,7 +227,9 @@ pub struct ParsedInfo {
 fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Result<Regex, onig::Error> {
     let syntax = match ty {
         RegexType::Emacs => Syntax::emacs(),
-        RegexType::Grep => Syntax::grep(),
+        // GNU find matches the whole path, including embedded newlines; onig's
+        // grep syntax is line-oriented, so use GNU regex syntax instead.
+        RegexType::Grep => Syntax::gnu_regex(),
         RegexType::PosixBasic => Syntax::posix_basic(),
         RegexType::PosixExtended => Syntax::posix_extended(),
     };
@@ -737,7 +739,10 @@ mod tests {
     use std::io::{self, Write};
     use std::path::Path;
 
-    use super::{is_db_too_old, make_regex, path_exists, Config, DbReader, RegexType, Statistics};
+    use super::{
+        is_db_too_old, make_regex, path_exists, Config, DbReader, ExistenceMode, Mode, RegexType,
+        Statistics,
+    };
 
     #[test]
     fn grep_regex_matches_newline_in_path() {

@@ -87,7 +87,9 @@ impl RegexMatcher {
     ) -> Result<Self, Box<dyn Error>> {
         let syntax = match regex_type {
             RegexType::Emacs => Syntax::emacs(),
-            RegexType::Grep => Syntax::grep(),
+            // GNU find matches the whole path, including embedded newlines; onig's
+            // grep syntax is line-oriented, so use GNU regex syntax instead.
+            RegexType::Grep => Syntax::gnu_regex(),
             RegexType::PosixBasic => Syntax::posix_basic(),
             RegexType::PosixExtended => Syntax::posix_extended(),
         };
