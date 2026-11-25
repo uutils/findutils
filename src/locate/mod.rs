@@ -14,7 +14,7 @@ use std::{
 
 use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
 use itertools::Itertools;
-use onig::{Regex, RegexOptions, Syntax};
+use onig::{Regex, RegexOptions, Syntax, SyntaxBehavior};
 use thiserror::Error;
 use uucore::error::{ClapErrorWrapper, UClapError, UError, UResult};
 
@@ -225,11 +225,12 @@ pub struct ParsedInfo {
 }
 
 fn make_regex(ty: RegexType, config: &Config, pattern: &str) -> Result<Regex, onig::Error> {
+    // Let negated character classes match newlines like GNU find does.
+    let mut grep_syntax = Syntax::grep().clone();
+    grep_syntax.disable_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_NOT_NEWLINE_IN_NEGATIVE_CC);
     let syntax = match ty {
         RegexType::Emacs => Syntax::emacs(),
-        // GNU find matches the whole path, including embedded newlines; onig's
-        // grep syntax is line-oriented, so use GNU regex syntax instead.
-        RegexType::Grep => Syntax::gnu_regex(),
+        RegexType::Grep => &grep_syntax,
         RegexType::PosixBasic => Syntax::posix_basic(),
         RegexType::PosixExtended => Syntax::posix_extended(),
     };
