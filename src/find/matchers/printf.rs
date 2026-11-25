@@ -360,14 +360,6 @@ impl FormatStringParser<'_> {
                 follow_links: false,
             },
             'Y' => FormatDirective::Type { follow_links: true },
-            // GNU find reserves these directives for future use; using one is a
-            // fatal error rather than an unrecognized-directive warning.
-            '(' | '{' | '[' => {
-                return Err(format!(
-                    "error: the format directive `%{first}' is reserved for future use"
-                )
-                .into());
-            }
             // TODO: %Z
             '(' | '{' | '[' => {
                 return Err(format!(
