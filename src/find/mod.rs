@@ -169,16 +169,8 @@ struct Files0Paths {
 }
 
 impl Files0Paths {
-    /// Open the source named by `-files0-from`; `-` means standard input.
-    fn open(name: &str) -> Result<Self, Box<dyn Error>> {
-        let reader: Box<dyn BufRead> = if name == "-" {
-            Box::new(BufReader::new(io::stdin()))
-        } else {
-            let file = std::fs::File::open(name)
-                .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
-            Box::new(BufReader::new(file))
-        };
-        Ok(Self { reader })
+    fn new(reader: Box<dyn BufRead>) -> Self {
+        Self { reader }
     }
 }
 
@@ -271,23 +263,28 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                  with -ok, -okdir",
             ));
         }
-        #[cfg(unix)]
-        if name != "-" && config.interactive_exec {
+        let reader: Box<dyn BufRead> = if name == "-" {
+            Box::new(BufReader::new(io::stdin()))
+        } else {
             let file = std::fs::File::open(name)
                 .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
 
-            if is_file_stdin(&file)? {
+            #[cfg(unix)]
+            if config.interactive_exec && is_file_stdin(&file)? {
                 return Err(format!(
                     "when -ok or -okdir is in use, the option \
-                    -files0-from cannot also read from standard input, but the \
-                    file ('{}') used for -files0-from appears to refer to the same \
-                    file as the standard input",
+            -files0-from cannot also read from standard input, but the \
+            file ('{}') used for -files0-from appears to refer to the same \
+            file as the standard input",
                     name
                 )
                 .into());
             }
-        }
-        files0_paths = Some(Files0Paths::open(name)?);
+
+            Box::new(BufReader::new(file))
+        };
+
+        files0_paths = Some(Files0Paths::new(reader));
         paths.clear();
     }
     Ok(ParsedInfo {
