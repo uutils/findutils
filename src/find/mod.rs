@@ -379,11 +379,21 @@ pub fn same_device(a: u64, b: u64) -> bool {
     a == b
 }
 
-/// Under `-xdev`, only skip a pruned dir that was pushed (on the root device);
-/// skipping a mount point would pop the parent and drop later siblings (#1045).
+/// Decide whether a `-prune`d directory should be skipped (popped via
+/// `skip_current_dir`). Never under `-depth`; under `-xdev` only when the
+/// entry was actually pushed (on the root device) — else we'd drop siblings (#1045).
 #[cfg(unix)]
 #[inline]
-pub fn should_skip_pruned_entry(same_file_system: bool, entry_dev: u64, root_dev: u64) -> bool {
+pub fn should_skip_pruned_entry(
+    marked: bool,
+    depth_first: bool,
+    same_file_system: bool,
+    entry_dev: u64,
+    root_dev: u64,
+) -> bool {
+    if !marked || depth_first {
+        return false;
+    }
     !same_file_system || same_device(entry_dev, root_dev)
 }
 
@@ -396,7 +406,12 @@ fn resolve_dev(dev: Option<u64>, fallback: u64) -> u64 {
 }
 
 #[cfg(unix)]
-fn should_skip_current_dir(entry: &WalkEntry, config: &Config, root_dev: u64) -> bool {
+fn should_skip_current_dir(
+    marked: bool,
+    entry: &WalkEntry,
+    config: &Config,
+    root_dev: u64,
+) -> bool {
     // On stat failure fall back to the root device (preserves old "skip" behaviour).
     let entry_dev = resolve_dev(
         entry
@@ -405,13 +420,25 @@ fn should_skip_current_dir(entry: &WalkEntry, config: &Config, root_dev: u64) ->
             .map(std::os::unix::fs::MetadataExt::dev),
         root_dev,
     );
-    should_skip_pruned_entry(config.same_file_system, entry_dev, root_dev)
+    should_skip_pruned_entry(
+        marked,
+        config.depth_first,
+        config.same_file_system,
+        entry_dev,
+        root_dev,
+    )
 }
 
-/// Non-unix fallback: no device concept, so always skip (previous behaviour).
+/// Non-unix fallback: no device concept, so keep the previous behaviour of
+/// skipping any marked directory that is not under `-depth`.
 #[cfg(not(unix))]
-fn should_skip_current_dir(_entry: &WalkEntry, _config: &Config, _root_dev: u64) -> bool {
-    true
+fn should_skip_current_dir(
+    marked: bool,
+    _entry: &WalkEntry,
+    config: &Config,
+    _root_dev: u64,
+) -> bool {
+    marked && !config.depth_first
 }
 
 fn process_dir(
@@ -504,10 +531,12 @@ fn process_dir(
                 // -prune is a no-op under -depth; under -xdev walkdir never
                 // pushes a mount-point dir, so skip_current_dir() would pop the
                 // parent and drop later siblings (#1045) — only skip pushed entries.
-                if matcher_io.should_skip_current_dir()
-                    && !config.depth_first
-                    && should_skip_current_dir(&entry, config, root_dev)
-                {
+                if should_skip_current_dir(
+                    matcher_io.should_skip_current_dir(),
+                    &entry,
+                    config,
+                    root_dev,
+                ) {
                     it.skip_current_dir();
                 }
             }
@@ -866,19 +895,19 @@ mod tests {
         // on a different file system, so it is always skipped). This is the
         // `-xdev` "different device" path that the integration test never hits
         // directly, and it is the branch codecov flags as partial.
-        assert!(super::should_skip_pruned_entry(false, 1, 2));
+        assert!(super::should_skip_pruned_entry(true, false, false, 1, 2));
         // Even when the device ids happen to match, a different file system
         // still skips (the `||` short-circuits before `same_device`).
-        assert!(super::should_skip_pruned_entry(false, 7, 7));
+        assert!(super::should_skip_pruned_entry(true, false, false, 7, 7));
 
         // Branch 2: same file system + same device id => the pruned dir was
         // pushed onto walkdir's stack, so it must be skipped (pop the entry).
-        assert!(super::should_skip_pruned_entry(true, 5, 5));
+        assert!(super::should_skip_pruned_entry(true, false, true, 5, 5));
 
         // Branch 3: same file system + different device id => this is a mount
         // point that walkdir never pushed; skipping it would pop the parent and
         // drop later siblings (#1045), so it must NOT be skipped.
-        assert!(!super::should_skip_pruned_entry(true, 5, 6));
+        assert!(!super::should_skip_pruned_entry(true, false, true, 5, 6));
     }
 
     #[test]

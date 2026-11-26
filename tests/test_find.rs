@@ -870,13 +870,13 @@ fn find_xdev_prune_mount_point_keeps_siblings() {
 fn should_skip_pruned_entry_keeps_mount_point_siblings() {
     use findutils::find::should_skip_pruned_entry;
     // Not under -xdev: always skip the pruned entry (unchanged behaviour).
-    assert!(should_skip_pruned_entry(false, 7, 7));
-    assert!(should_skip_pruned_entry(false, 7, 8));
+    assert!(should_skip_pruned_entry(true, false, false, 7, 7));
+    assert!(should_skip_pruned_entry(true, false, false, 7, 8));
     // Under -xdev, entry on the root device: it was pushed, so skip it.
-    assert!(should_skip_pruned_entry(true, 7, 7));
+    assert!(should_skip_pruned_entry(true, false, true, 7, 7));
     // Under -xdev, entry on a *different* device (mount point): do NOT skip,
     // otherwise skip_current_dir() pops the parent and drops later siblings.
-    assert!(!should_skip_pruned_entry(true, 8, 7));
+    assert!(!should_skip_pruned_entry(true, false, true, 8, 7));
 }
 
 #[test]
