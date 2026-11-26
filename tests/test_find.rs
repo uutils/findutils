@@ -493,7 +493,10 @@ fn files0_from_dev_stdin_rejected_with_ok() {
 #[cfg(target_os = "linux")]
 #[test]
 fn files0_from_same_file_as_stdin_rejected_with_ok() {
-    let temp_dir = Builder::new().prefix("find_files0_same_").tempdir().unwrap();
+    let temp_dir = Builder::new()
+        .prefix("find_files0_same_")
+        .tempdir()
+        .unwrap();
     let list = temp_dir.path().join("cand.list");
     fs::write(&list, b"y\n\0test_data\0").unwrap();
 
