@@ -372,35 +372,21 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     })
 }
 
+/// Whether two device ids refer to the same file system.
+#[cfg(unix)]
+#[inline]
+fn same_device(a: u64, b: u64) -> bool {
+    a == b
+}
+
 /// Whether `entry` lives on the same file system as the walk's root `dir`.
-///
-/// This mirrors walkdir's own `is_same_file_system` check: a directory is only
-/// pushed onto walkdir's internal stack (and therefore only becomes a candidate
-/// for `skip_current_dir()`) when it is on the same device as the root. When
-/// `-xdev`/`-mount` is not in effect, every entry is considered on the same
-/// file system (walkdir always pushes directories in that case).
-///
-/// If the device number cannot be determined, we conservatively report `true`
-/// so that the previous behaviour (calling `skip_current_dir()`) is preserved.
-fn entry_is_on_same_file_system(entry: &WalkEntry, dir: &str, config: &Config) -> bool {
-    if !config.same_file_system {
-        return true;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        match (entry.metadata(), std::fs::metadata(dir)) {
-            (Ok(entry_meta), Ok(root_meta)) => entry_meta.dev() == root_meta.dev(),
-            // If either stat fails, fall back to the old behaviour.
-            _ => true,
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = (entry, dir);
-        true
+#[cfg(unix)]
+fn entry_is_on_same_file_system(entry: &WalkEntry, root_dev: u64) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match entry.metadata() {
+        Ok(meta) => same_device(meta.dev(), root_dev),
+        // If the stat fails, fall back to the old behaviour.
+        Err(_) => true,
     }
 }
 
@@ -430,6 +416,14 @@ fn process_dir(
     }
 
     let mut ret = 0;
+
+    // Under -xdev, fetch the root device once so we can tell whether a pruned
+    // directory was actually pushed onto walkdir's stack (see below).
+    #[cfg(unix)]
+    let root_dev = {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(dir).map_or(0, |m| m.dev())
+    };
 
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
@@ -480,23 +474,16 @@ fn process_dir(
                     *quit = true;
                     break;
                 }
-                // -prune does nothing under -depth: the directory's contents
-                // have already been visited, and skipping now would skip the
-                // rest of its parent instead.
+                // -prune does nothing under -depth: the contents were already
+                // visited, and skipping now would skip the rest of the parent.
                 //
-                // Under -xdev (-same_file_system), walkdir does not push a
-                // directory that lives on a different file system onto its
-                // stack (see walkdir's handle_entry: it only pushes when
-                // is_same_file_system() is true). Such a directory is a mount
-                // point: walkdir already refuses to descend into it, so
-                // calling skip_current_dir() here would pop the *parent*
-                // instead of the pruned directory, silently dropping every
-                // sibling that follows the mount point in readdir order
-                // (issue #1045). Only skip when the entry was actually pushed
-                // — i.e. a real directory on the same file system.
+                // Under -xdev, walkdir never pushes a mount-point directory (one
+                // on a different fs) onto its stack, so skip_current_dir() would
+                // pop the *parent* and drop later siblings (issue #1045). Only
+                // skip entries that were actually pushed (same fs as root).
                 if matcher_io.should_skip_current_dir()
                     && !config.depth_first
-                    && entry_is_on_same_file_system(&entry, dir, config)
+                    && (!config.same_file_system || entry_is_on_same_file_system(&entry, root_dev))
                 {
                     it.skip_current_dir();
                 }
@@ -825,6 +812,17 @@ mod tests {
                 e
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn same_device_compares_device_ids() {
+        // Same device id => same file system.
+        assert!(super::same_device(42, 42));
+        // A different device id (e.g. a mount point on another fs) must NOT be
+        // treated as the same file system; this is the check that -xdev pruning
+        // relies on, and it fails if the comparison is ever dropped.
+        assert!(!super::same_device(42, 43));
     }
 
     #[test]

@@ -827,29 +827,11 @@ fn find_depth_prune_still_visits_siblings() {
 
 #[test]
 fn find_xdev_prune_mount_point_keeps_siblings() {
-    // Regression test for issue #1045: with -xdev/-mount, when -prune matches a
-    // directory that is itself a mount point, find used to drop the *parent*
-    // directory instead of just the pruned directory. Every entry after the
-    // mount point in readdir order was silently skipped and the exit status
-    // stayed 0.
-    //
-    // The bug is in the prune/skip decision: walkdir does not push a directory
-    // that lives on a different file system onto its stack (it only pushes when
-    // is_same_file_system() is true). Calling skip_current_dir() for such a
-    // mount-point directory therefore pops the *parent* instead of the pruned
-    // directory, discarding the remaining siblings.
-    //
-    // A real mount point requires privileges (unshare -rm + tmpfs), so this
-    // test exercises the same prune/skip decision without a mount: every child
-    // directory is on the same file system as the root, so skip_current_dir()
-    // must be called for each pruned directory and the siblings after each one
-    // must still be visited. The full integration repro is documented in the
-    // PR description.
+    // Regression test for issue #1045: under -xdev, pruning a mount-point
+    // directory used to drop the *parent* and every later sibling. A real
+    // mount needs privileges, so here every child is on the root fs and the
+    // siblings after the pruned dir must still be visited.
     let temp_dir = Builder::new().prefix("find_xdev_prune_").tempdir().unwrap();
-    // `pruned` is the "mount point" analog: the single directory matched by
-    // -prune. The other directories are ordinary siblings that must still be
-    // visited (their files printed) even though they follow `pruned` in
-    // readdir order.
     let pruned = "p3";
     let siblings = ["p1", "p2", "p4", "p5"];
     fs::create_dir(temp_dir.path().join(pruned)).unwrap();
@@ -859,11 +841,6 @@ fn find_xdev_prune_mount_point_keeps_siblings() {
         File::create(temp_dir.path().join(name).join("f")).unwrap();
     }
 
-    // -xdev is in effect. `pruned` is on the same file system as the root (no
-    // real mount is involved), so skip_current_dir() must be called for it and
-    // the sibling directories that follow it in readdir order must still be
-    // visited. The full mount-point integration repro is documented in the PR
-    // description.
     let result = ucmd()
         .arg(temp_dir.path())
         .args(&[
