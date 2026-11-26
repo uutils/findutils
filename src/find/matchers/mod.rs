@@ -265,13 +265,9 @@ pub(crate) fn report_stat_failure(error: &WalkError, path: &Path, matcher_io: &m
     if matcher_io.ignore_readdir_race() && error.is_not_found() {
         return;
     }
-    let message = strip_errno(&std::io::Error::from(error));
-    let _ = writeln!(
-        &mut stderr(),
-        "{}: '{}': {message}",
-        crate::find::program_name(),
-        path.display()
-    );
+    // Reuse the exact walker diagnostic format (see `find::report_walk_error`)
+    // so `-ls`/`-fls` stat failures read identically to walk errors.
+    crate::find::report_walk_error(error, Some(path));
     matcher_io.set_exit_code(1);
 }
 

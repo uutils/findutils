@@ -416,17 +416,7 @@ fn process_dir(
                     && err.depth().is_some_and(|depth| depth > 0) => {}
             Err(err) => {
                 ret = 1;
-                let message = uucore::error::strip_errno(&io::Error::from(&err));
-                match err.path() {
-                    Some(path) => writeln!(
-                        &mut stderr(),
-                        "{}: '{}': {message}",
-                        program_name(),
-                        path.display()
-                    ),
-                    None => writeln!(&mut stderr(), "{}: {message}", program_name()),
-                }
-                .unwrap();
+                report_walk_error(&err, err.path());
             }
             Ok(entry) => {
                 let mut matcher_io = matchers::MatcherIO::for_walk(deps, dir.as_ref(), config);
@@ -645,6 +635,25 @@ pub fn program_name() -> &'static str {
         }
     }
     name
+}
+
+/// Print a walker/stat error the way GNU find does: `find: 'path': message`
+/// (or `find: message` when the path is unknown), with the errno suffix
+/// stripped.  Both the directory-walk error path and the `-ls`/`-fls`
+/// stat-failure path (`matchers::report_stat_failure`) call this so the two
+/// diagnostics are guaranteed to stay byte-for-byte identical.
+pub(crate) fn report_walk_error(error: &matchers::WalkError, path: Option<&std::path::Path>) {
+    let message = uucore::error::strip_errno(&io::Error::from(error));
+    match path {
+        Some(path) => writeln!(
+            &mut stderr(),
+            "{}: '{}': {message}",
+            program_name(),
+            path.display()
+        ),
+        None => writeln!(&mut stderr(), "{}: {message}", program_name()),
+    }
+    .unwrap();
 }
 
 /// Does all the work for find.
