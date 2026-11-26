@@ -369,12 +369,6 @@ impl FormatStringParser<'_> {
                 .into());
             }
             // TODO: %Z
-            '(' | '{' | '[' => {
-                return Err(format!(
-                    "error: the format directive `%{first}' is reserved for future use"
-                )
-                .into());
-            }
             _ => {
                 eprintln!(
                     "{}: warning: unrecognized format directive '%{first}'",
