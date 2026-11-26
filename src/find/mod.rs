@@ -379,11 +379,8 @@ pub fn same_device(a: u64, b: u64) -> bool {
     a == b
 }
 
-/// Decide whether a matched `-prune` directory should be skipped via
-/// `skip_current_dir()`. Under `-xdev` only entries actually pushed onto
-/// walkdir's stack (i.e. on the root device) may be skipped; skipping a
-/// mount-point dir would pop the parent and drop later siblings (#1045).
-/// Pure + `pub` so the device comparison is unit-testable with any dev.
+/// Under `-xdev`, only skip a pruned dir that was pushed (on the root device);
+/// skipping a mount point would pop the parent and drop later siblings (#1045).
 #[cfg(unix)]
 #[inline]
 pub fn should_skip_pruned_entry(same_file_system: bool, entry_dev: u64, root_dev: u64) -> bool {
