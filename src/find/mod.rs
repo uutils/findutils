@@ -387,12 +387,24 @@ pub fn should_skip_pruned_entry(same_file_system: bool, entry_dev: u64, root_dev
     !same_file_system || same_device(entry_dev, root_dev)
 }
 
+/// Resolve a device id from an optional stat result, falling back to `fallback`
+/// when the stat failed (preserves the previous "skip" behaviour on error).
+#[cfg(unix)]
+#[inline]
+fn resolve_dev(dev: Option<u64>, fallback: u64) -> u64 {
+    dev.unwrap_or(fallback)
+}
+
 #[cfg(unix)]
 fn should_skip_current_dir(entry: &WalkEntry, config: &Config, root_dev: u64) -> bool {
     // On stat failure fall back to the root device (preserves old "skip" behaviour).
-    let entry_dev = entry
-        .metadata()
-        .map_or(root_dev, std::os::unix::fs::MetadataExt::dev);
+    let entry_dev = resolve_dev(
+        entry
+            .metadata()
+            .ok()
+            .map(std::os::unix::fs::MetadataExt::dev),
+        root_dev,
+    );
     should_skip_pruned_entry(config.same_file_system, entry_dev, root_dev)
 }
 
@@ -435,7 +447,7 @@ fn process_dir(
     #[cfg(unix)]
     let root_dev = {
         use std::os::unix::fs::MetadataExt;
-        std::fs::metadata(dir).map_or(0, |m| m.dev())
+        resolve_dev(std::fs::metadata(dir).ok().map(|m| m.dev()), 0)
     };
     #[cfg(not(unix))]
     let root_dev = 0u64;
@@ -834,6 +846,17 @@ mod tests {
         // treated as the same file system; this is the check that -xdev pruning
         // relies on, and it fails if the comparison is ever dropped.
         assert!(!super::same_device(42, 43));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_dev_falls_back_on_stat_failure() {
+        // Successful stat: use the reported device id.
+        assert_eq!(super::resolve_dev(Some(7), 99), 7);
+        // Failed stat (None): fall back to the root device so a pruned entry is
+        // still skipped (preserves the pre-fix "skip on error" behaviour). This
+        // is the branch -xdev pruning takes when metadata() errors out.
+        assert_eq!(super::resolve_dev(None, 99), 99);
     }
 
     #[test]
