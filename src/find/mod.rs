@@ -859,6 +859,28 @@ mod tests {
         assert_eq!(super::resolve_dev(None, 99), 99);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn should_skip_pruned_entry_covers_all_branches() {
+        // Branch 1: `!same_file_system` short-circuits to `true` (the entry is
+        // on a different file system, so it is always skipped). This is the
+        // `-xdev` "different device" path that the integration test never hits
+        // directly, and it is the branch codecov flags as partial.
+        assert!(super::should_skip_pruned_entry(false, 1, 2));
+        // Even when the device ids happen to match, a different file system
+        // still skips (the `||` short-circuits before `same_device`).
+        assert!(super::should_skip_pruned_entry(false, 7, 7));
+
+        // Branch 2: same file system + same device id => the pruned dir was
+        // pushed onto walkdir's stack, so it must be skipped (pop the entry).
+        assert!(super::should_skip_pruned_entry(true, 5, 5));
+
+        // Branch 3: same file system + different device id => this is a mount
+        // point that walkdir never pushed; skipping it would pop the parent and
+        // drop later siblings (#1045), so it must NOT be skipped.
+        assert!(!super::should_skip_pruned_entry(true, 5, 6));
+    }
+
     #[test]
     fn parse_args_handles_single_dash() {
         // Apparently "-" should be treated as a directory name.
