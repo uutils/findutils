@@ -504,7 +504,7 @@ dependencies = [
  "rustix",
  "tempfile",
  "thiserror",
- "uucore 0.13.0",
+ "uucore",
  "uutests",
  "walkdir",
 ]
@@ -1650,14 +1650,19 @@ checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
 
 [[package]]
 name = "uucore"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f24a5910ebbf2c0baf486a9125705f8e026a8f7741a3ea8cf5eca3c9257c9bdf"
+checksum = "90cf14b33aa0368fd2842ef436d8890219dea9be20b2594836f0bba903533cca"
 dependencies = [
+ "ariadne",
+ "bstr",
+ "cfg_aliases",
  "clap",
  "dns-lookup",
+ "dunce",
  "fluent",
  "fluent-syntax",
+ "icu_locale",
  "jiff",
  "libc",
  "nix 0.31.4",
@@ -1668,46 +1673,9 @@ dependencies = [
  "time",
  "unic-langid",
  "unicode-width",
- "uucore_procs 0.12.0",
+ "uucore_procs",
  "wild",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "uucore"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90cf14b33aa0368fd2842ef436d8890219dea9be20b2594836f0bba903533cca"
-dependencies = [
- "ariadne",
- "bstr",
- "cfg_aliases",
- "clap",
- "dunce",
- "fluent",
- "fluent-syntax",
- "icu_locale",
- "libc",
- "nix 0.31.4",
- "os_display",
- "rustc-hash",
- "rustix",
- "thiserror",
- "unic-langid",
- "unicode-width",
- "uucore_procs 0.13.0",
- "wild",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "uucore_procs"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50aa1f3bba55168888ae6f1f2714ce58897d8020d742d21f474f01e86468fedd"
-dependencies = [
- "proc-macro2",
- "quote",
 ]
 
 [[package]]
@@ -1722,9 +1690,9 @@ dependencies = [
 
 [[package]]
 name = "uutests"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c47cf53a889f65f0c96eb4fcaaf29cc3a61ae1cef00860e0ca94e0ed4952ef7"
+checksum = "ec9b08b2d8415d2c3d9b5825301e4686909aa6c154828999e95c67ff551e6286"
 dependencies = [
  "ctor",
  "libc",
@@ -1733,9 +1701,22 @@ dependencies = [
  "rand",
  "regex",
  "rlimit",
+ "rustix",
  "tempfile",
- "uucore 0.12.0",
+ "uucore",
+ "uutests_procs",
  "xattr",
+]
+
+[[package]]
+name = "uutests_procs"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e759af52ab8e56529202885503420686c9f54bdcfe19d40d3272b49cce98bd8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]
