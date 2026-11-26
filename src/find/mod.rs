@@ -274,22 +274,17 @@ const DEBUG_FLAGS: &[(&str, &str)] = &[
 #[cfg(unix)]
 fn refers_to_stdin(name: &str) -> bool {
     use std::os::unix::fs::MetadataExt;
-    use std::os::unix::io::AsRawFd;
 
-    let Ok(file) = std::fs::metadata(name) else {
+    // `/dev/stdin` is a symlink to `/proc/self/fd/0`, and `metadata()` follows
+    // symlinks, so statting it resolves to the actual file (or pipe/tty) that
+    // file descriptor 0 refers to.  Comparing by device/inode therefore catches
+    // a redirected regular file (`find ... < list`) as well as every `/dev/stdin`,
+    // `/dev/fd/0`, `/proc/self/fd/0` alias.  If either name cannot be stat'd
+    // (e.g. the `-files0-from` file is missing) it is not standard input.
+    let (Ok(file), Ok(stdin)) = (std::fs::metadata(name), std::fs::metadata("/dev/stdin")) else {
         return false;
     };
-    let Ok(stdin) = std::fs::metadata("/dev/stdin") else {
-        return false;
-    };
-    // Compare against the actual open descriptor 0 rather than /dev/stdin's own
-    // metadata, so a redirected regular file (`find ... < list`) is caught too.
-    let stdin_fd = io::stdin().as_raw_fd();
-    let Ok(stdin_fd_meta) = std::fs::metadata(format!("/proc/self/fd/{stdin_fd}")) else {
-        // Fall back to /dev/stdin if the procfs alias is unavailable.
-        return file.dev() == stdin.dev() && file.ino() == stdin.ino();
-    };
-    file.dev() == stdin_fd_meta.dev() && file.ino() == stdin_fd_meta.ino()
+    file.dev() == stdin.dev() && file.ino() == stdin.ino()
 }
 
 /// Non-Unix fallback: only the literal `-` is recognised as standard input.
@@ -749,6 +744,28 @@ mod tests {
     /// Do nothing equivalent of the above for non-windows systems.
     pub fn fix_up_slashes(path: &str) -> String {
         path.to_string()
+    }
+
+    /// Unit coverage for the stdin-identity helper that backs the
+    /// `-files0-from <stdin>` + `-ok`/`-okdir` rejection.  Exercises the
+    /// matching branch (a name that resolves to the same file as fd 0), the
+    /// non-matching branch (an unrelated regular file), and the metadata-error
+    /// branch (a name that does not exist).
+    #[cfg(unix)]
+    #[test]
+    fn refers_to_stdin_matches_by_identity() {
+        // A missing file cannot be standard input -> metadata-error branch.
+        assert!(!super::refers_to_stdin("/nonexistent/jarvis-no-such-file"));
+
+        // An ordinary existing file is not standard input -> non-matching branch.
+        let dir = Builder::new().prefix("refers_stdin_").tempdir().unwrap();
+        let regular = dir.path().join("regular.list");
+        fs::write(&regular, b"x\0").unwrap();
+        assert!(!super::refers_to_stdin(&regular.display().to_string()));
+
+        // `/dev/stdin` (a symlink to fd 0) resolves to the same file as fd 0 ->
+        // matching branch.  This is exactly what the interactive-exec guard uses.
+        assert!(super::refers_to_stdin("/dev/stdin"));
     }
 
     /// A struct that implements Dependencies, but uses faked implementations,
