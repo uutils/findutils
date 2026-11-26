@@ -382,11 +382,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
 ///
 /// If the device number cannot be determined, we conservatively report `true`
 /// so that the previous behaviour (calling `skip_current_dir()`) is preserved.
-fn entry_is_on_same_file_system(
-    entry: &WalkEntry,
-    dir: &str,
-    config: &Config,
-) -> bool {
+fn entry_is_on_same_file_system(entry: &WalkEntry, dir: &str, config: &Config) -> bool {
     if !config.same_file_system {
         return true;
     }
@@ -395,9 +391,7 @@ fn entry_is_on_same_file_system(
     {
         use std::os::unix::fs::MetadataExt;
         match (entry.metadata(), std::fs::metadata(dir)) {
-            (Ok(entry_meta), Ok(root_meta)) => {
-                entry_meta.dev() == root_meta.dev()
-            }
+            (Ok(entry_meta), Ok(root_meta)) => entry_meta.dev() == root_meta.dev(),
             // If either stat fails, fall back to the old behaviour.
             _ => true,
         }

@@ -845,10 +845,7 @@ fn find_xdev_prune_mount_point_keeps_siblings() {
     // must be called for each pruned directory and the siblings after each one
     // must still be visited. The full integration repro is documented in the
     // PR description.
-    let temp_dir = Builder::new()
-        .prefix("find_xdev_prune_")
-        .tempdir()
-        .unwrap();
+    let temp_dir = Builder::new().prefix("find_xdev_prune_").tempdir().unwrap();
     // `pruned` is the "mount point" analog: the single directory matched by
     // -prune. The other directories are ordinary siblings that must still be
     // visited (their files printed) even though they follow `pruned` in
@@ -870,14 +867,7 @@ fn find_xdev_prune_mount_point_keeps_siblings() {
     let result = ucmd()
         .arg(temp_dir.path())
         .args(&[
-            "-xdev",
-            "-name",
-            pruned,
-            "-prune",
-            "-o",
-            "-type",
-            "f",
-            "-print",
+            "-xdev", "-name", pruned, "-prune", "-o", "-type", "f", "-print",
         ])
         .succeeds();
 
