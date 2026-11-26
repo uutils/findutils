@@ -374,7 +374,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         let source = if name == "-" {
             "(standard input)".to_string()
         } else {
-            name.to_string()
+            name.clone()
         };
 
         files0_paths = Some(Files0Paths::new(reader, source));
