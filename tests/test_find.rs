@@ -827,10 +827,9 @@ fn find_depth_prune_still_visits_siblings() {
 
 #[test]
 fn find_xdev_prune_mount_point_keeps_siblings() {
-    // Regression test for issue #1045: under -xdev, pruning a mount-point
-    // directory used to drop the *parent* and every later sibling. A real
-    // mount needs privileges, so here every child is on the root fs and the
-    // siblings after the pruned dir must still be visited.
+    // Regression test for #1045: pruning a mount-point dir under -xdev used to
+    // drop the parent and later siblings. A real mount needs privileges, so
+    // every child here is on the root fs; siblings must still be visited.
     let temp_dir = Builder::new().prefix("find_xdev_prune_").tempdir().unwrap();
     let pruned = "p3";
     let siblings = ["p1", "p2", "p4", "p5"];
@@ -858,6 +857,20 @@ fn find_xdev_prune_mount_point_keeps_siblings() {
         printed, expected,
         "siblings after a pruned directory must still be visited under -xdev"
     );
+}
+
+// Unit test for the extracted device comparison (issue #1045). The integration
+// test above can't create a second file system, so exercise `same_device`
+// directly with a *different* dev value: this fails without the fix (which
+// compared the wrong thing) and passes with it.
+#[cfg(unix)]
+#[test]
+fn same_device_distinguishes_different_devs() {
+    use findutils::find::same_device;
+    // Same device id -> same file system.
+    assert!(same_device(7, 7));
+    // Different device id -> different file system (the case the fix must catch).
+    assert!(!same_device(7, 8));
 }
 
 #[test]

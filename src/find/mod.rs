@@ -375,7 +375,7 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
 /// Whether two device ids refer to the same file system.
 #[cfg(unix)]
 #[inline]
-fn same_device(a: u64, b: u64) -> bool {
+pub fn same_device(a: u64, b: u64) -> bool {
     a == b
 }
 
@@ -492,12 +492,9 @@ fn process_dir(
                     *quit = true;
                     break;
                 }
-                // -prune does nothing under -depth: the contents were already
-                // visited, and skipping now would skip the rest of the parent.
-                //
-                // Under -xdev, walkdir never pushes a mount-point dir (on another
-                // fs), so skip_current_dir() would pop the *parent* and drop later
-                // siblings (issue #1045); only skip entries actually pushed.
+                // -prune is a no-op under -depth; under -xdev walkdir never
+                // pushes a mount-point dir, so skip_current_dir() would pop the
+                // parent and drop later siblings (#1045) — only skip pushed entries.
                 if matcher_io.should_skip_current_dir()
                     && !config.depth_first
                     && should_skip_current_dir(&entry, config, root_dev)
