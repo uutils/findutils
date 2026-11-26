@@ -379,24 +379,24 @@ pub fn same_device(a: u64, b: u64) -> bool {
     a == b
 }
 
-/// Whether `entry` lives on the same file system as the walk's root device.
+/// Decide whether a matched `-prune` directory should be skipped via
+/// `skip_current_dir()`. Under `-xdev` only entries actually pushed onto
+/// walkdir's stack (i.e. on the root device) may be skipped; skipping a
+/// mount-point dir would pop the parent and drop later siblings (#1045).
+/// Pure + `pub` so the device comparison is unit-testable with any dev.
 #[cfg(unix)]
-fn entry_is_on_same_file_system(entry: &WalkEntry, root_dev: u64) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    match entry.metadata() {
-        Ok(meta) => same_device(meta.dev(), root_dev),
-        // If the stat fails, fall back to the old behaviour.
-        Err(_) => true,
-    }
+#[inline]
+pub fn should_skip_pruned_entry(same_file_system: bool, entry_dev: u64, root_dev: u64) -> bool {
+    !same_file_system || same_device(entry_dev, root_dev)
 }
 
-/// Whether a matched `-prune` directory should be skipped via
-/// `skip_current_dir()`. Under `-xdev` this is only true when the entry was
-/// actually pushed onto walkdir's stack (i.e. it is on the root file system);
-/// otherwise skipping would pop the parent and drop later siblings (#1045).
 #[cfg(unix)]
 fn should_skip_current_dir(entry: &WalkEntry, config: &Config, root_dev: u64) -> bool {
-    !config.same_file_system || entry_is_on_same_file_system(entry, root_dev)
+    // On stat failure fall back to the root device (preserves old "skip" behaviour).
+    let entry_dev = entry
+        .metadata()
+        .map_or(root_dev, std::os::unix::fs::MetadataExt::dev);
+    should_skip_pruned_entry(config.same_file_system, entry_dev, root_dev)
 }
 
 /// Non-unix fallback: no device concept, so always skip (previous behaviour).

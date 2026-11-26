@@ -5,3 +5,7 @@ target
 .settings
 test_data/links/link-*
 /public/
+
+# local review artifacts
+FMT_REPORT.md
+REVIEW_FIX_REPORT.md

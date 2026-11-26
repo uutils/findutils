@@ -859,18 +859,24 @@ fn find_xdev_prune_mount_point_keeps_siblings() {
     );
 }
 
-// Unit test for the extracted device comparison (issue #1045). The integration
-// test above can't create a second file system, so exercise `same_device`
-// directly with a *different* dev value: this fails without the fix (which
-// compared the wrong thing) and passes with it.
+// Unit test for the extracted prune decision (issue #1045). The integration
+// test above can't put a child on another file system, so exercise the pure
+// `should_skip_pruned_entry` decision directly with a *different* dev: a
+// mount-point entry (dev != root) must NOT be skipped, or its parent and
+// later siblings are dropped. This fails against the pre-fix logic, which
+// skipped every pruned entry under -xdev.
 #[cfg(unix)]
 #[test]
-fn same_device_distinguishes_different_devs() {
-    use findutils::find::same_device;
-    // Same device id -> same file system.
-    assert!(same_device(7, 7));
-    // Different device id -> different file system (the case the fix must catch).
-    assert!(!same_device(7, 8));
+fn should_skip_pruned_entry_keeps_mount_point_siblings() {
+    use findutils::find::should_skip_pruned_entry;
+    // Not under -xdev: always skip the pruned entry (unchanged behaviour).
+    assert!(should_skip_pruned_entry(false, 7, 7));
+    assert!(should_skip_pruned_entry(false, 7, 8));
+    // Under -xdev, entry on the root device: it was pushed, so skip it.
+    assert!(should_skip_pruned_entry(true, 7, 7));
+    // Under -xdev, entry on a *different* device (mount point): do NOT skip,
+    // otherwise skip_current_dir() pops the parent and drops later siblings.
+    assert!(!should_skip_pruned_entry(true, 8, 7));
 }
 
 #[test]
