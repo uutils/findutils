@@ -2765,12 +2765,63 @@ fn find_ls_reports_vanished_file_and_continues() {
     File::create(dir.join("a")).unwrap();
     File::create(dir.join("b")).unwrap();
 
-    // -exec rm removes each file before -ls stats it.
-    ucmd()
+    // -exec rm removes each file before -ls stats it. Both files vanish, so
+    // GNU find emits exactly one diagnostic per file (order is unspecified) and
+    // exits 1. Assert the exact set of lines, not merely that stderr is
+    // non-empty.
+    let result = ucmd()
         .arg(&dir)
         .args(&["-type", "f", "-exec", "rm", "{}", ";", "-ls"])
-        .fails_with_code(1)
-        .stderr_contains("No such file or directory");
+        .fails_with_code(1);
+    result.no_stdout();
+
+    let mut lines: Vec<String> = result
+        .stderr_str()
+        .lines()
+        .map(std::string::ToString::to_string)
+        .collect();
+    lines.sort();
+    let mut expected = vec![
+        format!(
+            "find: '{}': No such file or directory",
+            dir.join("a").display()
+        ),
+        format!(
+            "find: '{}': No such file or directory",
+            dir.join("b").display()
+        ),
+    ];
+    expected.sort();
+    assert_eq!(lines, expected);
+}
+
+// With -ignore_readdir_race a file that vanished after its name was read from
+// the directory is not an error, so -ls must stay silent and still exit 0.
+#[test]
+#[cfg(unix)]
+fn find_ls_vanished_file_silent_with_ignore_readdir_race() {
+    let temp_dir = Builder::new()
+        .prefix("find_ls_vanish_race_")
+        .tempdir()
+        .unwrap();
+    let dir = temp_dir.path().join("t");
+    fs::create_dir(&dir).unwrap();
+    File::create(dir.join("a")).unwrap();
+
+    ucmd()
+        .arg(&dir)
+        .args(&[
+            "-ignore_readdir_race",
+            "-type",
+            "f",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-ls",
+        ])
+        .succeeds()
+        .no_output();
 }
 
 #[test]

@@ -257,6 +257,24 @@ impl StdoutErrors {
     }
 }
 
+/// Report an entry whose metadata could not be read (e.g. it vanished between
+/// the directory read and now), the way GNU find does: one `find: 'path': ...`
+/// diagnostic and exit status 1, then carry on.  With `-ignore_readdir_race` a
+/// vanished entry is not an error, so stay silent (as `-delete` does).
+pub(crate) fn report_stat_failure(error: &WalkError, path: &Path, matcher_io: &mut MatcherIO) {
+    if matcher_io.ignore_readdir_race() && error.is_not_found() {
+        return;
+    }
+    let message = strip_errno(&std::io::Error::from(error));
+    let _ = writeln!(
+        &mut stderr(),
+        "{}: '{}': {message}",
+        crate::find::program_name(),
+        path.display()
+    );
+    matcher_io.set_exit_code(1);
+}
+
 /// A basic interface that can be used to determine whether a directory entry
 /// is what's being searched for. To a first order approximation, find consists
 /// of building a chain of Matcher objects, and then walking a directory tree,

@@ -81,12 +81,9 @@ impl Ls {
             Ok(metadata) => metadata,
             Err(e) => {
                 // The entry could not be stat'ed (e.g. it was removed between
-                // the directory read and now, the path became too long, or the
-                // parent is unsearchable). GNU find prints one diagnostic for
-                // that entry, sets the exit status to 1 and carries on instead
-                // of aborting the whole run.
-                writeln!(&mut stderr(), "{}", e).unwrap();
-                matcher_io.set_exit_code(1);
+                // the directory read and now). Report it like GNU find and
+                // carry on instead of aborting the whole run.
+                super::report_stat_failure(&e, file_info.path(), matcher_io);
                 return;
             }
         };
@@ -164,11 +161,9 @@ impl Ls {
             Ok(metadata) => metadata,
             Err(e) => {
                 // The entry could not be stat'ed (e.g. it was removed between
-                // the directory read and now). GNU find prints one diagnostic
-                // for that entry, sets the exit status to 1 and carries on
-                // instead of aborting the whole run.
-                writeln!(&mut stderr(), "{}", e).unwrap();
-                matcher_io.set_exit_code(1);
+                // the directory read and now). Report it like GNU find and
+                // carry on instead of aborting the whole run.
+                super::report_stat_failure(&e, file_info.path(), matcher_io);
                 return;
             }
         };
