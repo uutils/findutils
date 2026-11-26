@@ -59,25 +59,11 @@ pub struct NoUserMatcher {}
 impl Matcher for NoUserMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        use nix::unistd::Uid;
-
-        if file_info.path().is_symlink() {
-            return false;
-        }
-
         let Ok(metadata) = file_info.metadata() else {
             return true;
         };
 
-        let Ok(uid) = User::from_uid(Uid::from_raw(metadata.uid())) else {
-            return true;
-        };
-
-        let Some(_user) = uid else {
-            return true;
-        };
-
-        false
+        !super::names::user_exists(metadata.uid())
     }
 
     #[cfg(not(unix))]
@@ -93,7 +79,6 @@ mod tests {
     fn test_user_matcher() {
         use crate::find::matchers::{tests::get_dir_entry_for, user::UserMatcher, Matcher};
         use crate::find::tests::FakeDependencies;
-        use chrono::Local;
         use nix::unistd::{Uid, User};
         use std::fs::File;
         use std::os::unix::fs::MetadataExt;
@@ -119,7 +104,7 @@ mod tests {
         );
 
         // Testing a non-existent group name
-        let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
+        let time_string = jiff::Zoned::now().strftime("%Y%m%d%H%M%S").to_string();
         let matcher = UserMatcher::from_user_name(time_string.as_str());
         assert!(
             matcher.is_none(),

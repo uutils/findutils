@@ -61,25 +61,11 @@ pub struct NoGroupMatcher {}
 impl Matcher for NoGroupMatcher {
     #[cfg(unix)]
     fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
-        use nix::unistd::Gid;
-
-        if file_info.path().is_symlink() {
-            return false;
-        }
-
         let Ok(metadata) = file_info.metadata() else {
             return true;
         };
 
-        let Ok(gid) = Group::from_gid(Gid::from_raw(metadata.gid())) else {
-            return true;
-        };
-
-        let Some(_group) = gid else {
-            return true;
-        };
-
-        false
+        !super::names::group_exists(metadata.gid())
     }
 
     #[cfg(not(unix))]
@@ -95,7 +81,6 @@ mod tests {
     fn test_group_matcher() {
         use crate::find::matchers::{group::GroupMatcher, tests::get_dir_entry_for, Matcher};
         use crate::find::tests::FakeDependencies;
-        use chrono::Local;
         use nix::unistd::{Gid, Group};
         use std::fs::File;
         use std::os::unix::fs::MetadataExt;
@@ -122,7 +107,7 @@ mod tests {
         );
 
         // Testing a non-existent group name
-        let time_string = Local::now().format("%Y%m%d%H%M%S").to_string();
+        let time_string = jiff::Zoned::now().strftime("%Y%m%d%H%M%S").to_string();
         let matcher = GroupMatcher::from_group_name(time_string.as_str());
         assert!(
             matcher.is_none(),

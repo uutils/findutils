@@ -4,15 +4,21 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use onig::{Regex, RegexOptions, Syntax};
+use std::sync::LazyLock;
 
-/// Parse a string as a POSIX Basic Regular Expression.
+use onig::{Regex, RegexOptions, Syntax, SyntaxBehavior};
+
+/// Compile a glob's BRE with backslash escapes enabled inside bracket expressions.
 fn parse_bre(expr: &str, options: RegexOptions) -> Result<Regex, onig::Error> {
-    let bre = Syntax::posix_basic();
-    Regex::with_options(expr, bre.options() | options, bre)
+    static SYNTAX: LazyLock<Syntax> = LazyLock::new(|| {
+        let mut syntax = *Syntax::posix_basic();
+        syntax.enable_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_BACKSLASH_ESCAPE_IN_CC);
+        syntax
+    });
+    Regex::with_options(expr, SYNTAX.options() | options, &SYNTAX)
 }
 
-/// Push a literal character onto a regex, escaping it if necessary.
+/// Push a literal character outside a bracket expression, escaping it if necessary.
 fn regex_push_literal(regex: &mut String, ch: char) {
     // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_03_03
     if matches!(ch, '.' | '[' | '\\' | '*' | '^' | '$') {
@@ -22,7 +28,7 @@ fn regex_push_literal(regex: &mut String, ch: char) {
 }
 
 /// Extracts a bracket expression from a glob.
-fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
+fn extract_bracket_expr(mut pattern: &str) -> Option<(String, &str)> {
     // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_13_01
     //
     //     If an open bracket introduces a bracket expression as in XBD RE Bracket Expression,
@@ -38,17 +44,14 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
 
     let mut expr = "[".to_string();
 
-    let mut chars = pattern.chars();
-    let mut next = chars.next();
-
     // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_03_05
     //
     //     3. A non-matching list expression begins with a <circumflex> ( '^' ) ...
     //
     // (but in a glob, '!' is used instead of '^')
-    if next == Some('!') {
+    if let Some(rest) = pattern.strip_prefix('!') {
         expr.push('^');
-        next = chars.next();
+        pattern = rest;
     }
 
     // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_03_05
@@ -56,16 +59,24 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
     //     1. ... The <right-square-bracket> ( ']' ) shall lose its special meaning and represent
     //        itself in a bracket expression if it occurs first in the list (after an initial
     //        <circumflex> ( '^' ), if any).
-    if next == Some(']') {
+    if let Some(rest) = pattern.strip_prefix(']') {
         expr.push(']');
-        next = chars.next();
+        pattern = rest;
     }
 
-    while let Some(ch) = next {
-        expr.push(ch);
-
-        match ch {
-            '[' => {
+    let mut chars = pattern.chars();
+    loop {
+        match chars.next()? {
+            '\\' => {
+                let literal = chars.next()?;
+                // A glob escape quotes one character. Keep the backslash only
+                // for bracket metacharacters so e.g. \d matches a literal d.
+                if matches!(literal, '[' | ']' | '-' | '^' | '\\') {
+                    expr.push('\\');
+                }
+                expr.push(literal);
+            }
+            '[' if chars.as_str().starts_with(['.', '=', ':']) => {
                 // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_03_05
                 //
                 //     4. A collating symbol is a collating element enclosed within bracket-period
@@ -77,21 +88,23 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
                 //
                 //     6. ...  A character class expression is expressed as a character class name
                 //        enclosed within bracket- <colon> ( "[:" and ":]" ) delimiters.
-                next = chars.next();
-                if let Some(delim) = next {
+                let delim = chars.next()?;
+                let closer = format!("{delim}]");
+                let (name, rest) = chars.as_str().split_once(&closer)?;
+                if delim == ':' && name == "digit" {
+                    // POSIX limits [:digit:] to 0-9 in every locale, but
+                    // Oniguruma uses its Unicode table (fullwidth and
+                    // Arabic-Indic digits too), so spell out the range.
+                    expr.push_str("0-9");
+                } else {
+                    expr.push('[');
                     expr.push(delim);
-
-                    if matches!(delim, '.' | '=' | ':') {
-                        let rest = chars.as_str();
-                        // Search for the two-byte closer `<delim>]` (e.g. `:]`);
-                        // matching either byte alone let `+ 2` overshoot a char boundary.
-                        let closer = format!("{delim}]");
-                        let end = rest.find(closer.as_str())? + 2;
-                        expr.push_str(&rest[..end]);
-                        chars = rest[end..].chars();
-                    }
+                    expr.push_str(name);
+                    expr.push_str(&closer);
                 }
+                chars = rest.chars();
             }
+            '[' => expr.push_str(r"\["),
             ']' => {
                 // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_03_05
                 //
@@ -99,12 +112,11 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
                 //        expression, unless it appears in a collating symbol (such as "[.].]" ) or is
                 //        the ending <right-square-bracket> for a collating symbol, equivalence class,
                 //        or character class.
+                expr.push(']');
                 break;
             }
-            _ => {}
+            ch => expr.push(ch),
         }
-
-        next = chars.next();
     }
 
     if parse_bre(&expr, RegexOptions::REGEX_OPTION_NONE).is_ok() {
@@ -114,7 +126,8 @@ fn extract_bracket_expr(pattern: &str) -> Option<(String, &str)> {
     }
 }
 
-/// Converts a POSIX glob into a POSIX Basic Regular Expression
+/// Translate an fnmatch-style glob to a POSIX basic regex with backslash escapes
+/// enabled inside bracket expressions.
 fn glob_to_regex(pattern: &str) -> Option<String> {
     let mut regex = String::new();
 
@@ -178,6 +191,7 @@ impl Pattern {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[track_caller]
     fn assert_glob_regex(glob: &str, regex: &str) {
@@ -209,12 +223,45 @@ mod tests {
         assert_glob_regex(r"foo[bar][!baz]", r"foo[bar][^baz]");
     }
 
+    #[rstest]
+    #[case(r"[a\]]", &["a", "]"])]
+    #[case(r"[!a\]]", &["[", r"\"])]
+    #[case(r"[[\]]", &["]", "["])]
+    #[case(r"[\[-\]]", &["]", "[", r"\"])]
+    #[case(r"[a\\]]", &["a]", r"\]"])]
+    #[case(r"[a\]", &["[a]"])]
+    #[case(r"[\a]", &["a"])]
+    fn escaped_brackets(#[case] glob: &str, #[case] expected: &[&str]) {
+        let pattern = Pattern::new(glob, false);
+        let matches: Vec<_> = ["a", "]", "a]", "[", r"\", r"\]", "[a]"]
+            .into_iter()
+            .filter(|name| pattern.matches(name))
+            .collect();
+        assert_eq!(matches, expected);
+    }
+
     #[test]
     fn complex_brackets() {
+        // A doubled backslash leaves the following collating symbol `[.].]` intact.
         assert_glob_regex(
-            r"[!]!.*[\[.].][=]=][:space:]-]",
-            r"[^]!.*[\[.].][=]=][:space:]-]",
+            r"[!]!.*[\\[.].][=]=][:space:]-]",
+            r"[^]!.*\[\\[.].][=]=][:space:]-]",
         );
+    }
+
+    #[test]
+    fn digit_class_is_ascii_range() {
+        assert_glob_regex(r"[[:digit:]]*", r"[0-9].*");
+        assert_glob_regex(r"[![:digit:]a]", r"[^0-9a]");
+    }
+
+    #[rstest]
+    #[case("7", true)]
+    #[case("\u{ff17}", false)] // FULLWIDTH DIGIT SEVEN
+    #[case("\u{0667}", false)] // ARABIC-INDIC DIGIT SEVEN
+    fn digit_class_is_ascii_only(#[case] name: &str, #[case] expected: bool) {
+        assert_eq!(Pattern::new("[[:digit:]]", false).matches(name), expected);
+        assert_eq!(Pattern::new("[![:digit:]]", false).matches(name), !expected);
     }
 
     #[test]

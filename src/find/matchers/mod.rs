@@ -16,6 +16,8 @@ mod lname;
 mod logical_matchers;
 mod ls;
 mod name;
+#[cfg(unix)]
+mod names;
 mod path;
 mod perm;
 mod printer;
@@ -54,7 +56,7 @@ use self::size::SizeMatcher;
 use self::stat::{InodeMatcher, LinksMatcher};
 use self::time::{
     FileAgeRangeMatcher, FileTimeMatcher, FileTimeType, NewerMatcher, NewerOptionMatcher,
-    NewerOptionType, NewerTimeMatcher,
+    NewerOptionType, NewerTimeMatcher, UsedMatcher,
 };
 use self::type_matcher::{TypeMatcher, XtypeMatcher};
 use self::user::{NoUserMatcher, UserMatcher};
@@ -147,17 +149,45 @@ pub struct MatcherIO<'a> {
     should_skip_dir: bool,
     exit_code: i32,
     quit: bool,
+    ignore_readdir_race: bool,
+    /// The starting point as supplied for this walk.
+    starting_point: Option<&'a Path>,
     deps: &'a dyn Dependencies,
 }
 
-impl MatcherIO<'_> {
-    pub fn new(deps: &dyn Dependencies) -> MatcherIO<'_> {
-        MatcherIO {
+impl<'a> MatcherIO<'a> {
+    pub fn new(deps: &'a dyn Dependencies) -> Self {
+        Self {
             should_skip_dir: false,
             exit_code: 0,
             quit: false,
+            ignore_readdir_race: false,
+            starting_point: None,
             deps,
         }
+    }
+
+    pub(super) fn for_walk(
+        deps: &'a dyn Dependencies,
+        starting_point: &'a Path,
+        config: &Config,
+    ) -> Self {
+        Self {
+            starting_point: Some(starting_point),
+            ignore_readdir_race: config.ignore_readdir_race,
+            ..Self::new(deps)
+        }
+    }
+
+    pub fn set_ignore_readdir_race(&mut self, ignore: bool) {
+        self.ignore_readdir_race = ignore;
+    }
+
+    /// Whether -ignore_readdir_race is in effect, i.e. a file that vanished
+    /// after its name was read from the directory is not an error.
+    #[must_use]
+    pub fn ignore_readdir_race(&self) -> bool {
+        self.ignore_readdir_race
     }
 
     pub fn mark_current_dir_to_be_skipped(&mut self) {
@@ -318,6 +348,16 @@ pub fn build_top_level_matcher(
 ) -> Result<Box<dyn Matcher>, Box<dyn Error>> {
     let mut regex_type = RegexType::default();
     let (_, top_level_matcher) = build_matcher_tree(args, config, &mut regex_type, 0, None)?;
+
+    // -delete turns on -depth, under which -prune does nothing, so a -prune
+    // meant to protect a directory from -delete would silently not.
+    if config.uses_delete && config.uses_prune && !config.explicit_depth {
+        return Err(From::from(
+            "The -delete action automatically turns on -depth, but -prune does nothing when \
+             -depth is in effect.  If you want to carry on anyway, just explicitly use the \
+             -depth option.",
+        ));
+    }
 
     // if the matcher doesn't have any side-effects, then we default to printing
     if !top_level_matcher.has_side_effects() {
@@ -507,6 +547,7 @@ enum Predicate {
     Newer,
     Time(FileTimeType),
     Min(FileTimeType),
+    Used,
     Size,
     Empty,
     Exec,
@@ -534,6 +575,8 @@ enum Predicate {
     Follow,
     DayStart,
     NoLeaf,
+    IgnoreReaddirRace,
+    NoIgnoreReaddirRace,
     Depth,
     Mount,
     Sorted,
@@ -583,6 +626,7 @@ const PREDICATES: &[(&str, Predicate)] = &[
     ("-amin", Predicate::Min(FileTimeType::Accessed)),
     ("-cmin", Predicate::Min(FileTimeType::Changed)),
     ("-mmin", Predicate::Min(FileTimeType::Modified)),
+    ("-used", Predicate::Used),
     ("-size", Predicate::Size),
     ("-empty", Predicate::Empty),
     ("-exec", Predicate::Exec),
@@ -615,6 +659,8 @@ const PREDICATES: &[(&str, Predicate)] = &[
     ("-follow", Predicate::Follow),
     ("-daystart", Predicate::DayStart),
     ("-noleaf", Predicate::NoLeaf),
+    ("-ignore_readdir_race", Predicate::IgnoreReaddirRace),
+    ("-noignore_readdir_race", Predicate::NoIgnoreReaddirRace),
     ("-d", Predicate::Depth),
     ("-depth", Predicate::Depth),
     ("-mount", Predicate::Mount),
@@ -634,6 +680,11 @@ fn lookup_predicate(arg: &str) -> Predicate {
         .iter()
         .find(|(name, _)| *name == arg)
         .map_or(Predicate::Other, |&(_, predicate)| predicate)
+}
+
+/// Starts an error about a file given on the command line with the file's name.
+fn name_file<T>(path: &str, result: Result<T, Box<dyn Error>>) -> Result<T, String> {
+    result.map_err(|e| format!("{path}: {e}"))
 }
 
 /// Turns one of the `logical_matchers` "binary operator with nothing before it"
@@ -694,8 +745,16 @@ fn build_matcher_tree(
     // multiple-character flags don't start with a double dash
     let mut i = arg_index;
     let mut invert_next_matcher = false;
+    // Whether a token other than `-files0-from` came before, for GNU's error
+    // on a `)` that starts the expression.
+    let mut seen_expression_token = false;
     while i < args.len() {
-        let possible_submatcher = match lookup_predicate(args[i]) {
+        let predicate = lookup_predicate(args[i]);
+        let starts_expression = !seen_expression_token;
+        if !matches!(predicate, Predicate::Files0From) {
+            seen_expression_token = true;
+        }
+        let possible_submatcher = match predicate {
             Predicate::Print => Some(
                 Printer::new(PrintDelimiter::Newline, None)
                     .with_stdout_errors(config.stdout_errors.clone())
@@ -849,6 +908,7 @@ fn build_matcher_tree(
             Predicate::Delete => {
                 // -delete implicitly requires -depth
                 config.depth_first = true;
+                config.uses_delete = true;
                 Some(DeleteMatcher::new().into_box())
             }
             Predicate::Newer => {
@@ -856,7 +916,8 @@ fn build_matcher_tree(
                     return Err(missing_argument_error(args, i).into());
                 }
                 i += 1;
-                Some(NewerMatcher::new(args[i], config.follow)?.into_box())
+                let path = args[i];
+                Some(name_file(path, NewerMatcher::new(path, config.follow))?.into_box())
             }
             Predicate::Time(file_time_type) => {
                 if i >= args.len() - 1 {
@@ -876,6 +937,14 @@ fn build_matcher_tree(
                     FileAgeRangeMatcher::new(file_time_type, minutes, config.today_start)
                         .into_box(),
                 )
+            }
+            Predicate::Used => {
+                if i >= args.len() - 1 {
+                    return Err(missing_argument_error(args, i).into());
+                }
+                let days = convert_arg_to_comparable_value(args[i], args[i + 1])?;
+                i += 1;
+                Some(UsedMatcher::new(days).into_box())
             }
             Predicate::Size => {
                 if i >= args.len() - 1 {
@@ -999,9 +1068,7 @@ fn build_matcher_tree(
                 }
                 i += 1;
                 let path = args[i];
-                let matcher = SameFileMatcher::new(path, config.follow)
-                    .map_err(|e| format!("{path}: {e}"))?;
-                Some(matcher.into_box())
+                Some(name_file(path, SameFileMatcher::new(path, config.follow))?.into_box())
             }
             Predicate::User => {
                 if i >= args.len() - 1 {
@@ -1071,7 +1138,10 @@ fn build_matcher_tree(
                 i += 1;
                 Some(PermMatcher::new(args[i])?.into_box())
             }
-            Predicate::Prune => Some(PruneMatcher::new().into_box()),
+            Predicate::Prune => {
+                config.uses_prune = true;
+                Some(PruneMatcher::new().into_box())
+            }
             Predicate::Quit => Some(QuitMatcher.into_box()),
             Predicate::Writable => Some(AccessMatcher::Writable.into_box()),
             Predicate::Not => {
@@ -1116,6 +1186,16 @@ fn build_matcher_tree(
             }
             Predicate::CloseParen => {
                 let Some(open_bracket_index) = open_bracket else {
+                    // Only possible without starting points (`-files0-from`): GNU
+                    // find wants an expression before a leading `)`.
+                    if starts_expression {
+                        return Err(ParseError::new(
+                            "invalid expression: expected expression before closing parentheses ')'.",
+                        )
+                        .at(i)
+                        .with_label("no expression before this")
+                        .into());
+                    }
                     return Err(ParseError::new("you have too many ')'")
                         .at(i)
                         .with_label("no matching '(' before this")
@@ -1158,9 +1238,21 @@ fn build_matcher_tree(
                 config.no_leaf_dirs = true;
                 Some(TrueMatcher.into_box())
             }
+            Predicate::IgnoreReaddirRace => {
+                // Like GNU find, this is a global option: it applies to the
+                // whole expression wherever it appears, and the last of
+                // -ignore_readdir_race and -noignore_readdir_race wins.
+                config.ignore_readdir_race = true;
+                Some(TrueMatcher.into_box())
+            }
+            Predicate::NoIgnoreReaddirRace => {
+                config.ignore_readdir_race = false;
+                Some(TrueMatcher.into_box())
+            }
             Predicate::Depth => {
                 // TODO add warning if it appears after actual testing criterion
                 config.depth_first = true;
+                config.explicit_depth = true;
                 Some(TrueMatcher.into_box())
             }
             Predicate::Mount => {
@@ -1248,7 +1340,8 @@ fn build_matcher_tree(
                 } else {
                     let file_path = args[i + 1];
                     i += 1;
-                    Some(NewerOptionMatcher::new(&x_option, &y_option, file_path)?.into_box())
+                    let matcher = NewerOptionMatcher::new(&x_option, &y_option, file_path);
+                    Some(name_file(file_path, matcher)?.into_box())
                 }
             }
         };
@@ -2087,13 +2180,14 @@ mod tests {
 
     #[test]
     fn parse_date_str_to_timestamps_test() {
-        use chrono::{Local, TimeZone};
         // Dates without a zone are local time, as in GNU find.
         let local = |y, m, d, h, min, sec| {
-            Local
-                .with_ymd_and_hms(y, m, d, h, min, sec)
+            jiff::civil::date(y, m, d)
+                .at(h, min, sec, 0)
+                .to_zoned(jiff::tz::TimeZone::system())
                 .unwrap()
-                .timestamp_millis()
+                .timestamp()
+                .as_millisecond()
         };
 
         assert_eq!(
@@ -2106,18 +2200,14 @@ mod tests {
         );
 
         // An empty string is the start of today.
-        let today = Local::now().date_naive();
-        assert_eq!(
-            parse_date_str_to_timestamps(""),
-            Some(
-                today
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_local_timezone(Local)
-                    .unwrap()
-                    .timestamp_millis()
-            )
-        );
+        let today = jiff::Zoned::now().date();
+        let expected = today
+            .at(0, 0, 0, 0)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .unwrap()
+            .timestamp()
+            .as_millisecond();
+        assert_eq!(parse_date_str_to_timestamps(""), Some(expected));
 
         // A year of non-ASCII decimal digits must be rejected, not panic.
         assert_eq!(parse_date_str_to_timestamps("jan 01, ٠٠٠٠"), None);

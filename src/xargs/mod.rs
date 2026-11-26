@@ -5,17 +5,21 @@
 // https://opensource.org/licenses/MIT.
 
 use std::{
-    collections::HashMap,
     error::Error,
     ffi::{OsStr, OsString},
     fmt::Display,
     fs,
     io::{self, BufRead, BufReader, Read},
-    process::{Command, Stdio},
+    process::Stdio,
 };
 
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
 use uucore::error::strip_errno;
+
+#[cfg(unix)]
+use argmax::Command as ExecCommand;
+#[cfg(not(unix))]
+use std::process::Command as ExecCommand;
 
 mod options {
     pub const COMMAND: &str = "COMMAND";
@@ -59,6 +63,8 @@ enum ArgumentKind {
     HardTerminated,
     /// An argument that was terminated by non-newline whitespace.
     SoftTerminated,
+    /// A replacement line that is not itself passed as an argv entry.
+    Replacement,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -80,6 +86,11 @@ trait CommandSizeLimiter {
         arg: Argument,
         cursor: LimiterCursor<'_>,
     ) -> Result<Argument, ExhaustedCommandSpace>;
+    /// Whether the command line holds everything a limit of -n or -L allows,
+    /// so the command had already been started.
+    fn is_complete(&self) -> bool {
+        false
+    }
     fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter>;
 }
 
@@ -124,6 +135,10 @@ impl LimiterCollection {
             limiters: &mut self.limiters[..],
         };
         cursor.try_next(arg)
+    }
+
+    fn is_complete(&self) -> bool {
+        self.limiters.iter().any(|limiter| limiter.is_complete())
     }
 }
 
@@ -206,47 +221,26 @@ impl MaxCharsCommandSizeLimiter {
         }
     }
 
-    #[cfg(windows)]
-    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
-        // Taken from the CreateProcess docs. -2 to account for how
-        // std::process unconditionally surrounds the program name with quotes.
-        const MAX_CMDLINE: usize = 32767 - 2;
-        Self::new(MAX_CMDLINE)
-    }
-
-    #[cfg(unix)]
-    fn new_system(env: &HashMap<OsString, OsString>) -> Self {
-        // POSIX requires that we leave 2048 bytes of space so that the child processes
-        // can have room to set their own environment variables.
-        const ARG_HEADROOM: usize = 2048;
-        let arg_max = unsafe { uucore::libc::sysconf(uucore::libc::_SC_ARG_MAX) } as usize;
-
-        let env_size: usize = env
-            .iter()
-            .map(|(var, value)| count_osstr_chars_for_exec(var) + count_osstr_chars_for_exec(value))
-            .sum();
-
-        Self::new(arg_max.saturating_sub(ARG_HEADROOM + env_size))
-    }
-
-    /// The limiter used when no explicit -s was given. Like GNU xargs, use at
-    /// most 128 KiB per command line by default: sizing command lines all the
-    /// way up to ARG_MAX would make execvp() fail with E2BIG, because the
-    /// kernel additionally charges the argv/envp pointers (since Linux commit
-    /// 98da7d08850f) against the limit, which are not part of the character
-    /// count. An explicit -s can still go beyond this, up to the system limit.
-    fn new_default(env: &HashMap<OsString, OsString>) -> Self {
+    /// The default string budget; the command builder enforces the system limit separately.
+    fn new_default() -> Self {
         const DEFAULT_MAX_CHARS: usize = 128 * 1024;
-        Self::new(Self::new_system(env).max_chars.min(DEFAULT_MAX_CHARS))
+        #[cfg(unix)]
+        let max_chars = DEFAULT_MAX_CHARS;
+        #[cfg(not(unix))]
+        let max_chars = DEFAULT_MAX_CHARS.min(system_arg_max());
+        Self::new(max_chars)
     }
+}
 
-    #[cfg(not(any(unix, windows)))]
-    fn new_system(_env: &HashMap<OsString, OsString>) -> Self {
-        // No portable way to query the system limit; fall back to the POSIX
-        // minimum guaranteed value for _POSIX_ARG_MAX.
-        const POSIX_ARG_MAX: usize = 4096;
-        Self::new(POSIX_ARG_MAX)
-    }
+#[cfg(windows)]
+fn system_arg_max() -> usize {
+    // CreateProcess allows 32767 code units; std::process adds quotes around the program name.
+    32767 - 2
+}
+
+#[cfg(not(any(unix, windows)))]
+fn system_arg_max() -> usize {
+    4096
 }
 
 impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
@@ -255,6 +249,9 @@ impl CommandSizeLimiter for MaxCharsCommandSizeLimiter {
         arg: Argument,
         cursor: LimiterCursor<'_>,
     ) -> Result<Argument, ExhaustedCommandSpace> {
+        if arg.kind == ArgumentKind::Replacement {
+            return cursor.try_next(arg);
+        }
         let chars = count_osstr_chars_for_exec(&arg.arg);
         if self.current_size + chars <= self.max_chars {
             let arg = cursor.try_next(arg)?;
@@ -311,6 +308,10 @@ impl CommandSizeLimiter for MaxArgsCommandSizeLimiter {
     fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
         Box::new(self.clone())
     }
+
+    fn is_complete(&self) -> bool {
+        self.current_args >= self.max_args
+    }
 }
 
 #[derive(Clone)]
@@ -354,6 +355,10 @@ impl CommandSizeLimiter for MaxLinesCommandSizeLimiter {
 
     fn dyn_clone(&self) -> Box<dyn CommandSizeLimiter> {
         Box::new(self.clone())
+    }
+
+    fn is_complete(&self) -> bool {
+        self.current_line > self.max_lines
     }
 }
 
@@ -404,105 +409,162 @@ enum ExecAction {
 
 struct CommandBuilderOptions {
     action: ExecAction,
-    env: HashMap<OsString, OsString>,
     limiters: LimiterCollection,
     verbose: bool,
     close_stdin: bool,
     replace: Option<String>,
+    max_chars: usize,
 }
 impl CommandBuilderOptions {
     fn new(
         action: ExecAction,
-        env: HashMap<OsString, OsString>,
         mut limiters: LimiterCollection,
         replace: Option<String>,
+        max_chars: usize,
     ) -> Result<Self, ExhaustedCommandSpace> {
-        let initial_args = match &action {
-            ExecAction::Command(args) => args.iter().map(std::convert::AsRef::as_ref).collect(),
-            ExecAction::Echo => vec![OsStr::new("echo")],
-        };
-
-        for arg in initial_args {
-            limiters.try_arg(Argument {
-                arg: arg.to_owned(),
-                kind: ArgumentKind::Initial,
-            })?;
+        if replace.is_none() {
+            let initial_args = match &action {
+                ExecAction::Command(args) => args.iter().map(std::convert::AsRef::as_ref).collect(),
+                ExecAction::Echo => vec![OsStr::new("echo")],
+            };
+            for arg in initial_args {
+                limiters.try_arg(Argument {
+                    arg: arg.to_owned(),
+                    kind: ArgumentKind::Initial,
+                })?;
+            }
         }
 
         Ok(Self {
             action,
-            env,
             limiters,
             verbose: false,
             close_stdin: false,
             replace,
+            max_chars,
         })
+    }
+
+    fn uses_replacement(&self) -> bool {
+        self.replace.is_some()
+    }
+
+    /// Build a fresh command for a batch, with the system budget supplied by argmax on Unix.
+    fn command_for(&self, replacement: Option<&OsStr>) -> Result<ExecCommand, XargsError> {
+        let (program, initial_args): (&OsStr, &[OsString]) = match &self.action {
+            ExecAction::Command(args) => {
+                let (program, args) = args.split_first().ok_or(CommandExecutionError::Unknown)?;
+                (program, args)
+            }
+            ExecAction::Echo => (OsStr::new("echo"), &[]),
+        };
+        let replaced_args: Option<Vec<OsString>> =
+            self.replace
+                .as_ref()
+                .zip(replacement)
+                .map(|(pattern, replacement)| {
+                    let replacement = replacement.to_string_lossy();
+                    initial_args
+                        .iter()
+                        .map(|arg| {
+                            OsString::from(arg.to_string_lossy().replace(pattern, &replacement))
+                        })
+                        .collect()
+                });
+        let args = replaced_args.as_deref().unwrap_or(initial_args);
+        let chars = args
+            .iter()
+            .fold(count_osstr_chars_for_exec(program), |size, arg| {
+                size.saturating_add(count_osstr_chars_for_exec(arg))
+            });
+        if chars > self.max_chars {
+            return Err(XargsError::ArgumentTooLarge);
+        }
+        #[cfg(not(unix))]
+        if chars > system_arg_max() {
+            return Err(XargsError::ArgumentTooLarge);
+        }
+        let mut command = ExecCommand::new(program);
+        #[cfg(unix)]
+        command
+            .try_args(args)
+            .map_err(|_| XargsError::ArgumentTooLarge)?;
+        #[cfg(not(unix))]
+        command.args(args);
+        Ok(command)
     }
 }
 
 struct CommandBuilder<'options> {
     options: &'options CommandBuilderOptions,
-    extra_args: Vec<OsString>,
+    command: Option<ExecCommand>,
+    replacement: Option<OsString>,
     limiters: LimiterCollection,
 }
 
 impl CommandBuilder<'_> {
-    fn new(options: &CommandBuilderOptions) -> CommandBuilder<'_> {
-        CommandBuilder {
+    fn new(options: &CommandBuilderOptions) -> Result<CommandBuilder<'_>, XargsError> {
+        Ok(CommandBuilder {
             options,
-            extra_args: vec![],
+            command: if options.uses_replacement() {
+                None
+            } else {
+                Some(options.command_for(None)?)
+            },
+            replacement: None,
             limiters: options.limiters.clone(),
-        }
+        })
     }
 
-    fn add_arg(&mut self, arg: Argument) -> Result<(), ExhaustedCommandSpace> {
+    fn add_arg(&mut self, mut arg: Argument) -> Result<(), ExhaustedCommandSpace> {
+        // A failed builder is flushed and replaced by process_input.
+        if self.options.uses_replacement() {
+            if count_osstr_chars_for_exec(&arg.arg) > self.options.max_chars {
+                return Err(ExhaustedCommandSpace {
+                    arg,
+                    out_of_chars: true,
+                });
+            }
+            arg.kind = ArgumentKind::Replacement;
+        }
         let arg = self.limiters.try_arg(arg)?;
-        self.extra_args.push(arg.arg);
+        if let Some(command) = self.command.as_mut() {
+            #[cfg(unix)]
+            command
+                .try_arg(&arg.arg)
+                .map_err(|_| ExhaustedCommandSpace {
+                    arg,
+                    out_of_chars: true,
+                })?;
+            #[cfg(not(unix))]
+            command.arg(arg.arg);
+        } else {
+            self.replacement = Some(arg.arg);
+        }
         Ok(())
     }
 
-    fn execute(self) -> Result<CommandResult, CommandExecutionError> {
-        let (entry_point, initial_args): (&OsStr, &[OsString]) = match &self.options.action {
-            ExecAction::Command(args) => (&args[0], &args[1..]),
-            ExecAction::Echo => (OsStr::new("echo"), &[]),
+    /// Whether the command line is full, so that the next argument would
+    /// start a new command.
+    fn is_complete(&self) -> bool {
+        self.limiters.is_complete()
+    }
+
+    fn execute(self) -> Result<CommandResult, XargsError> {
+        let mut command = match self.command {
+            Some(command) => command,
+            None => self.options.command_for(self.replacement.as_deref())?,
         };
-
-        let mut command = Command::new(entry_point);
-
-        if let Some(replace_str) = &self.options.replace {
-            // Replace all occurrences in initial args with the extra arg,
-            // Thanks to `MaxArgsCommandSizeLimiter`, we only process a single extra arg here.
-            let replacement = self.extra_args[0].to_string_lossy();
-            let initial_args: Vec<OsString> = initial_args
-                .iter()
-                .map(|arg| {
-                    let arg_str = arg.to_string_lossy();
-                    OsString::from(arg_str.replace(replace_str, &replacement))
-                })
-                .collect();
-
-            command
-                .args(&initial_args)
-                .env_clear()
-                .envs(&self.options.env);
-        } else {
-            // don't do any replacement
-            command
-                .args(initial_args)
-                .args(&self.extra_args)
-                .env_clear()
-                .envs(&self.options.env);
-        }
-
         if self.options.close_stdin {
             command.stdin(Stdio::null());
         }
 
         if self.options.verbose {
+            let command: &std::process::Command = &command;
             eprintln!("{command:?}");
         }
 
-        match &self.options.action {
+        let result = match &self.options.action {
             ExecAction::Command(_) => match command.status() {
                 Ok(status) => {
                     if status.success() {
@@ -536,15 +598,16 @@ impl CommandBuilder<'_> {
             ExecAction::Echo => {
                 println!(
                     "{}",
-                    self.extra_args
-                        .iter()
+                    command
+                        .get_args()
                         .map(|arg| arg.to_string_lossy())
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
                 Ok(CommandResult::Success)
             }
-        }
+        };
+        result.map_err(XargsError::from)
     }
 }
 
@@ -588,6 +651,31 @@ impl<R: Read> Read for NonFatalPipeReader<R> {
             }
         }
     }
+}
+
+/// An opening quote that was never closed.
+///
+/// It is carried inside an [`io::Error`] so that it can travel through
+/// [`ArgumentReader::next`], which reports errors as [`io::Error`].
+#[derive(Debug)]
+struct UnterminatedQuote(u8);
+
+impl Display for UnterminatedQuote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let quote = if self.0 == b'\'' { "single" } else { "double" };
+        write!(
+            f,
+            "unmatched {quote} quote; by default quotes are special to xargs unless you use the -0 option"
+        )
+    }
+}
+
+impl Error for UnterminatedQuote {}
+
+/// Whether an [`io::Error`] from the input reader is an [`UnterminatedQuote`].
+fn is_unterminated_quote(e: &io::Error) -> bool {
+    e.get_ref()
+        .is_some_and(<dyn Error + Send + Sync>::is::<UnterminatedQuote>)
 }
 
 struct WhitespaceDelimitedArgumentReader<R: Read> {
@@ -650,7 +738,7 @@ where
                     if let Some(Escape::Quote(q)) = &escape {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            format!("Unterminated quote: {q}"),
+                            UnterminatedQuote(*q),
                         ));
                     }
                     // Anything we skipped over was a delimiter, not an
@@ -671,7 +759,7 @@ where
                 (Some(Escape::Quote(q)), b'\n') => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        format!("Unterminated quote: {q}"),
+                        UnterminatedQuote(*q),
                     ));
                 }
                 (Some(Escape::Quote(_)), c) => result.push(c),
@@ -874,15 +962,33 @@ fn process_input(
     mut args: Box<dyn ArgumentReader>,
     options: &InputProcessOptions,
 ) -> Result<CommandResult, XargsError> {
-    let mut current_builder = CommandBuilder::new(builder_options);
+    let mut current_builder = CommandBuilder::new(builder_options)?;
     let mut have_pending_command = false;
     let mut result = CommandResult::Success;
 
-    while let Some(arg) = args.next()? {
+    // An unmatched quote ends the input; it is held until the arguments
+    // already read are used up, and the half-read argument is dropped.
+    let mut quote_error: Option<io::Error> = None;
+
+    loop {
+        let arg = match args.next() {
+            Ok(Some(arg)) => arg,
+            Ok(None) => break,
+            Err(e) if is_unterminated_quote(&e) => {
+                quote_error = Some(e);
+                break;
+            }
+            Err(e) => return Err(e.into()),
+        };
+
         if let Err(ExhaustedCommandSpace { arg, out_of_chars }) = current_builder.add_arg(arg) {
+            let mut next_builder = CommandBuilder::new(builder_options)?;
+            let arg_fits = next_builder.add_arg(arg).is_ok();
+            // -x exits without running the pending command: with -L or -n
+            // once the command is too long, otherwise only if the argument alone does not fit.
             if out_of_chars
                 && options.exit_if_pass_char_limit
-                && (options.max_args.is_some() || options.max_lines.is_some())
+                && (!arg_fits || options.max_args.is_some() || options.max_lines.is_some())
             {
                 return Err(XargsError::ArgumentTooLarge);
             }
@@ -890,17 +996,29 @@ fn process_input(
                 result.combine(current_builder.execute()?);
             }
 
-            current_builder = CommandBuilder::new(builder_options);
-            if let Err(ExhaustedCommandSpace { .. }) = current_builder.add_arg(arg) {
+            if !arg_fits {
                 return Err(XargsError::ArgumentTooLarge);
             }
+            current_builder = next_builder;
         }
 
         have_pending_command = true;
     }
 
-    if !options.no_run_if_empty || have_pending_command {
+    // With -x nothing starts after the bad quote, except a batch that is
+    // already complete: GNU starts a full batch as soon as it fills, before
+    // the quote.
+    let run_pending = if quote_error.is_some() {
+        have_pending_command && (!options.exit_if_pass_char_limit || current_builder.is_complete())
+    } else {
+        !options.no_run_if_empty || have_pending_command
+    };
+    if run_pending {
         result.combine(current_builder.execute()?);
+    }
+
+    if let Some(e) = quote_error {
+        return Err(e.into());
     }
 
     Ok(result)
@@ -911,9 +1029,10 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
         Some(hex) if hex.starts_with('x') => {
             u8::from_str_radix(&hex[1..], 16).map_err(|e| format!("Invalid hex sequence: {e}"))
         }
-        Some(oct) if oct.starts_with('0') => {
-            u8::from_str_radix(&oct[1..], 8).map_err(|e| format!("Invalid octal sequence: {e}"))
-        }
+        Some(oct) if oct.starts_with(|c: char| c.is_digit(8)) => u32::from_str_radix(oct, 8)
+            .ok()
+            .and_then(|value| u8::try_from(value).ok())
+            .ok_or_else(|| format!("Invalid octal sequence: \\{oct}")),
         Some(special) => match special {
             "a" => Ok(b'\x07'),
             "b" => Ok(b'\x08'),
@@ -923,7 +1042,6 @@ fn parse_delimiter(s: &str) -> Result<u8, String> {
             "t" => Ok(b'\t'),
             "v" => Ok(b'\x0B'),
             "\\" => Ok(b'\\'),
-            "0" => Ok(b'\0'),
             _ => Err(format!("Invalid escape sequence: \\{special}")),
         },
         None if s.len() == 1 => Ok(s.as_bytes()[0]),
@@ -939,44 +1057,95 @@ fn validate_positive_usize(s: &str) -> Result<usize, String> {
     }
 }
 
+/// The options that set how many arguments go into each command.
+#[derive(Clone, Copy, PartialEq)]
+enum BatchOption {
+    MaxLines,
+    MaxArgs,
+    Replace,
+}
+
+impl BatchOption {
+    /// How the option is named when it is the one being overridden.
+    fn long_name(self) -> &'static str {
+        match self {
+            Self::MaxLines => "--max-lines",
+            Self::MaxArgs => "--max-args",
+            Self::Replace => "--replace",
+        }
+    }
+}
+
+/// Of the given options, the one that appears last on the command line.
+fn last_given<'a>(matches: &clap::ArgMatches, ids: &[&'a str]) -> Option<&'a str> {
+    ids.iter()
+        .filter_map(|&id| {
+            matches
+                .indices_of(id)
+                .and_then(|mut indices| indices.next_back())
+                .map(|index| (index, id))
+        })
+        .max()
+        .map(|(_, id)| id)
+}
+
 fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
-    let (max_args, max_lines, replace) =
-        match (options.max_args, options.max_lines, &options.replace) {
-            // These 3 options are mutually exclusive.
-            // But `max_args=1` and `replace` do not actually conflict, so no warning.
-            (None | Some(1), None, Some(_)) => {
-                // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
-                // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
-                // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
-                (Some(1), None, options.replace)
-            }
-            (Some(_), None, None) | (None, Some(_), None) | (None, None, None) => {
-                (options.max_args, options.max_lines, None)
-            }
-            _ => {
-                eprintln!(
-                "WARNING: -L, -n and -I/-i are mutually exclusive, but more than one were given; \
-                only the last option will be used"
-            );
-                let lines_index = matches
-                    .indices_of(options::MAX_LINES)
-                    .and_then(|mut v| v.next_back());
-                let args_index = matches
-                    .indices_of(options::MAX_ARGS)
-                    .and_then(|mut v| v.next_back());
-                let replace_index = [options::REPLACE, options::REPLACE_I]
-                    .iter()
-                    .flat_map(|o| matches.indices_of(o).and_then(|mut v| v.next_back()))
-                    .max();
-                if lines_index > args_index && lines_index > replace_index {
-                    (None, options.max_lines, None)
-                } else if args_index > lines_index && args_index > replace_index {
-                    (options.max_args, None, None)
-                } else {
-                    (Some(1), None, options.replace)
+    // -L, -l, -n and -I/-i are mutually exclusive: the last one given wins and
+    // each option it overrides is reported, naming both.
+    let mut given: Vec<(usize, BatchOption, &str)> = Vec::new();
+    for (id, option, spelling) in [
+        (options::MAX_LINES, BatchOption::MaxLines, "-L"),
+        (
+            options::MAX_LINES_L,
+            BatchOption::MaxLines,
+            "--max-lines/-l",
+        ),
+        (options::MAX_ARGS, BatchOption::MaxArgs, "--max-args/-n"),
+        (options::REPLACE, BatchOption::Replace, "--replace/-I/-i"),
+        (options::REPLACE_I, BatchOption::Replace, "--replace/-I/-i"),
+    ] {
+        given.extend(
+            matches
+                .indices_of(id)
+                .into_iter()
+                .flatten()
+                .map(|index| (index, option, spelling)),
+        );
+    }
+    given.sort_by_key(|&(index, _, _)| index);
+
+    let mut winner: Option<BatchOption> = None;
+    for (_, option, spelling) in given {
+        match winner {
+            Some(previous) if previous != option => {
+                // -n1 after -I changes nothing, as -I already takes one
+                // argument at a time.
+                if previous == BatchOption::Replace
+                    && option == BatchOption::MaxArgs
+                    && options.max_args == Some(1)
+                {
+                    continue;
                 }
+                let previous = previous.long_name();
+                eprintln!(
+                    "xargs: warning: options {previous} and {spelling} are mutually exclusive, \
+                    ignoring previous {previous} value"
+                );
+                winner = Some(option);
             }
-        };
+            _ => winner = Some(option),
+        }
+    }
+
+    let (max_args, max_lines, replace) = match winner {
+        None => (None, None, None),
+        Some(BatchOption::MaxLines) => (None, options.max_lines, None),
+        Some(BatchOption::MaxArgs) => (options.max_args, None, None),
+        // If `replace`, all matches in initial args should be replaced with extra args read from stdin.
+        // It is possible to have multiple matches and multiple extra args, and the Cartesian product is desired.
+        // To be specific, we process extra args one by one, and replace all matches with the same extra arg in each time.
+        Some(BatchOption::Replace) => (Some(1), None, options.replace),
+    };
 
     let delimiter = match (options.delimiter, options.null) {
         (Some(delimiter), true) => {
@@ -1014,9 +1183,84 @@ fn normalize_options(options: Options, matches: &clap::ArgMatches) -> Options {
     }
 }
 
-fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
-    let matches = clap::Command::new("xargs")
+/// Find the option of `command` that `is_option` matches, ignoring positionals.
+fn find_option(command: &clap::Command, is_option: impl Fn(&Arg) -> bool) -> Option<&Arg> {
+    command
+        .get_arguments()
+        .filter(|arg| !arg.is_positional())
+        .find(|arg| is_option(arg))
+}
+
+/// Whether `arg` needs a value (`Some(true)`), takes an optional one
+/// (`Some(false)`), or takes none (`None`). Its command must be built.
+fn value_required(arg: &Arg) -> Option<bool> {
+    let range = arg.get_num_args()?;
+    (range.max_values() > 0).then(|| range.min_values() > 0)
+}
+
+/// Rewrite `-eVALUE` to `-e=VALUE` for clap's `require_equals`.
+/// Stops at the command, like GNU getopt.
+fn attach_eof_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut rest = args.iter();
+    if let Some(name) = rest.next() {
+        out.push((*name).to_owned());
+    }
+    while let Some(&arg) = rest.next() {
+        if arg == "--" || arg == "-" || !arg.starts_with('-') {
+            out.push(arg.to_owned());
+            break;
+        }
+        let mut next_is_value = false;
+        if let Some(long) = arg.strip_prefix("--") {
+            out.push(arg.to_owned());
+            next_is_value = !long.contains('=')
+                && find_option(command, |a| a.get_long() == Some(long)).and_then(value_required)
+                    == Some(true);
+        } else {
+            // A cluster of short options, for example `-tn1` or `-tecd`.
+            let cluster = &arg[1..];
+            let mut rewritten = None;
+            for (i, c) in cluster.char_indices() {
+                let Some(option) = find_option(command, |a| a.get_short() == Some(c)) else {
+                    break;
+                };
+                let value = &cluster[i + c.len_utf8()..];
+                match value_required(option) {
+                    None => continue,
+                    Some(true) => next_is_value = value.is_empty(),
+                    Some(false) => {
+                        if option.get_id() == options::EOF_E && !value.is_empty() {
+                            rewritten = Some((&cluster[..i], c, value));
+                        }
+                    }
+                }
+                break;
+            }
+            match rewritten {
+                Some((flags, c, value)) => {
+                    if !flags.is_empty() {
+                        out.push(format!("-{flags}"));
+                    }
+                    out.push(format!("-{c}={value}"));
+                }
+                None => out.push(arg.to_owned()),
+            }
+        }
+        if next_is_value {
+            if let Some(&value) = rest.next() {
+                out.push(value.to_owned());
+            }
+        }
+    }
+    out.extend(rest.map(|arg| (*arg).to_owned()));
+    out
+}
+
+fn xargs_command() -> clap::Command {
+    clap::Command::new("xargs")
         .version(crate_version!())
+        .args_override_self(true)
         .about("Run commands using arguments derived from standard input")
         .arg(
             Arg::new(options::COMMAND)
@@ -1029,12 +1273,14 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::ARG_FILE)
                 .short('a')
                 .long(options::ARG_FILE)
+                .allow_hyphen_values(true)
                 .help("Read arguments from the given file instead of stdin"),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .short('d')
                 .long(options::DELIMITER)
+                .allow_hyphen_values(true)
                 .help("Use the given delimiter to split the input")
                 .value_parser(parse_delimiter),
         )
@@ -1052,6 +1298,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_ARGS)
                 .short('n')
                 .long(options::MAX_ARGS)
+                .allow_hyphen_values(true)
                 .help(
                     "Set the max number of arguments read from stdin to be passed \
                     to each command invocation (mutually exclusive with -L and -I/-i)",
@@ -1062,6 +1309,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_LINES)
                 .short('L')
                 .long(options::MAX_LINES)
+                .allow_hyphen_values(true)
                 .help(
                     "Set the max number of lines from stdin to be passed to each \
                     command invocation (mutually exclusive with -n and -I/-i)",
@@ -1072,6 +1320,9 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_LINES_L)
                 .short('l')
                 .num_args(0..=1)
+                // Without a value the option still needs an index to be ordered
+                // against -L, -n and -I.
+                .default_missing_value("1")
                 .help(
                     "Equivalent to -L, but with a default value of 1 if max-lines \
                     is unspecified",
@@ -1083,6 +1334,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_PROCS)
                 .short('P')
                 .long(options::MAX_PROCS)
+                .allow_hyphen_values(true)
                 .help("Run up to this many commands in parallel [NOT IMPLEMENTED]")
                 .value_parser(clap::value_parser!(usize)),
         )
@@ -1104,6 +1356,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             Arg::new(options::MAX_CHARS)
                 .short('s')
                 .long(options::MAX_CHARS)
+                .allow_hyphen_values(true)
                 .help(
                     "Set the max number of characters to be passed to each \
                     invocation",
@@ -1123,6 +1376,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('i')
                 .num_args(0..=1)
                 .require_equals(true)
+                .default_missing_value("{}")
                 .value_parser(clap::value_parser!(String))
                 .value_name("R")
                 .help("If R is specified, the same as -I R; otherwise, the same as -I {}"),
@@ -1158,13 +1412,20 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
                 .short('e')
                 .long(options::EOF)
                 .num_args(0..=1)
+                .require_equals(true)
                 .allow_hyphen_values(true)
                 .value_name("eof-string")
                 .help("Alias for -E")
                 .overrides_with(options::EOF)
                 .value_parser(clap::value_parser!(String)),
         )
-        .try_get_matches_from(args);
+}
+
+fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
+    let mut command = xargs_command();
+    command.build();
+    let args = attach_eof_short_equals(&command, args);
+    let matches = command.try_get_matches_from(args);
 
     let matches = match matches {
         Ok(m) => m,
@@ -1187,26 +1448,12 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         exit_if_pass_char_limit: matches.get_flag(options::EXIT),
         max_args: matches.get_one::<usize>(options::MAX_ARGS).copied(),
         max_chars: matches.get_one::<usize>(options::MAX_CHARS).copied(),
-        max_lines: [options::MAX_LINES, options::MAX_LINES_L]
-            .iter()
-            .find_map(|&option| {
-                matches.contains_id(option).then(|| {
-                    matches
-                        .get_one::<usize>(option)
-                        .map_or_else(|| 1, std::borrow::ToOwned::to_owned)
-                })
-            }),
+        max_lines: last_given(&matches, &[options::MAX_LINES, options::MAX_LINES_L])
+            .and_then(|option| matches.get_one::<usize>(option).copied()),
         no_run_if_empty: matches.get_flag(options::NO_RUN_IF_EMPTY),
         null: matches.get_flag(options::NULL),
-        replace: [options::REPLACE_I, options::REPLACE]
-            .iter()
-            .find_map(|&option| {
-                matches.contains_id(option).then(|| {
-                    matches
-                        .get_one::<String>(option)
-                        .map_or_else(|| "{}".to_string(), std::borrow::ToOwned::to_owned)
-                })
-            }),
+        replace: last_given(&matches, &[options::REPLACE_I, options::REPLACE])
+            .and_then(|option| matches.get_one::<String>(option).cloned()),
         verbose: matches.get_flag(options::VERBOSE),
         eof_delimiter: [options::EOF_E, options::EOF]
             .iter()
@@ -1223,8 +1470,6 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
         }
         _ => ExecAction::Echo,
     };
-    let env = std::env::vars_os().collect();
-
     let mut limiters = LimiterCollection::new();
     if let Some(max_args) = options.max_args {
         limiters.add(MaxArgsCommandSizeLimiter::new(max_args));
@@ -1232,15 +1477,15 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
     if let Some(max_lines) = options.max_lines {
         limiters.add(MaxLinesCommandSizeLimiter::new(max_lines));
     }
-    if let Some(max_chars) = options.max_chars {
-        limiters.add(MaxCharsCommandSizeLimiter::new(max_chars));
-    } else {
-        limiters.add(MaxCharsCommandSizeLimiter::new_default(&env));
-    }
-    limiters.add(MaxCharsCommandSizeLimiter::new_system(&env));
+    let max_chars = options
+        .max_chars
+        .unwrap_or_else(|| MaxCharsCommandSizeLimiter::new_default().max_chars);
+    limiters.add(MaxCharsCommandSizeLimiter::new(max_chars));
+    #[cfg(not(unix))]
+    limiters.add(MaxCharsCommandSizeLimiter::new(system_arg_max()));
 
     let mut builder_options =
-        CommandBuilderOptions::new(action, env, limiters, options.replace.clone()).map_err(
+        CommandBuilderOptions::new(action, limiters, options.replace.clone(), max_chars).map_err(
             |_| "Base command and environment are too large to fit into one command execution",
         )?;
 
@@ -1306,6 +1551,46 @@ pub fn xargs_main(args: &[&str]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rewrite(args: &[&str]) -> Vec<String> {
+        let mut command = xargs_command();
+        command.build();
+        attach_eof_short_equals(&command, args)
+    }
+
+    #[test]
+    fn attach_eof_short_equals_rewrites_attached_values() {
+        assert_eq!(rewrite(&["xargs", "-ecd"]), ["xargs", "-e=cd"]);
+        assert_eq!(rewrite(&["xargs", "-e=cd"]), ["xargs", "-e==cd"]);
+        assert_eq!(rewrite(&["xargs", "-e-end"]), ["xargs", "-e=-end"]);
+        assert_eq!(rewrite(&["xargs", "-tecd"]), ["xargs", "-t", "-e=cd"]);
+        assert_eq!(rewrite(&["xargs", "-e"]), ["xargs", "-e"]);
+        assert_eq!(rewrite(&["xargs", "-E", "-end"]), ["xargs", "-E", "-end"]);
+        assert_eq!(rewrite(&["xargs", "--eof", "cd"]), ["xargs", "--eof", "cd"]);
+        assert_eq!(rewrite(&["xargs", "-n", "-ecd"]), ["xargs", "-n", "-ecd"]);
+        assert_eq!(
+            rewrite(&["xargs", "--arg-file", "-e-file"]),
+            ["xargs", "--arg-file", "-e-file"]
+        );
+        assert_eq!(rewrite(&["xargs", "--", "-ecd"]), ["xargs", "--", "-ecd"]);
+    }
+
+    #[test]
+    fn attach_eof_short_equals_stops_at_the_command() {
+        assert_eq!(rewrite(&["xargs", "echo", "-en"]), ["xargs", "echo", "-en"]);
+        assert_eq!(
+            rewrite(&["xargs", "-t", "grep", "-efoo"]),
+            ["xargs", "-t", "grep", "-efoo"]
+        );
+        assert_eq!(
+            rewrite(&["xargs", "-n1", "grep", "-efoo"]),
+            ["xargs", "-n1", "grep", "-efoo"]
+        );
+        assert_eq!(
+            rewrite(&["xargs", "-n", "1", "grep", "-efoo"]),
+            ["xargs", "-n", "1", "grep", "-efoo"]
+        );
+    }
 
     fn make_arg_init(s: &str) -> Argument {
         Argument {
@@ -1396,7 +1681,7 @@ mod tests {
 
     #[test]
     fn test_chars_limiter() {
-        // Room for exactly "abc" and "a", including terminators and pointers.
+        // Room for exactly "abc" and "a", including terminators.
         let max_chars = count_osstr_chars_for_exec(OsStr::new("abc"))
             + count_osstr_chars_for_exec(OsStr::new("a"));
         let mut limiter = MaxCharsCommandSizeLimiter::new(max_chars);
@@ -1422,13 +1707,11 @@ mod tests {
     }
 
     #[test]
-    fn test_default_chars_limiter_caps_system_limit() {
-        let env = HashMap::new();
-        let system = MaxCharsCommandSizeLimiter::new_system(&env);
-        let default = MaxCharsCommandSizeLimiter::new_default(&env);
-        // The default never exceeds 128 KiB nor what the system allows.
+    fn test_default_chars_limiter_caps_string_budget() {
+        let default = MaxCharsCommandSizeLimiter::new_default();
         assert!(default.max_chars <= 128 * 1024);
-        assert!(default.max_chars <= system.max_chars);
+        #[cfg(not(unix))]
+        assert!(default.max_chars <= system_arg_max());
     }
 
     #[test]
@@ -1754,8 +2037,15 @@ mod tests {
         assert_eq!(parse_delimiter("\\0141").unwrap(), b'a');
         assert_eq!(parse_delimiter("\\0000141").unwrap(), b'a');
         assert_eq!(parse_delimiter("\\n").unwrap(), b'\n');
+        assert_eq!(parse_delimiter("\\0").unwrap(), b'\0');
+        assert_eq!(parse_delimiter("\\72").unwrap(), b':');
+        assert_eq!(parse_delimiter("\\141").unwrap(), b'a');
+        assert_eq!(parse_delimiter("\\377").unwrap(), 0xff);
 
-        assert!(parse_delimiter("\\0").is_err());
+        assert!(parse_delimiter("\\400").is_err());
+        assert!(parse_delimiter("\\0400").is_err());
+        assert!(parse_delimiter("\\8").is_err());
+        assert!(parse_delimiter("\\09").is_err());
         assert!(parse_delimiter("\\x").is_err());
         assert!(parse_delimiter("\\").is_err());
         assert!(parse_delimiter("abc").is_err());

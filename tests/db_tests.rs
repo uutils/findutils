@@ -160,11 +160,36 @@ fn test_locate_ignore_case_plain_all() {
 
 #[test]
 fn test_locate_invalid_db() {
-    Command::cargo_bin("locate")
+    let assert = Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
         .args(["test_data", INVALID_DB_FLAG])
         .assert()
         .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    // the second record has a shared prefix count of -2, so only the first entry is valid
+    assert_eq!(stdout, "./test_data\n");
+    assert!(stderr.contains("corrupt or invalid"), "{stderr}");
+}
+
+// a LOCATE02 shared prefix count must stay within the previous entry (#967)
+#[rstest]
+#[case::negative(b"\0LOCATE02\0\x00/srv\0\xfe/q\0", "/srv\n")]
+#[case::past_end(b"\0LOCATE02\0\x00/srv\0\x03Q\0\x03R\0", "/srv\n/srQ\n")]
+#[case::past_end_first_entry(b"\0LOCATE02\0\x01/srv\0", "")]
+fn test_locate_rejects_out_of_range_prefix(#[case] db: &[u8], #[case] valid_entries: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bad.db");
+    std::fs::write(&path, db).unwrap();
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["/", &format!("--database={}", path.display())])
+        .assert()
+        .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert_eq!(stdout, valid_entries);
+    assert!(stderr.contains("corrupt or invalid"), "{stderr}");
 }
 
 #[test]
@@ -187,6 +212,20 @@ fn test_locate_large_max_database_age() {
             .assert()
             .success();
     }
+}
+
+#[test]
+fn test_locate_warning_database_too_old() {
+    let assert = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["test_data", "--max-database-age=0", DB_FLAG])
+        .assert()
+        .success();
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: database ‘test_data/db/test_data_db’ is more than 0 days old")
+    );
 }
 
 #[test]
@@ -466,6 +505,56 @@ fn test_locate_split_database_paths() {
         ])
         .assert()
         .failure();
+}
+
+// a stored path containing glob metacharacters is matched as plain text (#964)
+#[test]
+fn test_locate_entry_with_glob_metachars() {
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let archive = dir.path().join("[archive]");
+    std::fs::create_dir(&archive).unwrap();
+    std::fs::write(archive.join("payroll.xls"), b"").unwrap();
+    std::fs::write(dir.path().join("plain.sh"), b"").unwrap();
+    std::fs::write(dir.path().join("plain[1].sh"), b"").unwrap();
+    #[cfg(unix)]
+    std::fs::write(dir.path().join(r"odd*?\name"), b"").unwrap();
+    let db = dir.path().join("db");
+
+    Command::cargo_bin("updatedb")
+        .expect("couldn't find updatedb binary")
+        .args([
+            format!("--localpaths={}", dir.path().display()),
+            format!("--output={}", db.display()),
+        ])
+        .assert()
+        .success();
+    let db_flag = format!("--database={}", db.display());
+
+    let locate = |args: &[&str]| {
+        let assert = Command::cargo_bin("locate")
+            .expect("couldn't find locate binary")
+            .args(args)
+            .arg(&db_flag)
+            .assert()
+            .success();
+        String::from_utf8_lossy(&assert.get_output().stdout).into_owned()
+    };
+
+    let stdout = locate(&["payroll"]);
+    assert!(stdout.contains("[archive]"), "{stdout:?}");
+    let stdout = locate(&["plain"]);
+    assert!(stdout.contains("plain[1].sh"), "{stdout:?}");
+    assert!(stdout.contains("plain.sh"), "{stdout:?}");
+    let stdout = locate(&["--basename", "--all", "plain", "1"]);
+    assert!(stdout.contains("plain[1].sh"), "{stdout:?}");
+    // the count must agree with the listing: the directory and the file inside it
+    assert_eq!(locate(&["-c", "archive"]).trim(), "2");
+    assert_eq!(locate(&["-c", "plain"]).trim(), "2");
+    #[cfg(unix)]
+    {
+        let stdout = locate(&["name"]);
+        assert!(stdout.contains(r"odd*?\name"), "{stdout:?}");
+    }
 }
 
 #[test]

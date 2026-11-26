@@ -1,10 +1,9 @@
 [package]
 name = "findutils"
 version = "0.11.0"
-homepage = "https://github.com/uutils/findutils"
 repository = "https://github.com/uutils/findutils"
 edition = "2021"
-rust-version = "1.88.0"
+rust-version = "1.89.0"
 license = "MIT"
 readme = "README.md"
 description = "Rust implementation of GNU findutils"
@@ -19,14 +18,14 @@ pkg-fmt = "zip"
 
 [dependencies]
 argmax = "0.4.0"
-chrono = "0.4.45"
+jiff = "0.2"
 clap = { version = "4.6", features = ["env"] }
 faccess = "0.2.4"
-nix = { version = "0.31", features = ["fs", "user"] }
+nix = { version = "0.32", features = ["fs", "user"] }
 onig = { version = "6.5", default-features = false }
 parse_datetime = "0.17.0"
 regex = "1.12"
-uucore = { version = "0.12.0", features = ["diagnostics", "entries", "fs", "fsext", "mode"] }
+uucore = { version = "0.13.0", features = ["diagnostics", "entries", "fs", "fsext", "mode"] }
 walkdir = "2.5"
 itertools = "0.15.0"
 thiserror = "2.0.12"
@@ -42,7 +41,7 @@ criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
 assert_cmd = "2"
 ctor = "1.0"
 filetime = "0.2"
-nix = { version = "0.31", features = ["fs"] }
+nix = { version = "0.32", features = ["fs"] }
 rstest = "0.28.0"
 tempfile = "3"
 uutests = "0.12.0"

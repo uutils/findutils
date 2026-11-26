@@ -9,8 +9,6 @@ use std::fs::{self, Metadata};
 use std::io::{stderr, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Local, Timelike};
-
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
@@ -19,18 +17,18 @@ use super::{ComparableValue, Follow, Matcher, MatcherIO, WalkEntry};
 const SECONDS_PER_DAY: i64 = 60 * 60 * 24;
 
 fn get_time(matcher_io: &mut MatcherIO, today_start: bool) -> SystemTime {
+    let now = matcher_io.now();
     if today_start {
-        // the time at 00:00:00 of today
-        let duration_since_unix_epoch = matcher_io.now().duration_since(UNIX_EPOCH).unwrap();
-        let seconds_since_unix_epoch = duration_since_unix_epoch.as_secs();
-        let utc_time = DateTime::from_timestamp(seconds_since_unix_epoch as i64, 0).unwrap();
-        let local_time = utc_time.with_timezone(&Local);
-        let seconds_since_last_midnight = local_time.num_seconds_from_midnight();
-        let local_midnight_seconds = local_time.timestamp() - seconds_since_last_midnight as i64;
-
-        UNIX_EPOCH + Duration::from_secs(local_midnight_seconds as u64)
+        jiff::Timestamp::try_from(now)
+            .ok()
+            .and_then(|ts| {
+                ts.to_zoned(jiff::tz::TimeZone::system())
+                    .start_of_day()
+                    .ok()
+            })
+            .map_or(now, |midnight| SystemTime::from(midnight.timestamp()))
     } else {
-        matcher_io.now()
+        now
     }
 }
 
@@ -265,6 +263,19 @@ impl FileTimeType {
     }
 }
 
+/// A file's age in whole seconds, negated when the file time is in the future.
+///
+/// Two `i64` timestamps can be further apart than `i64::MAX` seconds, so the age saturates
+/// rather than wrapping, which would turn a very old file into a future one.
+fn signed_age_secs(age: Duration, is_negative: bool) -> i64 {
+    let secs = i64::try_from(age.as_secs()).unwrap_or(i64::MAX);
+    if is_negative {
+        -secs
+    } else {
+        secs
+    }
+}
+
 /// This matcher checks whether a file's accessed|creation|modification time is
 /// {less than | exactly | more than} N days old.
 pub struct FileTimeMatcher {
@@ -312,7 +323,7 @@ impl FileTimeMatcher {
                 e.duration()
             }
         };
-        let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+        let age_in_seconds = signed_age_secs(age, is_negative);
 
         // rust division truncates towards zero (see
         // https://github.com/rust-lang/rust/blob/master/src/libcore/ops.rs#L580 )
@@ -381,7 +392,7 @@ impl FileAgeRangeMatcher {
                 e.duration()
             }
         };
-        let age_in_seconds: i64 = age.as_secs() as i64 * if is_negative { -1 } else { 1 };
+        let age_in_seconds = signed_age_secs(age, is_negative);
         let age_in_minutes = age_in_seconds / 60 + if is_negative { -1 } else { 0 };
         Ok(self.minutes.imatches(age_in_minutes))
     }
@@ -395,9 +406,59 @@ impl FileAgeRangeMatcher {
     }
 }
 
+/// `-used N`: the file was last accessed N days after its status last changed,
+/// counting a part day as a whole one. Never true when the access is not later.
+pub struct UsedMatcher {
+    days: ComparableValue,
+}
+
+impl Matcher for UsedMatcher {
+    fn matches(&self, file_info: &WalkEntry, _: &mut MatcherIO) -> bool {
+        match self.matches_impl(file_info) {
+            Err(e) => {
+                writeln!(
+                    &mut stderr(),
+                    "Error getting access and change times for {}: {}",
+                    file_info.path().to_string_lossy(),
+                    e
+                )
+                .unwrap();
+                false
+            }
+            Ok(t) => t,
+        }
+    }
+}
+
+impl UsedMatcher {
+    fn matches_impl(&self, file_info: &WalkEntry) -> Result<bool, Box<dyn Error>> {
+        let metadata = file_info.metadata()?;
+        let accessed = FileTimeType::Accessed.get_file_time(metadata)?;
+        let changed = FileTimeType::Changed.get_file_time(metadata)?;
+        let Ok(used) = accessed.duration_since(changed) else {
+            return Ok(false);
+        };
+        if used.is_zero() {
+            return Ok(false);
+        }
+        let day = Duration::from_secs(SECONDS_PER_DAY as u64).as_nanos();
+        let days = used.as_nanos().div_ceil(day) as u64;
+        Ok(match self.days {
+            ComparableValue::MoreThan(n) => days > n,
+            ComparableValue::EqualTo(n) => days == n,
+            // days is rounded up, so a file used 12 hours after its change
+            // counts as 1 day and must still match -used -1, as in GNU find.
+            ComparableValue::LessThan(n) => days <= n,
+        })
+    }
+
+    pub fn new(days: ComparableValue) -> Self {
+        Self { days }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveTime;
     use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::Read;
@@ -623,8 +684,19 @@ mod tests {
         let deps = FakeDependencies::new();
         let midnight = get_time(&mut deps.new_matcher_io(), true);
 
-        let midnight = DateTime::<Local>::from(midnight);
-        assert_eq!(midnight.time(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+        let midnight = jiff::Timestamp::try_from(midnight)
+            .unwrap()
+            .to_zoned(jiff::tz::TimeZone::system());
+        assert_eq!(midnight.time(), jiff::civil::time(0, 0, 0, 0));
+    }
+
+    #[test]
+    fn get_local_midnight_fallback_on_out_of_range() {
+        let mut deps = FakeDependencies::new();
+        let out_of_range = SystemTime::UNIX_EPOCH + Duration::from_secs(300_000_000_000);
+        deps.set_time(out_of_range);
+        let time = get_time(&mut deps.new_matcher_io(), true);
+        assert_eq!(time, out_of_range);
     }
 
     #[test]
@@ -929,5 +1001,59 @@ mod tests {
             !matcher.matches(&new_file, &mut FakeDependencies::new().new_matcher_io()),
             "The correct situation is that the file reading here cannot be successful."
         );
+    }
+
+    #[test]
+    fn signed_age_secs_saturates() {
+        // two i64 timestamps can be up to 2^64 - 1 seconds apart, more than i64 can hold.
+        // Such an age must stay on the right side of zero (#963)
+        let huge = Duration::from_secs(u64::MAX);
+        assert_eq!(signed_age_secs(huge, false), i64::MAX);
+        assert_eq!(signed_age_secs(huge, true), -i64::MAX);
+        let past_i64 = Duration::from_secs(i64::MAX as u64 + 1);
+        assert_eq!(signed_age_secs(past_i64, false), i64::MAX);
+        assert_eq!(signed_age_secs(Duration::from_secs(90), false), 90);
+        assert_eq!(signed_age_secs(Duration::from_secs(90), true), -90);
+    }
+
+    #[test]
+    // The change time is only read on Unix.
+    #[cfg(unix)]
+    fn used_matcher() {
+        let temp_dir = Builder::new().prefix("used_matcher").tempdir().unwrap();
+        let later = temp_dir.path().join("later");
+        let earlier = temp_dir.path().join("earlier");
+        File::create(&later).unwrap();
+        File::create(&earlier).unwrap();
+        // Setting the access time also sets the change time to now.
+        let now = SystemTime::now();
+        let hour = Duration::from_secs(3600);
+        filetime::set_file_atime(&later, (now + 25 * hour).into()).unwrap();
+        filetime::set_file_atime(&earlier, (now - 25 * hour).into()).unwrap();
+        let later = get_dir_entry_for(temp_dir.path().to_str().unwrap(), "later");
+        let earlier = get_dir_entry_for(temp_dir.path().to_str().unwrap(), "earlier");
+        let deps = FakeDependencies::new();
+
+        // 25 hours counts as 2 days
+        for (days, expected) in [
+            (ComparableValue::EqualTo(2), true),
+            (ComparableValue::EqualTo(1), false),
+            (ComparableValue::MoreThan(1), true),
+            (ComparableValue::MoreThan(2), false),
+            (ComparableValue::LessThan(2), true),
+            (ComparableValue::LessThan(1), false),
+        ] {
+            let label = format!("{days:?}");
+            let matcher = UsedMatcher::new(days);
+            assert_eq!(
+                matcher.matches(&later, &mut deps.new_matcher_io()),
+                expected,
+                "{label}"
+            );
+            assert!(
+                !matcher.matches(&earlier, &mut deps.new_matcher_io()),
+                "{label}"
+            );
+        }
     }
 }

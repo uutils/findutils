@@ -383,9 +383,38 @@ fn files0_pipe_double_nul() {
     ucmd()
         .pipe_in(b"./test_data/simple\0\0./test_data/links" as &[u8])
         .args(&["-files0-from", "-"])
-        .succeeds()
-        .stderr_contains("invalid zero-length file name")
+        .fails_with_code(1)
+        .stderr_contains("'(standard input)':2: invalid zero-length file name")
         .stdout_contains("./test_data/");
+}
+
+#[test]
+fn files0_zero_length_name_is_reported_with_position() {
+    ucmd()
+        .args(&["-files0-from", "-", "-print"])
+        .pipe_in("./test_data/simple/abbbc\0./test_data/simple/subdir\0\0")
+        .fails_with_code(1)
+        .stdout_contains("./test_data/simple/abbbc\n")
+        .stderr_contains("'(standard input)':3: invalid zero-length file name");
+
+    ucmd()
+        .args(&["-files0-from", "-", "-print"])
+        .pipe_in("\0./test_data/simple/abbbc\0")
+        .fails_with_code(1)
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: '(standard input)':1: invalid zero-length file name\n");
+
+    let temp_dir = Builder::new().prefix("find_files0_").tempdir().unwrap();
+    let list0 = temp_dir.path().join("list0");
+    fs::write(&list0, b"./test_data/simple/abbbc\0\0").expect("wrote path list");
+    ucmd()
+        .args(&["-files0-from", &list0.display().to_string(), "-print"])
+        .fails_with_code(1)
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is(format!(
+            "find: '{}':2: invalid zero-length file name\n",
+            list0.display()
+        ));
 }
 
 /// The starting points are read incrementally, so output for the earlier ones
@@ -620,6 +649,136 @@ fn matcher_with_side_effects_in_front() {
     assert!(!temp_dir.path().exists(), "temp dir should also be deleted");
 }
 
+// The file is removed by -exec before -delete gets to it, which is what a
+// readdir race looks like to -delete.
+#[test]
+#[cfg(unix)]
+fn delete_vanished_file_is_an_error_by_default() {
+    for args in [
+        &["-name", "test", "-exec", "rm", "{}", ";", "-delete"][..],
+        &[
+            "-ignore_readdir_race",
+            "-noignore_readdir_race",
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+        ][..],
+    ] {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        File::create(temp_dir.path().join("test")).expect("created test file");
+
+        ucmd()
+            .arg(temp_dir.path())
+            .args(args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("No such file or directory");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn delete_vanished_file_with_ignore_readdir_race() {
+    // It is a global option, so its position in the expression is irrelevant.
+    for args in [
+        &[
+            "-ignore_readdir_race",
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+        ][..],
+        &[
+            "-name",
+            "test",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-delete",
+            "-ignore_readdir_race",
+        ][..],
+    ] {
+        let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+        let test_file = temp_dir.path().join("test");
+        File::create(&test_file).expect("created test file");
+
+        ucmd()
+            .arg(temp_dir.path())
+            .args(args)
+            .succeeds()
+            .no_output();
+
+        assert!(!test_file.exists(), "test file should be deleted");
+        assert!(temp_dir.path().exists(), "temp dir should NOT be deleted");
+    }
+}
+
+// While "a" is visited, -exec removes the directory "b", which has already
+// been read from "d" but not opened yet.  -sorted makes "a" come first.
+#[cfg(unix)]
+fn vanished_dir_during_walk() -> tempfile::TempDir {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+    File::create(temp_dir.path().join("a")).expect("created test file");
+    fs::create_dir_all(temp_dir.path().join("b").join("inner")).expect("created test dir");
+    temp_dir
+}
+
+#[test]
+#[cfg(unix)]
+fn vanished_dir_during_walk_is_an_error_by_default() {
+    let temp_dir = vanished_dir_during_walk();
+    let b = temp_dir.path().join("b");
+
+    ucmd()
+        .arg(temp_dir.path())
+        .args(&["-sorted", "-name", "a", "-exec", "rm", "-rf"])
+        .arg(&b)
+        .args(&[";", "-print"])
+        .fails_with_code(1)
+        .stdout_is(format!("{}\n", temp_dir.path().join("a").display()))
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn vanished_dir_during_walk_with_ignore_readdir_race() {
+    let temp_dir = vanished_dir_during_walk();
+    let b = temp_dir.path().join("b");
+
+    ucmd()
+        .arg(temp_dir.path())
+        .args(&["-ignore_readdir_race", "-sorted", "-name", "a"])
+        .args(&["-exec", "rm", "-rf"])
+        .arg(&b)
+        .args(&[";", "-print"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("{}\n", temp_dir.path().join("a").display()));
+
+    assert!(!b.exists(), "b should have been removed by -exec");
+}
+
+#[test]
+fn missing_start_point_still_reported_with_ignore_readdir_race() {
+    let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
+    let missing = temp_dir.path().join("missing");
+
+    ucmd()
+        .arg(&missing)
+        .arg("-ignore_readdir_race")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("missing");
+}
+
 // This could be covered by a unit test in principle... in practice, changing
 // the working dir can't be done safely in unit tests unless `--test-threads=1`
 // or `serial` goes everywhere, and it doesn't seem possible to get an
@@ -638,6 +797,95 @@ fn delete_on_dot_dir() {
         .stdout_only(".\n");
 
     assert!(temp_dir.path().exists(), "temp dir should still exist");
+}
+
+/// Creates `keep/f` and `other` in a new temporary directory.
+fn prune_delete_tree() -> tempfile::TempDir {
+    let temp_dir = Builder::new()
+        .prefix("find_prune_delete_")
+        .tempdir()
+        .unwrap();
+    fs::create_dir(temp_dir.path().join("keep")).unwrap();
+    File::create(temp_dir.path().join("keep").join("f")).unwrap();
+    File::create(temp_dir.path().join("other")).unwrap();
+    temp_dir
+}
+
+#[test]
+fn find_prune_with_delete_is_rejected() {
+    for expression in [
+        &["-name", "keep", "-prune", "-o", "-type", "f", "-delete"][..],
+        &["-type", "f", "-delete", "-o", "-name", "keep", "-prune"],
+        &["(", "-prune", ")", "-delete"],
+    ] {
+        let temp_dir = prune_delete_tree();
+        ucmd()
+            .arg(temp_dir.path())
+            .args(expression)
+            .fails_with_code(1)
+            .stderr_only(format!(
+                "{PROGRAM}: The -delete action automatically turns on -depth, but -prune \
+                 does nothing when -depth is in effect.  If you want to carry on anyway, \
+                 just explicitly use the -depth option.\n"
+            ));
+
+        assert!(temp_dir.path().join("keep").join("f").exists());
+        assert!(temp_dir.path().join("other").exists());
+    }
+}
+
+#[test]
+fn find_prune_with_delete_and_explicit_depth_runs() {
+    for expression in [
+        &[
+            "-depth", "-name", "keep", "-prune", "-o", "-type", "f", "-delete",
+        ][..],
+        &[
+            "-name", "keep", "-prune", "-o", "-type", "f", "-delete", "-depth",
+        ],
+    ] {
+        let temp_dir = prune_delete_tree();
+        ucmd()
+            .arg(temp_dir.path())
+            .args(expression)
+            .succeeds()
+            .no_output();
+
+        // -prune does nothing under -depth, so keep/f is deleted too.
+        assert!(!temp_dir.path().join("keep").join("f").exists());
+        assert!(!temp_dir.path().join("other").exists());
+        assert!(temp_dir.path().join("keep").exists());
+    }
+}
+
+#[test]
+fn find_depth_prune_still_visits_siblings() {
+    // Every sibling matches -prune, so whichever one the walk returns first, the
+    // others come after it. Skipping the rest of the parent there would lose them.
+    let temp_dir = Builder::new()
+        .prefix("find_depth_prune_")
+        .tempdir()
+        .unwrap();
+    let names = ["p1", "p2", "p3", "p4", "p5"];
+    for name in names {
+        fs::create_dir(temp_dir.path().join(name)).unwrap();
+        File::create(temp_dir.path().join(name).join("f")).unwrap();
+    }
+
+    let result = ucmd()
+        .arg(temp_dir.path())
+        .args(&[
+            "-depth", "-name", "p*", "-prune", "-o", "-type", "f", "-print",
+        ])
+        .succeeds();
+
+    let mut printed: Vec<&str> = result.stdout_str().lines().collect();
+    printed.sort_unstable();
+    let expected: Vec<String> = names
+        .iter()
+        .map(|name| temp_dir.path().join(name).join("f").display().to_string())
+        .collect();
+    assert_eq!(printed, expected);
 }
 
 #[test]
@@ -815,8 +1063,8 @@ fn empty_files() {
         )));
 }
 
-#[test]
-fn find_printf() {
+/// Creates the links under test_data/links that the -printf tests read.
+fn create_printf_links() {
     #[cfg(unix)]
     {
         if let Err(e) = symlink("abbbc", "test_data/links/link-f") {
@@ -881,7 +1129,11 @@ fn find_printf() {
             );
         }
     }
+}
 
+#[test]
+fn find_printf() {
+    create_printf_links();
     ucmd()
         .arg(fix_up_slashes("./test_data/simple"))
         .args(&["-sorted", "-printf", "%f %d %h %H %p %P %y\n"])
@@ -932,6 +1184,49 @@ fn find_printf() {
 }
 
 #[test]
+fn find_printf_type_of_followed_links() {
+    create_printf_links();
+
+    ucmd()
+        .args(&["-H", &fix_up_slashes("./test_data/links/link-f")])
+        .args(&["-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("f f\n");
+
+    ucmd()
+        .args(&["-L", &fix_up_slashes("./test_data/links/link-d")])
+        .args(&["-maxdepth", "0", "-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("d d\n");
+
+    // A dangling link has nothing to follow, so it is still a link.
+    ucmd()
+        .args(&["-L", &fix_up_slashes("./test_data/links/link-missing")])
+        .args(&["-printf", "%y %Y\n"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("l N\n");
+}
+
+#[test]
+fn find_printf_reserved_directives_are_errors() {
+    for (format, directive) in [
+        ("%(", "`%(' is reserved"),
+        ("a%{b", "`%{' is reserved"),
+        ("%[\n", "`%[' is reserved"),
+        ("%-5(", "`%(' is reserved"),
+    ] {
+        ucmd()
+            .args(&["./test_data/simple", "-printf", format])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(directive);
+    }
+}
+
+#[test]
 fn find_printf_backslash_c_runs_the_next_action() {
     ucmd()
         .arg(fix_up_slashes("./test_data/simple"))
@@ -939,6 +1234,56 @@ fn find_printf_backslash_c_runs_the_next_action() {
         .succeeds()
         .no_stderr()
         .stdout_only("simple|\nabbbc|\nsubdir|\nABBBC|\n");
+}
+
+#[rstest::rstest]
+#[case::incomplete_directive(r"%f\c%", "simple", b"")]
+#[case::unknown_directive(r"%f\c%Q", "simple", b"")]
+#[case::unknown_escape(r"%f\c\q", "simple", b"")]
+#[case::octal_escape_after_stop(r"%f\c\377", "simple", b"")]
+#[case::escaped_backslash(r"\\c%f", r"\csimple", b"")]
+#[case::prior_escape_warning(r"\q\c%", r"\q", b"find: warning: unrecognized escape '\\q'\n")]
+#[case::prior_directive_warning(
+    r"%Q\c%",
+    "%Q",
+    b"find: warning: unrecognized format directive '%Q'\n"
+)]
+fn find_printf_and_fprintf_backslash_c_ignores_remaining_format(
+    #[case] format: &str,
+    #[case] expected: &str,
+    #[case] expected_stderr: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let starting_point = fix_up_slashes("test_data/simple");
+    ucmd()
+        .arg(&starting_point)
+        .args(&["-maxdepth", "0", "-printf", format, "-printf", "|next\n"])
+        .succeeds()
+        .stderr_is_bytes(expected_stderr)
+        .stdout_is_bytes(format!("{expected}|next\n").as_bytes());
+
+    let temp_dir = Builder::new().prefix("find_fprintf_stop_").tempdir()?;
+    let output = temp_dir.path().join("out");
+    ucmd()
+        .arg(&starting_point)
+        .args(&["-maxdepth", "0", "-fprintf"])
+        .arg(&output)
+        .args(&[format, "-printf", "|next\n"])
+        .succeeds()
+        .stderr_is_bytes(expected_stderr)
+        .stdout_is_bytes(b"|next\n");
+    assert_eq!(fs::read(output)?, expected.as_bytes());
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn find_printf_output_comes_before_exec_output() {
+    ucmd()
+        .args(&["./test_data/simple", "-maxdepth", "0"])
+        .args(&["-printf", "P:%p ", "-exec", "echo", "E:{}", ";"])
+        .succeeds()
+        .no_stderr()
+        .stdout_only("P:./test_data/simple E:./test_data/simple\n");
 }
 
 #[test]
@@ -1005,6 +1350,48 @@ fn find_printf_epoch_times_before_1970() {
             .succeeds()
             .no_output();
         assert_eq!(fs::read(&output_path).unwrap(), expected.as_bytes());
+    }
+}
+
+// Regression test for uutils/findutils#963: a file dated near i64::MIN is more
+// than i64::MAX seconds old, and that age used to wrap to a negative (future)
+// one. Only file systems with full 64-bit times can store such a date (tmpfs,
+// hence /dev/shm), so skip when the time doesn't round-trip.
+#[test]
+#[cfg(unix)]
+fn find_time_matches_file_dated_near_i64_min() {
+    use std::os::unix::fs::MetadataExt;
+
+    let builder = Builder::new()
+        .prefix("find_i64_min_")
+        .tempdir_in("/dev/shm");
+    let Ok(temp_dir) = builder else { return };
+    let file_path = temp_dir.path().join("ancient");
+    File::create(&file_path).expect("create test file");
+    // i64::MIN itself overflows inside filetime, and one second later is just as old.
+    let ancient = i64::MIN + 1;
+    let stored =
+        filetime::set_file_mtime(&file_path, filetime::FileTime::from_unix_time(ancient, 0))
+            .and_then(|()| fs::metadata(&file_path));
+    if !matches!(stored, Ok(metadata) if metadata.mtime() == ancient) {
+        return;
+    }
+
+    let dir = temp_dir.path().to_str().unwrap();
+    let expected = format!("{}\n", file_path.to_str().unwrap());
+    for older_than in [["-mtime", "+7"], ["-mmin", "+7"]] {
+        ucmd()
+            .args(&[dir, "-type", "f"])
+            .args(&older_than)
+            .succeeds()
+            .stdout_only(&expected);
+    }
+    for newer_than in [["-mtime", "-1"], ["-mmin", "-1"]] {
+        ucmd()
+            .args(&[dir, "-type", "f"])
+            .args(&newer_than)
+            .succeeds()
+            .no_output();
     }
 }
 
@@ -1283,6 +1670,77 @@ fn find_inum() {
         .fails()
         .stderr_contains("not available on this platform")
         .no_stdout();
+}
+
+/// Returns the first id from `start` for which `is_unmapped` holds.
+#[cfg(unix)]
+fn first_unmapped_id(start: u32, is_unmapped: impl Fn(u32) -> bool) -> u32 {
+    (start..u32::MAX)
+        .find(|&id| is_unmapped(id))
+        .expect("an unmapped id")
+}
+
+/// Variables that `fakeroot` sets alongside `LD_PRELOAD`. `UCommand` clears
+/// the environment and keeps only `LD_PRELOAD`, so without these `find` would
+/// not reach the fakeroot daemon and would see the real owners.
+#[cfg(unix)]
+const FAKEROOT_ENV: [&str; 3] = ["FAKEROOTKEY", "FAKED_MODE", "LD_LIBRARY_PATH"];
+
+/// Runs `find OPTION DIR TEST` and returns its output lines, sorted.
+#[cfg(unix)]
+fn sorted_find_output(option: &str, dir: &Path, test: &str) -> Vec<String> {
+    let mut cmd = ucmd();
+    for key in FAKEROOT_ENV {
+        if let Some(value) = std::env::var_os(key) {
+            cmd.env(key, value);
+        }
+    }
+    let result = cmd.arg(option).arg(dir).arg(test).succeeds();
+    let mut lines: Vec<String> = result.stdout_str().lines().map(String::from).collect();
+    lines.sort();
+    lines
+}
+
+#[cfg(unix)]
+#[test]
+fn find_nouser_nogroup_match_unowned_symlinks() {
+    use nix::unistd::{Gid, Group, Uid, User};
+    use std::os::unix::fs::lchown;
+
+    // Giving a file an owner without a passwd/group entry needs root, real or
+    // under `fakeroot` (as CI runs this test).
+    if !Uid::effective().is_root() {
+        return;
+    }
+
+    let unmapped_uid = first_unmapped_id(54321, |id| {
+        matches!(User::from_uid(Uid::from_raw(id)), Ok(None))
+    });
+    let unmapped_gid = first_unmapped_id(54321, |id| {
+        matches!(Group::from_gid(Gid::from_raw(id)), Ok(None))
+    });
+
+    let temp_dir = Builder::new().prefix("find_nouser_").tempdir().unwrap();
+    let dir = temp_dir.path();
+    // A link to a file with a known owner, and a dangling link, both unowned.
+    File::create(dir.join("owned")).unwrap();
+    symlink("owned", dir.join("orphan_link")).unwrap();
+    symlink("missing", dir.join("dangling")).unwrap();
+    for link in ["orphan_link", "dangling"] {
+        lchown(dir.join(link), Some(unmapped_uid), Some(unmapped_gid)).unwrap();
+    }
+
+    let path_of = |name: &str| dir.join(name).to_string_lossy().into_owned();
+    let both_links = vec![path_of("dangling"), path_of("orphan_link")];
+    let dangling_only = vec![path_of("dangling")];
+
+    for test in ["-nouser", "-nogroup"] {
+        // Without following, the link's own owner counts.
+        assert_eq!(sorted_find_output("-P", dir, test), both_links, "{test}");
+        assert_eq!(sorted_find_output("-H", dir, test), both_links, "{test}");
+        // With -L, the target's owner counts, except for a dangling link.
+        assert_eq!(sorted_find_output("-L", dir, test), dangling_only, "{test}");
+    }
 }
 
 #[cfg(unix)]
@@ -1632,6 +2090,16 @@ fn find_fs() {
 }
 
 #[test]
+fn find_newer_missing_reference_names_it() {
+    for predicate in ["-newer", "-anewer", "-cnewer", "-newermc"] {
+        ucmd()
+            .args(&["test_data/simple", predicate, "test_data/no_such_file"])
+            .fails_with_code(1)
+            .stderr_contains("find: test_data/no_such_file: ");
+    }
+}
+
+#[test]
 fn find_samefile() {
     let temp_dir = Builder::new().prefix("find_samefile_").tempdir().unwrap();
     let temp_dir_path = temp_dir.path().to_str().unwrap();
@@ -1723,6 +2191,65 @@ fn find_fprinter() {
     }
 }
 
+// APFS rejects non-UTF-8 filenames; printer unit tests cover raw bytes there.
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[rstest::rstest]
+#[case::implicit(None, b'\n', false)]
+#[case::print(Some("-print"), b'\n', false)]
+#[case::print0(Some("-print0"), b'\0', false)]
+#[case::fprint(Some("-fprint"), b'\n', true)]
+#[case::fprint0(Some("-fprint0"), b'\0', true)]
+fn find_print_preserves_non_utf8_filenames(
+    #[case] action: Option<&str>,
+    #[case] delimiter: u8,
+    #[case] writes_file: bool,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let temp_dir = Builder::new()
+        .prefix("find_print_bytes_")
+        .tempdir()
+        .unwrap();
+    fs::create_dir(temp_dir.path().join("d")).unwrap();
+    // Byte-sorted names mix valid text with invalid UTF-8. The last two 'a'
+    // names must stay distinct rather than both becoming "a\u{fffd}z".
+    let paths: &[&[u8]] = &[
+        b"d/ascii",
+        b"d/a\x80",
+        b"d/a\xef\xbf\xbdz",
+        b"d/a\xffz",
+        "d/caf\u{e9}".as_bytes(),
+    ];
+    let mut expected = Vec::new();
+    for path in paths {
+        File::create(temp_dir.path().join(OsStr::from_bytes(path))).unwrap();
+        expected.extend_from_slice(path);
+        expected.push(delimiter);
+    }
+
+    // Keep the arguments ASCII: invalid bytes come from directory entries.
+    let mut cmd = ucmd();
+    cmd.current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(&["d", "-sorted", "-type", "f"]);
+    if let Some(action) = action {
+        cmd.arg(action);
+    }
+    if writes_file {
+        cmd.arg("out");
+    }
+
+    let result = cmd.succeeds();
+    result.no_stderr();
+    if writes_file {
+        result.no_stdout();
+        assert_eq!(fs::read(temp_dir.path().join("out")).unwrap(), expected);
+    } else {
+        result.stdout_is_bytes(&expected);
+    }
+}
+
 #[test]
 fn find_fprint_dev_stdout_writes_to_standard_output() {
     // A redirected stdout must not be truncated or overwritten by -fprint,
@@ -1788,6 +2315,25 @@ fn find_follow() {
         .no_stderr();
 }
 
+/// Creates file and directory targets with valid and dangling links
+/// for the `-lname`/`-ilname` and `%l` tests.
+fn create_symlink_following_fixture(root: &Path) {
+    File::create(root.join("file-target")).expect("create target file");
+    fs::create_dir(root.join("dir-target")).expect("create target directory");
+    #[cfg(unix)]
+    {
+        symlink("file-target", root.join("file-link")).expect("create file link");
+        symlink("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+    #[cfg(windows)]
+    {
+        symlink_file("file-target", root.join("file-link")).expect("create file link");
+        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
+        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
+    }
+}
+
 // Expected outputs are ordered as [command-line roots, descendants].
 #[rstest::rstest]
 #[case::physical(&["-P"], &[], &[], ["broken-link\ndir-link\nfile-link\n"; 2])]
@@ -1808,20 +2354,7 @@ fn find_lname_respects_symlink_following(
         .tempdir()
         .expect("create temp dir");
     let root = temp_dir.path();
-    File::create(root.join("file-target")).expect("create target file");
-    fs::create_dir(root.join("dir-target")).expect("create target directory");
-    #[cfg(unix)]
-    {
-        symlink("file-target", root.join("file-link")).expect("create file link");
-        symlink("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink("missing-target", root.join("broken-link")).expect("create broken link");
-    }
-    #[cfg(windows)]
-    {
-        symlink_file("file-target", root.join("file-link")).expect("create file link");
-        symlink_dir("dir-target", root.join("dir-link")).expect("create directory link");
-        symlink_file("missing-target", root.join("broken-link")).expect("create broken link");
-    }
+    create_symlink_following_fixture(root);
 
     let mut command = ucmd();
     command.current_dir(root).env("LC_ALL", "C").args(options);
@@ -1846,6 +2379,64 @@ fn find_lname_respects_symlink_following(
         .succeeds()
         .no_stderr()
         .stdout_only(expected[usize::from(descendants)]);
+}
+
+// Follow expectations are ordered as [command-line roots, descendants].
+#[rstest::rstest]
+#[case::physical(&["-P"], &[], &[], [false; 2])]
+#[case::roots(&["-H"], &[], &[], [true, false])]
+#[case::logical(&["-L"], &[], &[], [true; 2])]
+#[case::follow(&[], &["-follow"], &[], [true; 2])]
+#[case::trailing_follow(&[], &[], &["-follow"], [true; 2])]
+fn find_printf_link_target_respects_symlink_following(
+    #[case] options: &[&str],
+    #[case] before_action: &[&str],
+    #[case] after_action: &[&str],
+    #[case] follows_links: [bool; 2],
+    #[values(false, true)] descendants: bool,
+) {
+    let temp_dir = Builder::new()
+        .prefix("find_printf_link_")
+        .tempdir()
+        .expect("create temp dir");
+    let root = temp_dir.path().join("tree");
+    let output = temp_dir.path().join("output");
+    fs::create_dir(&root).expect("create test tree");
+    create_symlink_following_fixture(&root);
+
+    let mut command = ucmd();
+    command.current_dir(&root).env("LC_ALL", "C").args(options);
+    if descendants {
+        command.args(&[".", "-mindepth", "1", "-maxdepth", "1", "-sorted"]);
+    } else {
+        command.args(&[
+            "broken-link",
+            "dir-link",
+            "dir-target",
+            "file-link",
+            "file-target",
+            "-maxdepth",
+            "0",
+        ]);
+    }
+    let expected = if follows_links[usize::from(descendants)] {
+        "<missing-target>\n<>\n<>\n<>\n<>\n"
+    } else {
+        "<missing-target>\n<dir-target>\n<>\n<file-target>\n<>\n"
+    };
+    command
+        .args(before_action)
+        .args(&["-printf", "<%l>\n", "-fprintf"])
+        .arg(&output)
+        .arg("<%l>\n")
+        .args(after_action)
+        .succeeds()
+        .no_stderr()
+        .stdout_only(expected);
+    assert_eq!(
+        fs::read(output).expect("read -fprintf output"),
+        expected.as_bytes()
+    );
 }
 
 #[test]
@@ -1915,6 +2506,60 @@ fn find_printf_path_keeps_trailing_slash() {
 }
 
 #[test]
+fn find_printf_keeps_each_starting_point_for_descendants() -> std::io::Result<()> {
+    let temp_dir = Builder::new()
+        .prefix("find_printf_starting_point_")
+        .tempdir()?;
+    let output = temp_dir.path().join("output");
+    let format = "[%H] [%P]\n";
+    let expected = "[subdir/] [ABBBC]\n[subdir/.] [ABBBC]\n";
+
+    ucmd()
+        .current_dir("test_data/simple")
+        .args(&[
+            "subdir/", "subdir/.", "-type", "f", "-printf", format, "-fprintf",
+        ])
+        .arg(&output)
+        .arg(format)
+        .succeeds()
+        .stdout_only(expected);
+    assert_eq!(fs::read(output)?, expected.as_bytes());
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn find_printf_basename_keeps_spelling_of_starting_point() {
+    ucmd()
+        .args(&[
+            "test_data/simple/subdir/",
+            "test_data/simple/subdir/.",
+            "./.",
+            "///",
+            ".//",
+            "-maxdepth",
+            "0",
+            "-printf",
+            "[%h] [%f]\n",
+        ])
+        .succeeds()
+        .no_stderr()
+        .stdout_is(
+            "[test_data/simple] [subdir/]\n\
+             [test_data/simple/subdir] [.]\n\
+             [.] [.]\n\
+             [//] [/]\n\
+             [./] [./]\n",
+        );
+
+    // Entries below a starting point still print their own name.
+    ucmd()
+        .args(&["test_data/simple/", "-name", "abbbc", "-printf", "%f\n"])
+        .succeeds()
+        .stdout_only("abbbc\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn find_fprintf_reports_write_error() {
     let result = ucmd()
@@ -1927,6 +2572,40 @@ fn find_fprintf_reports_write_error() {
     assert!(stderr.contains("/dev/full"));
     assert!(stderr.contains("No space left on device"));
     assert!(!stderr.contains("panicked"));
+}
+
+#[cfg(unix)]
+#[test]
+fn find_used() {
+    let temp_dir = Builder::new().prefix("find_used").tempdir().unwrap();
+    let file = temp_dir.path().join("f");
+    File::create(&file).unwrap();
+    // Setting the access time also sets the change time to now.
+    let later = time::SystemTime::now() + time::Duration::from_secs(12 * 3600);
+    filetime::set_file_atime(&file, later.into()).unwrap();
+    let file = file.to_str().unwrap();
+
+    for (arg, expected) in [("1", true), ("-1", true), ("+0", true), ("2", false)] {
+        let out = if expected {
+            format!("{file}\n")
+        } else {
+            String::new()
+        };
+        ucmd()
+            .args(&[file, "-used", arg])
+            .succeeds()
+            .no_stderr()
+            .stdout_only(out);
+    }
+
+    ucmd()
+        .arg("-used")
+        .fails()
+        .stderr_contains("missing argument to `-used'");
+    ucmd()
+        .args(&["-used", "x"])
+        .fails()
+        .stderr_contains("argument to -used, but got `x'");
 }
 
 #[test]
@@ -1955,8 +2634,6 @@ fn find_ls() {
 #[test]
 #[cfg(unix)] // TZ only reliably selects the local time zone on unix
 fn find_ls_uses_local_time() {
-    use chrono::{DateTime, FixedOffset};
-
     let temp_dir = Builder::new().prefix("find_ls_time_").tempdir().unwrap();
     let file_path = temp_dir.path().join("stamped");
     File::create(&file_path).expect("create test file");
@@ -1970,10 +2647,10 @@ fn find_ls_uses_local_time() {
         .expect("set test file mtime");
 
     // POSIX TZ "UTC-5" is five hours east of UTC.
-    let expected = DateTime::from_timestamp(secs, 0)
+    let expected = jiff::Timestamp::from_second(secs)
         .unwrap()
-        .with_timezone(&FixedOffset::east_opt(5 * 3600).unwrap())
-        .format("%b %e %H:%M")
+        .to_zoned(jiff::tz::TimeZone::fixed(jiff::tz::offset(5)))
+        .strftime("%b %e %H:%M")
         .to_string();
     let result = ucmd()
         .env("TZ", "UTC-5")
@@ -1996,6 +2673,8 @@ fn find_reports_stdout_write_error_once() {
         &["-print0"],
         &["-ls", "-ls"],
         &["-printf", "%p\n"],
+        &["-printf", "%p\\0"],
+        &["-printf", "%p "],
         &["-ls", "-printf", "%p\n"],
         &["-print", "-ls"],
         &["-print0", "-ls"],
@@ -2077,6 +2756,31 @@ fn find_ls_shows_allocated_blocks_and_link_target() {
         .args(&[temp_dir.path().join("link").to_str().unwrap(), "-ls"])
         .succeeds()
         .stdout_contains(" -> sparse\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn find_ls_shows_device_numbers() {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::libc::{dev_t, major, minor};
+
+    let rdev = fs::metadata("/dev/null").unwrap().rdev() as dev_t;
+    let expected = format!(" {:>3}, {:>3} ", major(rdev), minor(rdev));
+
+    ucmd()
+        .args(&["/dev/null", "-ls"])
+        .succeeds()
+        .stdout_contains(expected);
+}
+
+// /dev/null is character device 1,3 on Linux; check the literal GNU layout.
+#[test]
+#[cfg(target_os = "linux")]
+fn find_ls_shows_dev_null_major_minor() {
+    ucmd()
+        .args(&["/dev/null", "-ls"])
+        .succeeds()
+        .stdout_contains("  1,   3 ");
 }
 
 // Regression test for uutils/findutils#717: `-ls` used to abort (exit 101) when
@@ -2399,4 +3103,102 @@ fn find_exits_cleanly_on_broken_pipe() {
         !stderr.contains("panicked"),
         "find panicked instead of exiting cleanly on a broken pipe:\n{stderr}"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn missing_starting_point_is_named_without_os_error() {
+    ucmd()
+        .args(&["./test_data/simple/abbbc", "xyz.nonexistentDir"])
+        .fails()
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: 'xyz.nonexistentDir': No such file or directory\n");
+}
+
+#[test]
+fn find_leading_close_paren_needs_expression() {
+    for extra in [&[][..], &["-print"][..]] {
+        ucmd()
+            .args(&["-files0-from", "-", ")"])
+            .args(extra)
+            .pipe_in("")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("expected expression before closing parentheses");
+    }
+
+    ucmd()
+        .args(&["-files0-from", "-", "-files0-from", "-", ")"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_contains("expected expression before closing parentheses");
+
+    for before in [&["-true"][..], &["-maxdepth", "1"][..], &["-depth"][..]] {
+        ucmd()
+            .args(&["-files0-from", "-"])
+            .args(before)
+            .arg(")")
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("you have too many ')'");
+    }
+
+    ucmd()
+        .args(&["./test_data/simple", "-true", ")"])
+        .fails_with_code(1)
+        .stderr_contains("you have too many ')'");
+}
+
+#[test]
+fn find_debug_option() {
+    ucmd()
+        .arg("-D")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("Missing argument after the -D option");
+
+    ucmd()
+        .args(&["-D", "", "./test_data/simple/abbbc"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("Empty argument to the -D option");
+
+    for flags in ["search", "tree,stat", "exec,,all"] {
+        ucmd()
+            .args(&["-D", flags, "./test_data/simple/abbbc", "-maxdepth", "0"])
+            .succeeds()
+            .no_stderr()
+            .stdout_is("./test_data/simple/abbbc\n");
+    }
+
+    ucmd()
+        .args(&[
+            "-L",
+            "-D",
+            "bogus",
+            "./test_data/simple/abbbc",
+            "-maxdepth",
+            "0",
+        ])
+        .succeeds()
+        .stdout_is("./test_data/simple/abbbc\n")
+        .stderr_is("find: Ignoring unrecognised debug flag 'bogus'\n");
+
+    // `-D help` lists the flags and searches nothing.
+    ucmd()
+        .args(&["-D", "help,tree", "./test_data/simple"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("Valid arguments for -D:\n")
+        .stdout_contains("tree       Display the expression tree\n")
+        .stdout_does_not_contain("./test_data");
+
+    // Help is printed as soon as `-D` is parsed, so a later unknown
+    // option is not an error.
+    ucmd()
+        .args(&["-D", "help", "-bogus"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("Valid arguments for -D:\n")
+        .stdout_does_not_contain("bogus");
 }

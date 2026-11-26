@@ -77,6 +77,24 @@ fn xargs_delim() {
         .stdout_only("a\nb\nd e\nfg\n");
 
     ucmd()
+        .args(&["-d\\0"])
+        .pipe_in("ab\0cd\0ef")
+        .succeeds()
+        .stdout_only("ab cd ef\n");
+
+    ucmd()
+        .args(&["-d\\72"])
+        .pipe_in("ab:cd:ef")
+        .succeeds()
+        .stdout_only("ab cd ef\n");
+
+    ucmd()
+        .args(&["-d\\400"])
+        .fails_with_code(1)
+        .stderr_contains("invalid")
+        .no_stdout();
+
+    ucmd()
         .args(&["-dabc"])
         .fails_with_code(1)
         .stderr_contains("invalid")
@@ -102,6 +120,11 @@ fn xargs_if_empty() {
 }
 
 #[test]
+fn xargs_repeated_no_run_if_empty() {
+    ucmd().args(&["-r", "-r"]).succeeds().no_output();
+}
+
+#[test]
 fn xargs_replace_empty_input() {
     ucmd()
         .args(&["-I", "{}", "echo", "hello", "{}"])
@@ -117,6 +140,15 @@ fn xargs_max_args() {
         .pipe_in("ab cd ef\ngh i")
         .succeeds()
         .stdout_only("ab cd\nef gh\ni\n");
+}
+
+#[test]
+fn xargs_repeated_max_args() {
+    ucmd()
+        .args(&["-n", "1", "-n", "2", "echo"])
+        .pipe_in("a b c\n")
+        .succeeds()
+        .stdout_only("a b\nc\n");
 }
 
 #[test]
@@ -142,7 +174,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-L2", "-n2"])
         .pipe_in("ab cd ef\ngh i")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("ab cd\nef gh\ni\n");
 
     // -n2 is last, so it should be given priority.
@@ -150,7 +182,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-I=_", "-n2", "echo", "_"])
         .pipe_in("ab   cd ef\ngh i\njkl")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("_ ab cd\n_ ef gh\n_ i jkl\n");
 
     // -L2 is last, so it should be given priority.
@@ -158,7 +190,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-n2", "-L2"])
         .pipe_in("ab cd\nef\ngh i\n\njkl\n")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("ab cd ef\ngh i jkl\n");
 
     // -L2 is last, so it should be given priority.
@@ -166,7 +198,7 @@ fn xargs_max_args_lines_conflict() {
         .args(&["-I=_", "-L2", "echo", "_"])
         .pipe_in("ab cd\nef\ngh i\n\njkl\n")
         .succeeds()
-        .stderr_contains("WARNING")
+        .stderr_contains("mutually exclusive")
         .stdout_is("_ ab cd ef\n_ gh i jkl\n");
 
     for redundant_arg in ["-L2", "-n2"] {
@@ -175,9 +207,95 @@ fn xargs_max_args_lines_conflict() {
             .args(&[redundant_arg, "-I={}", "echo", "{} bar"])
             .pipe_in("ab  cd ef\ngh i\njkl")
             .succeeds()
-            .stderr_contains("WARNING")
+            .stderr_contains("mutually exclusive")
             .stdout_is("ab  cd ef bar\ngh i bar\njkl bar\n");
     }
+}
+
+#[test]
+fn xargs_conflicting_options_warning_names_options() {
+    ucmd()
+        .args(&["-L3", "-n1"])
+        .pipe_in("u v\nw\n")
+        .succeeds()
+        .stdout_is("u\nv\nw\n")
+        .stderr_is(
+            "xargs: warning: options --max-lines and --max-args/-n are mutually \
+             exclusive, ignoring previous --max-lines value\n",
+        );
+
+    ucmd()
+        .args(&["-n2", "-l1"])
+        .pipe_in("u v\nw\n")
+        .succeeds()
+        .stdout_is("u v\nw\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --max-lines/-l are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    // A bare -l is -l1.
+    ucmd()
+        .args(&["-n2", "-l"])
+        .pipe_in("u v\nw\n")
+        .succeeds()
+        .stdout_is("u v\nw\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --max-lines/-l are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    // A bare -i is -i{}.
+    ucmd()
+        .args(&["-n2", "-i", "echo", "<{}>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_is("<w>\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --replace/-I/-i are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    // -L and -l set the same option: the last one wins, with no warning.
+    ucmd()
+        .args(&["-L3", "-l"])
+        .pipe_in("u v\nw\nx\n")
+        .succeeds()
+        .stdout_only("u v\nw\nx\n");
+
+    ucmd()
+        .args(&["-l", "-L3"])
+        .pipe_in("u v\nw\nx\n")
+        .succeeds()
+        .stdout_only("u v w x\n");
+
+    // -n1 given before -I is overridden and reported.
+    ucmd()
+        .args(&["-n1", "-I", "%%", "echo", "<%%>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_is("<w>\n")
+        .stderr_is(
+            "xargs: warning: options --max-args and --replace/-I/-i are mutually \
+             exclusive, ignoring previous --max-args value\n",
+        );
+
+    ucmd()
+        .args(&["-I", "%%", "-L2", "echo", "<%%>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_is("<%%> w\n")
+        .stderr_is(
+            "xargs: warning: options --replace and -L are mutually \
+             exclusive, ignoring previous --replace value\n",
+        );
+
+    // -n1 given after -I is silently ignored.
+    ucmd()
+        .args(&["-I", "%%", "-n1", "echo", "<%%>"])
+        .pipe_in("w\n")
+        .succeeds()
+        .stdout_only("<w>\n");
 }
 
 #[test]
@@ -190,8 +308,8 @@ fn xargs_max_chars() {
             .stdout_only("ab cd\nefg\n");
     }
 
-    // Behavior should be the same with -x, which only takes effect with -L or
-    // -n.
+    // Behavior should be the same with -x: without -L or -n, it only takes
+    // effect for an argument that does not fit into a command of its own.
     ucmd()
         .args(&["-xs11"])
         .pipe_in("ab cd efg")
@@ -220,6 +338,24 @@ fn xargs_exit_on_large() {
         .fails_with_code(1)
         .stderr_contains("Error:")
         .no_stdout();
+}
+
+#[test]
+fn xargs_exit_on_large_single_argument() {
+    // With -x nothing runs; without -x the command built so far runs first.
+    ucmd()
+        .args(&["-xs11"])
+        .pipe_in("ab cdefghijkl")
+        .fails_with_code(1)
+        .stderr_contains("Error:")
+        .no_stdout();
+
+    ucmd()
+        .args(&["-s11"])
+        .pipe_in("ab cdefghijkl")
+        .fails_with_code(1)
+        .stderr_contains("Error:")
+        .stdout_is("ab\n");
 }
 
 #[test]
@@ -260,6 +396,122 @@ fn xargs_explicit_size_can_exceed_default_cap() {
         arg_count,
         result.stdout_str().split_ascii_whitespace().count()
     );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn xargs_explicit_size_accounts_for_argument_pointers() {
+    // Linux gives exec one quarter of the stack limit, with a floor of 32 pages.
+    // A private 1 MiB child stack keeps the test independent of the host's ARG_MAX.
+    let arg_max = (256 * 1024).max(linux_argument_string_limit());
+    // The strings fit, but their argv pointers push the command over ARG_MAX.
+    let arg_count = 1024;
+    let argument = "x".repeat(arg_max / arg_count - 3);
+    // A larger inherited environment must also reduce the space available to argv.
+    for env_size in [0, 32 * 1024] {
+        let result = TestScenario::new("xargs")
+            .cmd("sh")
+            .args(&[
+                "-c",
+                "ulimit -s 1024 && exec \"$@\"",
+                "sh",
+                env!("CARGO_BIN_EXE_xargs"),
+            ])
+            .env("XARGS_LIMIT_ENV", "v".repeat(env_size))
+            .args(&["-s", &arg_max.to_string(), "echo"])
+            .pipe_in(format!("{argument}\n").repeat(arg_count))
+            .succeeds();
+        assert!(result.stdout_str().lines().count() > 1);
+        assert_eq!(
+            arg_count,
+            result.stdout_str().split_ascii_whitespace().count()
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_argument_string_limit() -> usize {
+    // SAFETY: sysconf takes a constant selector and does not access caller memory.
+    let page_size = unsafe { uucore::libc::sysconf(uucore::libc::_SC_PAGESIZE) };
+    assert!(page_size > 0, "sysconf must return a positive page size");
+    usize::try_from(page_size)
+        .expect("page size must fit usize")
+        .checked_mul(32)
+        .expect("argument limit must fit usize")
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn xargs_oversized_argument_exit_status() {
+    // The string budget fits, but one exec argument exceeds Linux's per-argument limit.
+    let string_limit = linux_argument_string_limit();
+    for (replace, input_size, prefix) in [
+        (false, string_limit + 1, ""),
+        (false, string_limit + 1, "ok\n"),
+        (true, string_limit / 3 + 1, ""),
+    ] {
+        let mut command = ucmd();
+        command.args(&["-s", &(string_limit * 2).to_string()]);
+        if replace {
+            command.args(&["-I", "{}"]);
+        }
+        command.arg("echo");
+        if replace {
+            command.arg("{}{}{}");
+        }
+        let result = command
+            .pipe_in(format!("{prefix}{}", "x".repeat(input_size)))
+            .fails_with_code(1);
+        result
+            .stderr_contains("Argument too large")
+            .stdout_is(prefix);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn xargs_replacement_size_uses_the_actual_argv() {
+    // The input buffer and the expanded command each have their own -s limit.
+    for (template, input_size, expected) in [
+        ("{}", 14, Some(format!("{}\n", "x".repeat(14)))),
+        ("fixed", 19, Some("fixed\n".to_owned())),
+        ("{}{}{}", 6, None),
+        ("fixed", 20, None),
+    ] {
+        let mut command = ucmd();
+        command
+            .args(&["-s", "20", "-I", "{}", "echo", template])
+            .pipe_in("x".repeat(input_size));
+        if let Some(expected) = expected {
+            command.succeeds().stdout_only(expected);
+        } else {
+            command
+                .fails_with_code(1)
+                .stderr_contains("Argument too large")
+                .no_stdout();
+        }
+    }
+}
+
+#[test]
+fn xargs_replacement_defers_command_limits_until_input() {
+    for command in [vec!["echo", "{}"], vec![]] {
+        for input in ["", "\n", "x\n"] {
+            let mut xargs = ucmd();
+            xargs
+                .args(&["-I", "{}", "-s", "1"])
+                .args(&command)
+                .pipe_in(input);
+            if input == "x\n" {
+                xargs
+                    .fails_with_code(1)
+                    .stderr_contains("Argument too large")
+                    .no_stdout();
+            } else {
+                xargs.succeeds().no_output();
+            }
+        }
+    }
 }
 
 #[test]
@@ -404,18 +656,75 @@ fn xargs_exec_verbose() {
 
 #[test]
 fn xargs_unterminated_quote() {
+    // The arguments read before the bad quote still reach the command.
     ucmd()
-        .args(&[
-            "-n2",
-            &path_to_testing_commandline(),
-            "-",
-            "--print_stdin",
-            "--no_print_cwd",
-        ])
-        .pipe_in("a \"b c\nd")
+        .arg("echo")
+        .pipe_in("m1 m2\nm3 'm4\n")
         .fails_with_code(1)
-        .stderr_contains("Error: Unterminated quote:")
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1 m2 m3\n");
+
+    ucmd()
+        .args(&["-n1", "echo"])
+        .pipe_in("m1\nm2\nm3 \"m4")
+        .fails_with_code(1)
+        .stderr_contains("unmatched double quote")
+        .stdout_is("m1\nm2\nm3\n");
+
+    // With -x only a batch that is already complete runs: it was started
+    // before the quote. Anything shorter is dropped.
+    ucmd()
+        .args(&["-x", "echo"])
+        .pipe_in("m1 m2\nm3 'm4\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
         .no_stdout();
+
+    // The GNU testsuite's unmatched-n2-x case: one argument is pending, which
+    // is not a full -n2 batch, so nothing is run.
+    ucmd()
+        .args(&["-n2", "-x", "echo"])
+        .pipe_in("one\n\"two\nthree\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched double quote")
+        .no_stdout();
+
+    ucmd()
+        .args(&["-n2", "-x", "echo"])
+        .pipe_in("m1 m2 m3 'm4\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1 m2\n");
+
+    ucmd()
+        .args(&["-n1", "-x", "echo"])
+        .pipe_in("m1 m2 'm3\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1\nm2\n");
+
+    ucmd()
+        .args(&["-L1", "-x", "echo"])
+        .pipe_in("m1 m2\n'm3\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .stdout_is("m1 m2\n");
+
+    // No argument was read before the quote, so there is nothing to run.
+    ucmd()
+        .arg("echo")
+        .pipe_in("'m4\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched single quote")
+        .no_stdout();
+
+    // -I runs every line as it is read, so the line before the bad one ran.
+    ucmd()
+        .args(&["-I", "{}", "echo", "[{}]"])
+        .pipe_in("m1\nm2 \"m3\n")
+        .fails_with_code(1)
+        .stderr_contains("unmatched double quote")
+        .stdout_is("[m1]\n");
 }
 
 #[test]
@@ -432,7 +741,7 @@ fn xargs_quotes_cannot_span_lines() {
         ucmd()
             .args(&["-a", &temp_file.path().to_string_lossy()])
             .fails_with_code(1)
-            .stderr_contains("Error: Unterminated quote:")
+            .stderr_contains("unmatched")
             .no_stdout();
     }
 }
@@ -528,6 +837,31 @@ fn xargs_replace() {
 }
 
 #[test]
+fn xargs_replace_default_command() {
+    // The default command is echo with no initial arguments, so the replace
+    // token never appears and each input item should produce a blank line.
+    for args in [vec!["-I", "R"], vec!["-i"], vec!["--replace"]] {
+        ucmd()
+            .args(&args)
+            .pipe_in("hello\nworld\n")
+            .succeeds()
+            .stdout_only("\n\n");
+    }
+
+    ucmd()
+        .args(&["-I", "R", "echo"])
+        .pipe_in("hello\nworld\n")
+        .succeeds()
+        .stdout_only("\n\n");
+
+    ucmd()
+        .args(&["-I", "R", "echo", "R"])
+        .pipe_in("hello\nworld\n")
+        .succeeds()
+        .stdout_only("hello\nworld\n");
+}
+
+#[test]
 fn xargs_replace_multiple_lines() {
     ucmd()
         .args(&["-I", "_", "echo", "[_]"])
@@ -580,7 +914,7 @@ fn xargs_version() {
 
 #[test]
 fn xargs_eof() {
-    for option_style in [vec!["-ecd"], vec!["-E", "cd"], vec!["--eof", "cd"]] {
+    for option_style in [vec!["-ecd"], vec!["-E", "cd"], vec!["--eof=cd"]] {
         ucmd()
             .args(option_style.as_slice())
             .pipe_in("ab cd ef")
@@ -597,7 +931,7 @@ fn xargs_eof() {
 
 #[test]
 fn xargs_empty_eof() {
-    for option_style in [vec!["-E", ""], vec!["-e", ""], vec!["--eof="]] {
+    for option_style in [vec!["-E", ""], vec!["--eof="]] {
         ucmd()
             .args(option_style.as_slice())
             .arg("-n1")
@@ -616,6 +950,68 @@ fn xargs_bare_eof_disables_marker() {
             .pipe_in("ab {} ef")
             .succeeds()
             .stdout_only("ab {} ef\n");
+    }
+}
+
+#[test]
+fn xargs_eof_does_not_consume_next_option() {
+    // GNU: -e and --eof take an optional attached or --eof= value, and do not
+    // swallow a following option. `xargs --eof -l` still enables line mode.
+    // `-E` is different: it requires a value, so `-E -l` uses "-l" as the EOF string.
+    for flag in ["-e", "--eof"] {
+        ucmd()
+            .args(&[flag, "-l"])
+            .pipe_in("one\ntwo\n")
+            .succeeds()
+            .stdout_only("one\ntwo\n");
+    }
+}
+
+#[test]
+fn xargs_eof_separate_word_is_the_command() {
+    // GNU: a word after --eof is the command, not the EOF string.
+    ucmd()
+        .args(&["--eof", "echo", "X"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_only("X hello\n");
+}
+
+#[test]
+fn xargs_eof_attached_value_keeps_equals() {
+    // GNU: with the short form the attached value is taken as is, so
+    // `-e=cd` sets the EOF string to "=cd" and `-e=` sets it to "=".
+    ucmd()
+        .arg("-e=cd")
+        .pipe_in("ab =cd ef")
+        .succeeds()
+        .stdout_only("ab\n");
+    ucmd()
+        .arg("-e=")
+        .pipe_in("ab = ef")
+        .succeeds()
+        .stdout_only("ab\n");
+}
+
+#[test]
+fn xargs_eof_rewrite_leaves_command_args_alone() {
+    // Option scanning stops at the command, so its own `-e...` words are
+    // passed through unchanged.
+    ucmd()
+        .args(&["echo", "-ecd"])
+        .pipe_in("a b")
+        .succeeds()
+        .stdout_only("-ecd a b\n");
+}
+
+#[test]
+fn xargs_eof_attached_hyphen_value() {
+    for flag in ["-e-end", "--eof=-end"] {
+        ucmd()
+            .arg(flag)
+            .pipe_in("ab -end ef")
+            .succeeds()
+            .stdout_only("ab\n");
     }
 }
 
@@ -643,6 +1039,49 @@ fn xargs_arg_file_missing_strips_errno() {
         .stderr_contains("Failed to open")
         .stderr_contains(MISSING)
         .stderr_str_check(|s| !s.contains("(os error"));
+}
+
+#[rstest::rstest]
+#[case("-a")]
+#[case("--arg-file")]
+fn xargs_arg_file_starting_with_dash(#[case] opt: &str) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    std::fs::write(temp_dir.path().join("-foo"), b"hello\n").unwrap();
+
+    ucmd()
+        .current_dir(temp_dir.path())
+        .args(&[opt, "-foo", "echo"])
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
+#[test]
+fn xargs_delimiter_dash() {
+    ucmd()
+        .args(&["-d", "-", "echo"])
+        .pipe_in("a-b-c")
+        .succeeds()
+        .stdout_is("a b c\n");
+}
+
+#[rstest::rstest]
+#[case("-n", "-1", "invalid digit")]
+#[case("-s", "-1", "invalid digit")]
+#[case("-L", "-1", "invalid digit")]
+#[case("-P", "-1", "invalid digit")]
+#[case("--delimiter", "-1", "Delimiter must be one byte")]
+fn xargs_negative_numeric_option_rejected_as_value(
+    #[case] opt: &str,
+    #[case] val: &str,
+    #[case] expected_err: &str,
+) {
+    // Required option values starting with '-' must be parsed as the option value
+    // rather than reported as unexpected argument flags (issue #985).
+    ucmd()
+        .args(&[opt, val, "echo"])
+        .fails_with_code(1)
+        .stderr_contains(expected_err)
+        .stderr_str_check(|s| !s.contains("unexpected argument"));
 }
 
 #[cfg(unix)]
@@ -697,6 +1136,6 @@ fn xargs_replace_unterminated_quote() {
         ])
         .pipe_in("it's\nb\n")
         .fails_with_code(1)
-        .stderr_contains("Error: Unterminated quote:")
+        .stderr_contains("unmatched single quote")
         .no_stdout();
 }

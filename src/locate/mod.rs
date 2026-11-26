@@ -12,7 +12,6 @@ use std::{
     str::FromStr,
 };
 
-use chrono::{DateTime, Local, TimeDelta};
 use clap::{self, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, Id};
 use itertools::Itertools;
 use onig::{Regex, RegexOptions, Syntax};
@@ -132,8 +131,14 @@ impl Statistics {
     fn print<W: Write>(&self, out: &mut W, dbreader: &DbReader) -> io::Result<()> {
         if let Ok(metadata) = fs::metadata(&dbreader.path) {
             if let Ok(time) = metadata.modified() {
-                let time: DateTime<Local> = time.into();
-                writeln!(out, "Database was last modified at {}", time)?;
+                jiff::Timestamp::try_from(time).ok().map_or(Ok(()), |ts| {
+                    let time = ts.to_zoned(jiff::tz::TimeZone::system());
+                    writeln!(
+                        out,
+                        "Database was last modified at {}",
+                        time.strftime("%Y-%m-%d %H:%M:%S.%9f %:z")
+                    )
+                })?;
             }
             writeln!(out, "Locate database size: {} bytes", metadata.len())?;
         }
@@ -485,26 +490,17 @@ impl Iterator for DbReader {
         // read the actual path fragment
         let mut buf = Vec::new();
         self.reader.read_until(b'\0', &mut buf).ok()?;
-        let prefix = self.prev.as_ref().map(|s| {
-            s.to_bytes()
-                .iter()
-                .take(self.prefix as usize)
-                .collect::<Vec<_>>()
-        });
-        if (prefix.as_ref().map_or(0, std::vec::Vec::len) as isize) < size {
+        // the shared prefix count must stay within the previous entry
+        let prev = self.prev.as_ref().map_or(&[][..], |s| s.to_bytes());
+        let Some(prefix) = usize::try_from(self.prefix)
+            .ok()
+            .and_then(|len| prev.get(..len))
+        else {
             return Some(Err(Error::InvalidDb(
                 self.path.to_string_lossy().to_string(),
             )));
-        }
-        let res = CString::from_vec_with_nul(
-            prefix
-                .unwrap_or_default()
-                .into_iter()
-                .copied()
-                .chain(buf)
-                .collect(),
-        )
-        .ok()?;
+        };
+        let res = CString::from_vec_with_nul(prefix.iter().copied().chain(buf).collect()).ok()?;
         self.prev = Some(res.clone());
         Some(Ok(res))
     }
@@ -557,13 +553,6 @@ fn path_exists(path: &Path, follow_symlinks: bool) -> bool {
 }
 
 fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
-    // glob metacharacters in a stored path aren't handled yet, so such entries are skipped. On
-    // Windows `\` is the path separator (present in every path), so it must not count here.
-    #[cfg(windows)]
-    const GLOB_METACHARS: &str = "*?[]";
-    #[cfg(not(windows))]
-    const GLOB_METACHARS: &str = r"*?[]\";
-
     let buf = crate::bytes_to_path(entry.to_bytes());
     let name = if config.basename {
         let Some(path) = buf.file_name() else {
@@ -588,17 +577,11 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
     };
     let entry = name.to_string_lossy();
 
-    let has_metachars = entry.chars().any(|c| GLOB_METACHARS.contains(c));
+    // the stored path is plain text, so `[`, `*`, `?` and `\` in it never affect matching.
+    // TODO: patterns are always substrings for now; GNU locate treats a pattern containing
+    // `*`, `?` or `[` as a glob that must match the whole path.
     let patterns_match = if config.all {
-        if has_metachars {
-            // TODO: parse metacharacters
-            false
-        } else {
-            patterns.all_match(entry.as_ref())
-        }
-    } else if has_metachars {
-        // TODO: parse metacharacters
-        false
+        patterns.all_match(entry.as_ref())
     } else {
         patterns.any_match(entry.as_ref())
     };
@@ -614,12 +597,15 @@ fn match_entry(entry: &CStr, config: &Config, patterns: &Patterns) -> bool {
 }
 
 /// Whether a database of the given `age` is older than `max_age` days.
-/// A `max_age` too large for `i64`/`chrono` to represent can never be exceeded.
-fn is_db_too_old(age: TimeDelta, max_age: usize) -> bool {
-    match i64::try_from(max_age).ok().and_then(TimeDelta::try_days) {
-        Some(limit) => age > limit,
-        None => false,
-    }
+/// A `max_age` too large for `i64` to represent can never be exceeded.
+fn is_db_too_old(age: jiff::SignedDuration, max_age: usize) -> bool {
+    let Some(limit_secs) = i64::try_from(max_age)
+        .ok()
+        .and_then(|d| d.checked_mul(60 * 60 * 24))
+    else {
+        return false;
+    };
+    age.as_secs() > limit_secs
 }
 
 fn do_locate(args: &[&str]) -> LocateResult<()> {
@@ -660,16 +646,17 @@ fn do_locate(args: &[&str]) -> LocateResult<()> {
                 // if we can get the mtime of the file, check it against the current time
                 if let Ok(metadata) = fs::metadata(&dbreader.path) {
                     if let Ok(time) = metadata.modified() {
-                        let modified: DateTime<Local> = time.into();
-                        let now = Local::now();
-                        let delta = now - modified;
+                        let delta = jiff::Timestamp::try_from(time)
+                            .map_or(jiff::SignedDuration::ZERO, |modified| {
+                                jiff::Timestamp::now().duration_since(modified)
+                            });
                         if is_db_too_old(delta, config.max_age) {
                             eprintln!(
                                 "{}: warning: database ‘{}’ is more than {} days old (actual age is {:.1} days)",
                                 args[0],
                                 dbreader.path.to_string_lossy(),
                                 config.max_age,
-                                delta.num_seconds() as f64 / (60 * 60 * 24) as f64
+                                delta.as_secs() as f64 / (60.0 * 60.0 * 24.0)
                             );
                         }
                     }
@@ -747,8 +734,6 @@ mod tests {
     use std::io::{self, Write};
     use std::path::Path;
 
-    use chrono::TimeDelta;
-
     use super::{is_db_too_old, path_exists, DbReader, Statistics};
 
     /// A writer that always fails, to emulate stdout with no space left
@@ -779,21 +764,68 @@ mod tests {
     }
 
     #[test]
+    fn statistics_print_last_modified_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("db.bin");
+        std::fs::write(&db, b"\0LOCATE02\0\0/foo\0").unwrap();
+
+        let mtime = jiff::civil::date(2000, 1, 15)
+            .at(9, 30, 21, 2_000_000)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .unwrap();
+        filetime::set_file_mtime(
+            &db,
+            filetime::FileTime::from_unix_time(
+                mtime.timestamp().as_second(),
+                mtime.timestamp().subsec_nanosecond() as u32,
+            ),
+        )
+        .unwrap();
+
+        let dbreader = DbReader::new(&db).unwrap();
+
+        let stats = Statistics::new();
+        let mut out = Vec::new();
+        stats.print(&mut out, &dbreader).unwrap();
+        let output = String::from_utf8(out).unwrap();
+
+        let line = output
+            .lines()
+            .find(|line| line.starts_with("Database was last modified at "))
+            .expect("should output last modified date");
+
+        let offset = mtime.offset().seconds();
+        let sign = ['+', '-'][usize::from(offset < 0)];
+        let hours = offset.unsigned_abs() / 3600;
+        let mins = (offset.unsigned_abs() % 3600) / 60;
+        let expected = format!(
+            "Database was last modified at 2000-01-15 09:30:21.002000000 {sign}{hours:02}:{mins:02}"
+        );
+        assert_eq!(line, expected);
+    }
+
+    #[test]
     fn db_too_old_compares_ordinary_ages() {
-        let day = TimeDelta::days(1);
+        let day = jiff::SignedDuration::from_hours(24);
         assert!(is_db_too_old(day, 0));
         assert!(!is_db_too_old(day, 8));
     }
 
     #[test]
     fn db_too_old_ignores_max_age_beyond_i64() {
-        assert!(!is_db_too_old(TimeDelta::days(1), usize::MAX));
+        assert!(!is_db_too_old(
+            jiff::SignedDuration::from_hours(24),
+            usize::MAX
+        ));
     }
 
     #[test]
     #[cfg(target_pointer_width = "64")]
-    fn db_too_old_ignores_max_age_beyond_chrono_range() {
-        assert!(!is_db_too_old(TimeDelta::days(1), 1_000_000_000_000));
+    fn db_too_old_ignores_max_age_overflowing_seconds() {
+        assert!(!is_db_too_old(
+            jiff::SignedDuration::from_hours(24),
+            i64::MAX as usize
+        ));
     }
 
     /// Create a symlink at `link` pointing at `target`, cross-platform.

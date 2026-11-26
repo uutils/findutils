@@ -11,8 +11,6 @@ use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use chrono::{format::StrftimeItems, DateTime, Local};
-
 use super::{FileType, Matcher, MatcherIO, StdoutErrors, WalkEntry, WalkError};
 
 #[cfg(unix)]
@@ -37,10 +35,10 @@ struct Flags {
     zero: bool,
 }
 
+const CTIME_FORMAT: &str = "%a %b %e %H:%M:%S.%9f0 %Y";
+
 #[derive(Debug, PartialEq, Eq)]
 enum TimeFormat {
-    /// Follow ctime(3).
-    Ctime,
     /// Seconds since the epoch, as a float w/ nanosecond part.
     SinceEpoch,
     /// Follow strftime-compatible syntax
@@ -61,22 +59,12 @@ impl TimeFormat {
                 let fraction = nanos.rem_euclid(1_000_000_000);
                 format!("{seconds}.{fraction:09}0")
             }
-            Self::Ctime => {
-                const CTIME_FORMAT: &str = "%a %b %e %H:%M:%S.%f0 %Y";
-
-                DateTime::<Local>::from(time)
-                    .format(CTIME_FORMAT)
-                    .to_string()
-            }
             Self::Strftime(format) => {
-                // Handle a special case
-                // GNU prints a fixed-width fraction: dot, nine nanosecond
-                // digits, plus a trailing literal zero. chrono's `%.f` would
-                // drop the fraction (and the dot) entirely when it is zero.
-                let custom_format = format.replace("%+", "%Y-%m-%d+%H:%M:%S.%f0");
-                DateTime::<Local>::from(time)
-                    .format(&custom_format)
-                    .to_string()
+                let zoned = jiff::Timestamp::try_from(time)?.to_zoned(jiff::tz::TimeZone::system());
+                let config = jiff::fmt::strtime::Config::new()
+                    .custom(jiff::fmt::strtime::PosixCustom::new());
+                jiff::fmt::strtime::BrokenDownTime::from(&zoned)
+                    .to_string_with_config(&config, format)?
             }
         };
 
@@ -277,20 +265,17 @@ impl FormatStringParser<'_> {
     fn parse_time_specifier(&mut self, first: char) -> Result<TimeFormat, Box<dyn Error>> {
         match self.advance_one()? {
             '@' => Ok(TimeFormat::SinceEpoch),
-            'S' => Ok(TimeFormat::Strftime("%S.%f0".to_string())),
+            '+' => Ok(TimeFormat::Strftime("%Y-%m-%d+%H:%M:%S.%9f0".to_string())),
+            'S' => Ok(TimeFormat::Strftime("%S.%9f0".to_string())),
             // Like %S, the seconds of %T and %X carry the same fraction.
-            'T' | 'X' => Ok(TimeFormat::Strftime("%H:%M:%S.%f0".to_string())),
+            'T' | 'X' => Ok(TimeFormat::Strftime("%H:%M:%S.%9f0".to_string())),
             c => {
-                // We can't store the parsed items inside TimeFormat, because the items
-                // take a reference to the full format string, but we still try to parse
-                // it here so that errors get caught early.
                 let format = format!("%{c}");
-                match StrftimeItems::new(&format).next() {
-                    None | Some(chrono::format::Item::Error) => {
-                        Err(format!("Invalid time specifier: %{first}{c}").into())
-                    }
-                    Some(_item) => Ok(TimeFormat::Strftime(format)),
+                let dummy = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
+                if jiff::fmt::strtime::format(&format, &dummy).is_err() {
+                    return Err(format!("Invalid time specifier: %{first}{c}").into());
                 }
+                Ok(TimeFormat::Strftime(format))
             }
         }
     }
@@ -336,12 +321,12 @@ impl FormatStringParser<'_> {
         }
 
         let directive = match first {
-            'a' => FormatDirective::AccessTime(TimeFormat::Ctime),
+            'a' => FormatDirective::AccessTime(TimeFormat::Strftime(CTIME_FORMAT.to_string())),
             'A' => FormatDirective::AccessTime(self.parse_time_specifier(first)?),
             'b' => FormatDirective::Blocks {
                 large_blocks: false,
             },
-            'c' => FormatDirective::ChangeTime(TimeFormat::Ctime),
+            'c' => FormatDirective::ChangeTime(TimeFormat::Strftime(CTIME_FORMAT.to_string())),
             'C' => FormatDirective::ChangeTime(self.parse_time_specifier(first)?),
             'd' => FormatDirective::Depth,
             'D' => FormatDirective::Device,
@@ -365,7 +350,9 @@ impl FormatStringParser<'_> {
             },
             's' => FormatDirective::Size,
             'S' => FormatDirective::Sparseness,
-            't' => FormatDirective::ModificationTime(TimeFormat::Ctime),
+            't' => {
+                FormatDirective::ModificationTime(TimeFormat::Strftime(CTIME_FORMAT.to_string()))
+            }
             'T' => FormatDirective::ModificationTime(self.parse_time_specifier(first)?),
             'u' => FormatDirective::User { as_name: true },
             'U' => FormatDirective::User { as_name: false },
@@ -374,6 +361,12 @@ impl FormatStringParser<'_> {
             },
             'Y' => FormatDirective::Type { follow_links: true },
             // TODO: %Z
+            '(' | '{' | '[' => {
+                return Err(format!(
+                    "error: the format directive `%{first}' is reserved for future use"
+                )
+                .into());
+            }
             _ => {
                 eprintln!(
                     "{}: warning: unrecognized format directive '%{first}'",
@@ -413,7 +406,12 @@ impl FormatStringParser<'_> {
                 '%' => self.parse_format_specifier()?,
                 _ => panic!("{}", "Stopped at unexpected character: {self.string}"),
             };
+            // Stop parsing the format at \c and retain the flush component.
+            let is_flush = component == FormatComponent::Flush;
             components.push(component);
+            if is_flush {
+                return Ok(FormatString { components });
+            }
         }
 
         if !self.string.is_empty() {
@@ -434,7 +432,9 @@ impl FormatString {
     }
 }
 
-fn get_starting_point(file_info: &WalkEntry) -> &Path {
+// This ancestor is a component-wise prefix, so it can lose the original
+// spelling of a starting point such as "dir/" or "dir/.".
+fn root_ancestor(file_info: &WalkEntry) -> &Path {
     file_info
         .path()
         .ancestors()
@@ -442,6 +442,40 @@ fn get_starting_point(file_info: &WalkEntry) -> &Path {
         // safe to unwrap: the file's depth should never be longer than its path
         // (...right?).
         .unwrap()
+}
+
+/// The %f directive: the last element of the path.
+///
+/// A starting point is spelled out as given ("dir/" gives "dir/", "dir/."
+/// gives "."), not by its last normalised component, which `file_name()`
+/// returns for `-name`. Entries found while walking use `file_name()`.
+fn format_basename(file_info: &WalkEntry) -> Cow<'_, str> {
+    #[cfg(unix)]
+    if file_info.depth() == 0 {
+        use std::os::unix::ffi::OsStrExt;
+
+        let bytes = file_info.path().as_os_str().as_bytes();
+        if !bytes.is_empty() {
+            return String::from_utf8_lossy(basename_bytes(bytes));
+        }
+    }
+
+    file_info.file_name().to_string_lossy()
+}
+
+/// The text after the last slash of a path, with one trailing slash kept if
+/// the path had any. A path of only slashes is the root, "/".
+#[cfg(unix)]
+fn basename_bytes(bytes: &[u8]) -> &[u8] {
+    let Some(last) = bytes.iter().rposition(|&b| b != b'/') else {
+        return b"/";
+    };
+    let start = bytes[..last]
+        .iter()
+        .rposition(|&b| b == b'/')
+        .map_or(0, |i| i + 1);
+    let end = (last + 2).min(bytes.len());
+    &bytes[start..end]
 }
 
 /// The %h directive: everything before the last element of the path.
@@ -454,6 +488,11 @@ fn format_dirname(path: &Path) -> Cow<'_, str> {
         use std::os::unix::ffi::OsStrExt;
 
         let bytes = path.as_os_str().as_bytes();
+        // One character followed only by two or more slashes (".//", "///") is
+        // cut at its last slash, keeping the others.
+        if bytes.len() > 2 && bytes[1..].iter().all(|&b| b == b'/') {
+            return String::from_utf8_lossy(&bytes[..bytes.len() - 1]);
+        }
         // A path of only slashes (the root) has nothing before it.
         let Some(last) = bytes.iter().rposition(|&b| b != b'/') else {
             return "".into();
@@ -548,6 +587,7 @@ fn str_bytes(s: Cow<'_, str>) -> Cow<'_, [u8]> {
 
 fn format_directive<'entry>(
     file_info: &'entry WalkEntry,
+    starting_point: Option<&'entry Path>,
     directive: &FormatDirective,
 ) -> Result<Cow<'entry, str>, Box<dyn Error>> {
     let meta = || file_info.metadata();
@@ -561,7 +601,7 @@ fn format_directive<'entry>(
     let res: Cow<'entry, str> = match directive {
         FormatDirective::AccessTime(tf) => tf.apply(meta()?.accessed()?)?,
 
-        FormatDirective::Basename => file_info.file_name().to_string_lossy(),
+        FormatDirective::Basename => format_basename(file_info),
 
         FormatDirective::Blocks { large_blocks } => {
             #[cfg(unix)]
@@ -627,7 +667,7 @@ fn format_directive<'entry>(
         FormatDirective::Group { as_name } => {
             let gid = meta()?.gid();
             if *as_name {
-                uucore::entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
+                super::names::group_name(gid)
             } else {
                 gid.to_string()
             }
@@ -646,9 +686,8 @@ fn format_directive<'entry>(
 
         FormatDirective::ModificationTime(tf) => tf.apply(meta()?.modified()?)?,
 
-        // %p is the path as -print shows it. Don't run it through
-        // strip_prefix, which would drop the trailing slashes of a starting
-        // point like "dir/".
+        // Skip strip_prefix for %p so a starting point like "dir/" keeps
+        // its trailing slash.
         FormatDirective::Path {
             strip_starting_point: false,
         } => file_info.path().to_string_lossy(),
@@ -656,7 +695,7 @@ fn format_directive<'entry>(
             strip_starting_point: true,
         } => file_info
             .path()
-            .strip_prefix(get_starting_point(file_info))
+            .strip_prefix(root_ancestor(file_info))
             // safe to unwrap: the prefix is derived *from* the path to begin
             // with, so it cannot be invalid.
             .unwrap()
@@ -693,10 +732,13 @@ fn format_directive<'entry>(
             }
         }
 
-        FormatDirective::StartingPoint => get_starting_point(file_info).to_string_lossy(),
+        FormatDirective::StartingPoint => starting_point
+            .unwrap_or_else(|| root_ancestor(file_info))
+            .to_string_lossy(),
 
         FormatDirective::SymlinkTarget => {
-            if file_info.path_is_symlink() {
+            // Followed links have their target's type; dangling links remain symlinks.
+            if file_info.file_type().is_symlink() {
                 fs::read_link(file_info.path())?
                     .to_string_lossy()
                     .into_owned()
@@ -706,7 +748,7 @@ fn format_directive<'entry>(
             }
         }
 
-        FormatDirective::Type { follow_links } => if file_info.path_is_symlink() {
+        FormatDirective::Type { follow_links } => if file_info.file_type().is_symlink() {
             if *follow_links {
                 match file_info.path().metadata().map_err(WalkError::from) {
                     Ok(meta) => format_non_link_file_type(meta.file_type().into()),
@@ -729,7 +771,7 @@ fn format_directive<'entry>(
         FormatDirective::User { as_name } => {
             let uid = meta()?.uid();
             if *as_name {
-                uucore::entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string())
+                super::names::user_name(uid)
             } else {
                 uid.to_string()
             }
@@ -762,7 +804,12 @@ impl Printf {
         self
     }
 
-    fn print(&self, file_info: &WalkEntry, mut out: impl Write) -> std::io::Result<()> {
+    fn print(
+        &self,
+        file_info: &WalkEntry,
+        starting_point: Option<&Path>,
+        mut out: impl Write,
+    ) -> std::io::Result<()> {
         let mut result = Ok(());
         for component in &self.format.components {
             match component {
@@ -789,7 +836,7 @@ impl Printf {
                     precision,
                     justify,
                     flags,
-                } => match format_directive(file_info, directive) {
+                } => match format_directive(file_info, starting_point, directive) {
                     Ok(content) => {
                         let content = apply_precision_and_flags(
                             directive, content, *precision, flags, *width, justify,
@@ -816,6 +863,9 @@ impl Printf {
             }
         }
 
+        // Flush like -print does, so that write errors are reported and the
+        // output comes before that of any later -exec.
+        out.flush()?;
         result
     }
 
@@ -841,9 +891,13 @@ impl Printf {
 impl Matcher for Printf {
     fn matches(&self, file_info: &WalkEntry, matcher_io: &mut MatcherIO) -> bool {
         let result = if let Some((file, _)) = &self.output_file {
-            self.print(file_info, file)
+            self.print(file_info, matcher_io.starting_point, file)
         } else {
-            self.print(file_info, &mut *matcher_io.deps.get_output().borrow_mut())
+            self.print(
+                file_info,
+                matcher_io.starting_point,
+                &mut *matcher_io.deps.get_output().borrow_mut(),
+            )
         };
 
         if let Err(error) = result {
@@ -863,7 +917,6 @@ mod tests {
     use std::fs::File;
     use std::io::{ErrorKind, Write};
 
-    use chrono::{Duration, TimeZone};
     use tempfile::Builder;
 
     use super::*;
@@ -907,8 +960,37 @@ mod tests {
             ("a//b//", "a/"),
             ("/a/b", "/a"),
             ("./a/b/c", "./a/b"),
+            ("./", "."),
+            (".//", "./"),
+            ("///", "//"),
         ] {
             assert_eq!(format_dirname(Path::new(path)), expected, "path {path:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_basename_bytes() {
+        for (path, expected) in [
+            ("/", "/"),
+            ("//", "/"),
+            ("///", "/"),
+            (".", "."),
+            ("./", "./"),
+            (".//", "./"),
+            ("a", "a"),
+            ("foo/", "foo/"),
+            ("foo/.", "."),
+            ("./.", "."),
+            ("a/b", "b"),
+            ("a//b//", "b/"),
+            ("/a", "a"),
+        ] {
+            assert_eq!(
+                basename_bytes(path.as_bytes()),
+                expected.as_bytes(),
+                "path {path:?}"
+            );
         }
     }
 
@@ -920,9 +1002,41 @@ mod tests {
             let printf = Printf::new(format, None)?;
             assert_eq!(
                 printf
-                    .print(&abbbc, FailingWriter(ErrorKind::Other))
+                    .print(&abbbc, None, FailingWriter(ErrorKind::Other))
                     .map_err(|error| error.kind()),
                 Err(ErrorKind::Other)
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Accepts every write but fails to flush, like a buffered stdout on a
+    /// full disk.
+    struct FailingFlushWriter;
+
+    impl Write for FailingFlushWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(ErrorKind::StorageFull.into())
+        }
+    }
+
+    #[test]
+    fn print_flushes_its_output() -> Result<(), Box<dyn Error>> {
+        let abbbc = get_dir_entry_for("./test_data/simple", "abbbc");
+
+        for format in ["literal", "%p", "%p\\0", "%p\\n", "\\c"] {
+            let printf = Printf::new(format, None)?;
+            assert_eq!(
+                printf
+                    .print(&abbbc, None, FailingFlushWriter)
+                    .map_err(|error| error.kind()),
+                Err(ErrorKind::StorageFull),
+                "format {format:?}"
             );
         }
 
@@ -974,7 +1088,6 @@ mod tests {
                 FormatComponent::Byte(b'a'),
                 FormatComponent::Literal("de".to_owned()),
                 FormatComponent::Flush,
-                FormatComponent::Literal("f".to_owned())
             ]
         );
 
@@ -1053,7 +1166,9 @@ mod tests {
                 .components,
             vec![
                 FormatComponent::Literal("%".to_owned()),
-                unaligned_directive(FormatDirective::AccessTime(TimeFormat::Ctime)),
+                unaligned_directive(FormatDirective::AccessTime(TimeFormat::Strftime(
+                    CTIME_FORMAT.to_string()
+                ))),
                 unaligned_directive(FormatDirective::AccessTime(TimeFormat::SinceEpoch)),
                 unaligned_directive(FormatDirective::AccessTime(TimeFormat::Strftime(
                     "%k".to_string()
@@ -1061,7 +1176,9 @@ mod tests {
                 unaligned_directive(FormatDirective::Blocks {
                     large_blocks: false
                 }),
-                unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Ctime)),
+                unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Strftime(
+                    CTIME_FORMAT.to_string()
+                ))),
                 unaligned_directive(FormatDirective::ChangeTime(TimeFormat::SinceEpoch)),
                 unaligned_directive(FormatDirective::ChangeTime(TimeFormat::Strftime(
                     "%H".to_string()
@@ -1097,7 +1214,9 @@ mod tests {
                 }),
                 unaligned_directive(FormatDirective::Size),
                 unaligned_directive(FormatDirective::Sparseness),
-                unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Ctime)),
+                unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Strftime(
+                    CTIME_FORMAT.to_string()
+                ))),
                 unaligned_directive(FormatDirective::ModificationTime(TimeFormat::SinceEpoch)),
                 unaligned_directive(FormatDirective::ModificationTime(TimeFormat::Strftime(
                     "%d".to_string()
@@ -1255,7 +1374,7 @@ mod tests {
 
         let matcher = Printf::new("%.3f|%5.2f|%-5.1f|", None).unwrap();
         let mut out = Vec::new();
-        matcher.print(&file_info, &mut out).unwrap();
+        matcher.print(&file_info, None, &mut out).unwrap();
         assert_eq!(b"\xc3\xa9_|   \xc3\xa9|\xc3    |", out.as_slice());
     }
 
@@ -1558,25 +1677,28 @@ mod tests {
         let file_path = temp_dir.path().join(new_file_name);
         File::create(&file_path).expect("create temp file");
 
-        let mtime = chrono::Local
-            .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
-            .unwrap()
-            + Duration::nanoseconds(2_000_000);
+        let mtime = jiff::civil::date(2000, 1, 15)
+            .at(9, 30, 21, 2_000_000)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .unwrap();
         filetime::set_file_mtime(
             &file_path,
-            filetime::FileTime::from_unix_time(mtime.timestamp(), mtime.timestamp_subsec_nanos()),
+            filetime::FileTime::from_unix_time(
+                mtime.timestamp().as_second(),
+                mtime.timestamp().subsec_nanosecond() as u32,
+            ),
         )
         .expect("set temp file mtime");
 
         let file_info = get_dir_entry_for(&temp_dir_path, new_file_name);
         let deps = FakeDependencies::new();
 
-        let matcher = Printf::new("%t,%T@,%TF", None).unwrap();
+        let matcher = Printf::new("%t,%T@,%TF,%Tc,%Tx,%Tr", None).unwrap();
         assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
         assert_eq!(
             format!(
-                "Sat Jan 15 09:30:21.0020000000 2000,{}.0020000000,2000-01-15",
-                mtime.timestamp()
+                "Sat Jan 15 09:30:21.0020000000 2000,{}.0020000000,2000-01-15,Sat Jan 15 09:30:21 2000,01/15/00,09:30:21 AM",
+                mtime.timestamp().as_second()
             ),
             deps.get_output_as_string()
         );
@@ -1590,12 +1712,13 @@ mod tests {
         let file_path = temp_dir.path().join(new_file_name);
         File::create(&file_path).expect("create temp file");
 
-        let mtime = chrono::Local
-            .with_ymd_and_hms(2000, 1, 2, 9, 30, 21)
+        let mtime = jiff::civil::date(2000, 1, 2)
+            .at(9, 30, 21, 0)
+            .to_zoned(jiff::tz::TimeZone::system())
             .unwrap();
         filetime::set_file_mtime(
             &file_path,
-            filetime::FileTime::from_unix_time(mtime.timestamp(), 0),
+            filetime::FileTime::from_unix_time(mtime.timestamp().as_second(), 0),
         )
         .expect("set temp file mtime");
 
@@ -1631,15 +1754,15 @@ mod tests {
                 "2000-01-15+09:30:21.5000000000 09:30:21.5000000000 09:30:21.5000000000",
             ),
         ] {
-            let mtime = chrono::Local
-                .with_ymd_and_hms(2000, 1, 15, 9, 30, 21)
-                .unwrap()
-                + Duration::nanoseconds(nanos);
+            let mtime = jiff::civil::date(2000, 1, 15)
+                .at(9, 30, 21, nanos)
+                .to_zoned(jiff::tz::TimeZone::system())
+                .unwrap();
             filetime::set_file_mtime(
                 &file_path,
                 filetime::FileTime::from_unix_time(
-                    mtime.timestamp(),
-                    mtime.timestamp_subsec_nanos(),
+                    mtime.timestamp().as_second(),
+                    mtime.timestamp().subsec_nanosecond() as u32,
                 ),
             )
             .expect("set temp file mtime");
@@ -1704,5 +1827,15 @@ mod tests {
             assert!(matcher.matches(&file_info, &mut deps.new_matcher_io()));
             assert_eq!(expected, deps.get_output_as_string());
         }
+    }
+    #[test]
+    fn test_time_format_apply() {
+        assert!(FormatString::parse("%TS").is_ok());
+        let now = SystemTime::UNIX_EPOCH;
+        let far_future = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(300_000_000_000);
+        assert!(TimeFormat::Strftime("%Y".to_string())
+            .apply(far_future)
+            .is_err());
+        assert!(TimeFormat::Strftime("%".to_string()).apply(now).is_err());
     }
 }

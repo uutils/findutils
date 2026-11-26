@@ -2,8 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
-use chrono::DateTime;
 use std::{
     fs::File,
     io::{stderr, Write},
@@ -44,6 +42,19 @@ pub struct Ls {
 }
 
 impl Ls {
+    fn format_last_modified(metadata: &std::fs::Metadata) -> String {
+        metadata
+            .modified()
+            .ok()
+            .and_then(|t| jiff::Timestamp::try_from(t).ok())
+            .map(|ts| {
+                ts.to_zoned(jiff::tz::TimeZone::system())
+                    .strftime("%b %e %H:%M")
+                    .to_string()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn new(output_file: Option<File>) -> Self {
         Self {
             output_file,
@@ -64,7 +75,7 @@ impl Ls {
         mut out: impl Write,
         print_error_message: bool,
     ) {
-        use std::os::unix::fs::MetadataExt;
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
         let metadata = file_info.metadata().unwrap();
 
@@ -73,19 +84,21 @@ impl Ls {
         let number_of_blocks = metadata.blocks().div_ceil(2);
         let permission = uucore::fs::display_permissions(metadata, true);
         let hard_links = metadata.nlink();
-        // Fall back to the numeric id when the uid/gid has no passwd/group entry
-        // (unmapped owner) — matching GNU find, which never crashes. uucore::entries
-        // serializes the non-thread-safe getpwuid/getgrgid behind a mutex.
-        let user =
-            uucore::entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string());
-        let group =
-            uucore::entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string());
-        let size = metadata.size();
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let local: DateTime<chrono::Local> = system_time.into();
-            local.format("%b %e %H:%M")
+        let user = super::names::user_name(metadata.uid());
+        let group = super::names::group_name(metadata.gid());
+        // Device nodes have no size: the column holds their "major, minor" numbers.
+        let file_type = metadata.file_type();
+        let size = if file_type.is_char_device() || file_type.is_block_device() {
+            let rdev = metadata.rdev() as uucore::libc::dev_t;
+            format!(
+                "{:>3}, {:>3}",
+                uucore::libc::major(rdev),
+                uucore::libc::minor(rdev)
+            )
+        } else {
+            metadata.size().to_string()
         };
+        let last_modified = Self::format_last_modified(metadata);
         let mut path = file_info.path().to_string_lossy().into_owned();
         if file_info.file_type().is_symlink() {
             if let Ok(target) = std::fs::read_link(file_info.path()) {
@@ -162,11 +175,7 @@ impl Ls {
         let hard_links = 0;
         let user = 0;
         let group = 0;
-        let last_modified = {
-            let system_time = metadata.modified().unwrap();
-            let local: DateTime<chrono::Local> = system_time.into();
-            local.format("%b %e %H:%M")
-        };
+        let last_modified = Self::format_last_modified(metadata);
         let path = file_info.path().to_string_lossy();
 
         match writeln!(

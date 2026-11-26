@@ -22,13 +22,21 @@ use walkdir::WalkDir;
 pub struct Config {
     same_file_system: bool,
     depth_first: bool,
+    /// Whether -depth (or -d) was given, rather than implied by -delete.
+    explicit_depth: bool,
+    /// Whether the expression uses -prune.
+    uses_prune: bool,
+    /// Whether the expression uses -delete.
+    uses_delete: bool,
     min_depth: usize,
     max_depth: usize,
     sorted_output: bool,
     help_requested: bool,
     version_requested: bool,
+    debug_help_requested: bool,
     today_start: bool,
     no_leaf_dirs: bool,
+    ignore_readdir_race: bool,
     follow: Follow,
     files0_argument: Option<String>,
     /// Whether the expression uses -ok or -okdir, which prompt on stderr and
@@ -44,16 +52,21 @@ impl Default for Config {
         Self {
             same_file_system: false,
             depth_first: false,
+            explicit_depth: false,
+            uses_prune: false,
+            uses_delete: false,
             min_depth: 0,
             max_depth: usize::MAX,
             sorted_output: false,
             help_requested: false,
             version_requested: false,
+            debug_help_requested: false,
             today_start: false,
             // Directory information and traversal are done by walkdir,
             // and this configuration field will exist as
             // a compatibility item for GNU findutils.
             no_leaf_dirs: false,
+            ignore_readdir_race: false,
             follow: Follow::Never,
             files0_argument: None, // This option exclusively for -files0-from argument.
             interactive_exec: false,
@@ -166,11 +179,22 @@ struct ParsedInfo {
 /// <https://www.gnu.org/software/findutils/manual/html_node/find_html/Starting-points.html>
 struct Files0Paths {
     reader: Box<dyn BufRead>,
+    /// The source as GNU find names it in diagnostics.
+    source: String,
+    /// How many entries have been read, empty ones included.
+    position: usize,
+    /// Set once an empty entry was skipped, which makes find exit with 1.
+    skipped_empty: bool,
 }
 
 impl Files0Paths {
-    fn new(reader: Box<dyn BufRead>) -> Self {
-        Self { reader }
+    fn new(reader: Box<dyn BufRead>, source: String) -> Self {
+        Self {
+            reader,
+            source,
+            position: 0,
+            skipped_empty: false,
+        }
     }
 }
 
@@ -183,7 +207,7 @@ impl Iterator for Files0Paths {
             match self.reader.read_until(0, &mut buffer) {
                 Err(e) => return Some(Err(e.into())),
                 Ok(0) => return None,
-                Ok(_) => {}
+                Ok(_) => self.position += 1,
             }
             // A trailing separator terminates the name; without one we are at
             // EOF and the bytes read are still a name.
@@ -192,13 +216,41 @@ impl Iterator for Files0Paths {
             }
             if buffer.is_empty() {
                 // Skip it so as to avoid a file not found error.
-                eprintln!("{}: invalid zero-length file name", program_name());
+                eprintln!(
+                    "{}: '{}':{}: invalid zero-length file name",
+                    program_name(),
+                    self.source,
+                    self.position
+                );
+                self.skipped_empty = true;
                 continue;
             }
             return Some(String::from_utf8(buffer).map_err(Into::into));
         }
     }
 }
+
+/// The flags of `-D`, as GNU find lists them for `-D help`.
+const DEBUG_FLAGS: &[(&str, &str)] = &[
+    (
+        "exec",
+        "Show diagnostic information relating to -exec, -execdir, -ok and -okdir",
+    ),
+    (
+        "opt",
+        "Show diagnostic information relating to optimisation",
+    ),
+    ("rates", "Indicate how often each predicate succeeded"),
+    ("search", "Navigate the directory tree verbosely"),
+    ("stat", "Trace calls to stat(2) and lstat(2)"),
+    (
+        "time",
+        "Show diagnostic information relating to time-of-day and timestamp comparisons",
+    ),
+    ("tree", "Display the expression tree"),
+    ("all", "Set all of the debug flags (but help)"),
+    ("help", "Explain the various -D options"),
+];
 
 /// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
@@ -210,6 +262,41 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         match args[i] {
             "-O0" | "-O1" | "-O2" | "-O3" => {
                 // GNU find optimization level flag (ignored)
+            }
+            "-D" => {
+                // GNU find's debug flags. The flags are checked but no debug
+                // output is produced.
+                let Some(flags) = args.get(i + 1) else {
+                    return Err(ParseError::new("Missing argument after the -D option.")
+                        .at(i)
+                        .into());
+                };
+                if flags.is_empty() {
+                    return Err(ParseError::new("Empty argument to the -D option.")
+                        .at(i + 1)
+                        .into());
+                }
+                for flag in flags.split(',').filter(|flag| !flag.is_empty()) {
+                    if flag == "help" {
+                        config.debug_help_requested = true;
+                    } else if !DEBUG_FLAGS.iter().any(|(name, _)| *name == flag) {
+                        eprintln!(
+                            "{}: Ignoring unrecognised debug flag '{flag}'",
+                            program_name()
+                        );
+                    }
+                }
+                i += 1;
+                // GNU find lists the flags and exits 0 even if later
+                // arguments would be invalid (`find -D help -bogus`).
+                if config.debug_help_requested {
+                    return Ok(ParsedInfo {
+                        matcher: matchers::build_top_level_matcher(&[], &mut config)?,
+                        paths: vec![],
+                        files0_paths: None,
+                        config,
+                    });
+                }
             }
             "-H" => config.follow = Follow::Roots,
             "-L" => config.follow = Follow::Always,
@@ -284,7 +371,13 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             Box::new(BufReader::new(file))
         };
 
-        files0_paths = Some(Files0Paths::new(reader));
+        let source = if name == "-" {
+            "(standard input)".to_string()
+        } else {
+            name.to_string()
+        };
+
+        files0_paths = Some(Files0Paths::new(reader, source));
         paths.clear();
     }
     Ok(ParsedInfo {
@@ -341,12 +434,29 @@ fn process_dir(
     let mut current_dir: Option<PathBuf> = None;
     while let Some(result) = it.next() {
         match WalkEntry::from_walkdir(result, config.follow) {
+            // With -ignore_readdir_race, an entry that vanished after its
+            // parent directory was read is not an error.  Starting points
+            // (depth 0) are still reported, as GNU find does.
+            Err(err)
+                if config.ignore_readdir_race
+                    && err.is_not_found()
+                    && err.depth().is_some_and(|depth| depth > 0) => {}
             Err(err) => {
                 ret = 1;
-                writeln!(&mut stderr(), "Error: {err}").unwrap();
+                let message = uucore::error::strip_errno(&io::Error::from(&err));
+                match err.path() {
+                    Some(path) => writeln!(
+                        &mut stderr(),
+                        "{}: '{}': {message}",
+                        program_name(),
+                        path.display()
+                    ),
+                    None => writeln!(&mut stderr(), "{}: {message}", program_name()),
+                }
+                .unwrap();
             }
             Ok(entry) => {
-                let mut matcher_io = matchers::MatcherIO::new(deps);
+                let mut matcher_io = matchers::MatcherIO::for_walk(deps, dir.as_ref(), config);
 
                 let new_dir = entry.path().parent().map(std::path::Path::to_path_buf);
                 if new_dir != current_dir {
@@ -365,14 +475,17 @@ fn process_dir(
                     *quit = true;
                     break;
                 }
-                if matcher_io.should_skip_current_dir() {
+                // -prune does nothing under -depth: the directory's contents
+                // have already been visited, and skipping now would skip the
+                // rest of its parent instead.
+                if matcher_io.should_skip_current_dir() && !config.depth_first {
                     it.skip_current_dir();
                 }
             }
         }
     }
 
-    let mut matcher_io = matchers::MatcherIO::new(deps);
+    let mut matcher_io = matchers::MatcherIO::for_walk(deps, dir.as_ref(), config);
     if let Some(dir) = current_dir.take() {
         matcher.finished_dir(dir.as_path(), &mut matcher_io);
     }
@@ -388,6 +501,14 @@ fn process_dir(
 
 fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>> {
     let paths_and_matcher = parse_args(args)?;
+    if paths_and_matcher.config.debug_help_requested {
+        let mut output = deps.get_output().borrow_mut();
+        writeln!(output, "Valid arguments for -D:")?;
+        for (name, help) in DEBUG_FLAGS {
+            writeln!(output, "{name:<10} {help}")?;
+        }
+        return Ok(0);
+    }
     if paths_and_matcher.config.help_requested {
         print_help(deps)?;
         return Ok(0);
@@ -397,8 +518,9 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
         return Ok(0);
     }
 
+    let mut files0_paths = paths_and_matcher.files0_paths;
     let paths: Box<dyn Iterator<Item = Result<String, Box<dyn Error>>>> =
-        match paths_and_matcher.files0_paths {
+        match files0_paths.as_mut() {
             Some(files0_paths) => Box::new(files0_paths),
             None => Box::new(paths_and_matcher.paths.into_iter().map(Ok)),
         };
@@ -421,6 +543,9 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
             break;
         }
     }
+    if ret == 0 && files0_paths.is_some_and(|files0_paths| files0_paths.skipped_empty) {
+        ret = 1;
+    }
 
     Ok(ret)
 }
@@ -437,6 +562,7 @@ Options (before paths):
  -L                       Follow symbolic links
  -H                       Follow symbolic links on the command line only
  -Olevel                  Optimization level (0-3, currently ignored)
+ -D debugopts             Debug flags (checked, currently ignored); -D help lists them
 
 Operators:
  ( EXPR )                 Force precedence
@@ -453,6 +579,8 @@ Positional options:
  -d / -depth              Process directory contents before directory itself
  -mount / -xdev           Do not descend into other file systems
  -noleaf                  Do not optimize by assuming 2+ hard links
+ -ignore_readdir_race     Do not report files that vanish during the search
+ -noignore_readdir_race   Report files that vanish during the search (default)
  -sorted                  Sort directory contents by name (non-standard)
  -regextype type          Set regex syntax (default: emacs)
  -files0-from file        Read starting points from file, NUL-separated
