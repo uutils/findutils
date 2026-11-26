@@ -379,7 +379,7 @@ fn same_device(a: u64, b: u64) -> bool {
     a == b
 }
 
-/// Whether `entry` lives on the same file system as the walk's root `dir`.
+/// Whether `entry` lives on the same file system as the walk's root device.
 #[cfg(unix)]
 fn entry_is_on_same_file_system(entry: &WalkEntry, root_dev: u64) -> bool {
     use std::os::unix::fs::MetadataExt;
@@ -388,6 +388,21 @@ fn entry_is_on_same_file_system(entry: &WalkEntry, root_dev: u64) -> bool {
         // If the stat fails, fall back to the old behaviour.
         Err(_) => true,
     }
+}
+
+/// Whether a matched `-prune` directory should be skipped via
+/// `skip_current_dir()`. Under `-xdev` this is only true when the entry was
+/// actually pushed onto walkdir's stack (i.e. it is on the root file system);
+/// otherwise skipping would pop the parent and drop later siblings (#1045).
+#[cfg(unix)]
+fn should_skip_current_dir(entry: &WalkEntry, config: &Config, root_dev: u64) -> bool {
+    !config.same_file_system || entry_is_on_same_file_system(entry, root_dev)
+}
+
+/// Non-unix fallback: no device concept, so always skip (previous behaviour).
+#[cfg(not(unix))]
+fn should_skip_current_dir(_entry: &WalkEntry, _config: &Config, _root_dev: u64) -> bool {
+    true
 }
 
 fn process_dir(
@@ -418,12 +433,15 @@ fn process_dir(
     let mut ret = 0;
 
     // Under -xdev, fetch the root device once so we can tell whether a pruned
-    // directory was actually pushed onto walkdir's stack (see below).
+    // directory was actually pushed onto walkdir's stack (see below). On
+    // non-unix there is no device concept, so use 0 (unused there).
     #[cfg(unix)]
     let root_dev = {
         use std::os::unix::fs::MetadataExt;
         std::fs::metadata(dir).map_or(0, |m| m.dev())
     };
+    #[cfg(not(unix))]
+    let root_dev = 0u64;
 
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
@@ -477,13 +495,12 @@ fn process_dir(
                 // -prune does nothing under -depth: the contents were already
                 // visited, and skipping now would skip the rest of the parent.
                 //
-                // Under -xdev, walkdir never pushes a mount-point directory (one
-                // on a different fs) onto its stack, so skip_current_dir() would
-                // pop the *parent* and drop later siblings (issue #1045). Only
-                // skip entries that were actually pushed (same fs as root).
+                // Under -xdev, walkdir never pushes a mount-point dir (on another
+                // fs), so skip_current_dir() would pop the *parent* and drop later
+                // siblings (issue #1045); only skip entries actually pushed.
                 if matcher_io.should_skip_current_dir()
                     && !config.depth_first
-                    && (!config.same_file_system || entry_is_on_same_file_system(&entry, root_dev))
+                    && should_skip_current_dir(&entry, config, root_dev)
                 {
                     it.skip_current_dir();
                 }
