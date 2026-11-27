@@ -465,6 +465,89 @@ fn files0_stdin_with_ok_is_rejected() {
     }
 }
 
+/// `-files0-from` can name standard input without the literal `-`
+/// (`/dev/stdin`, `/dev/fd/0`, `/proc/self/fd/0`, or the list file itself when
+/// it is also redirected onto stdin).  GNU find compares the file with standard
+/// input by identity and rejects every such spelling together with -ok/-okdir.
+#[cfg(target_os = "linux")]
+#[test]
+fn files0_from_dev_stdin_rejected_with_ok() {
+    // No pipe_in(): find must reject the combination before reading anything.
+    for action in ["-ok", "-okdir"] {
+        for alias in ["/dev/stdin", "/dev/fd/0", "/proc/self/fd/0"] {
+            ucmd()
+                .args(&["-files0-from", alias, action, "echo", "{}", ";"])
+                .fails()
+                .code_is(1)
+                .no_stdout()
+                .stderr_contains(format!(
+                    "option -files0-from: standard input must not refer to the same \
+                     file when combined with -ok, -okdir: '{alias}'"
+                ));
+        }
+    }
+}
+
+/// The same-file case: the list is given by name and also redirected onto stdin
+/// (`find -files0-from list -ok ... < list`).  GNU find rejects it by identity.
+#[cfg(target_os = "linux")]
+#[test]
+fn files0_from_same_file_as_stdin_rejected_with_ok() {
+    let temp_dir = Builder::new()
+        .prefix("find_files0_same_")
+        .tempdir()
+        .unwrap();
+    let list = temp_dir.path().join("cand.list");
+    fs::write(&list, b"y\n\0test_data\0").unwrap();
+
+    ucmd()
+        .args(&[
+            "-files0-from",
+            &list.display().to_string(),
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        .set_stdin(File::open(&list).unwrap())
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_contains(
+            "option -files0-from: standard input must not refer to the same file \
+             when combined with -ok, -okdir",
+        );
+}
+
+/// A `-files0-from` name that does not exist is not standard input, so the
+/// interactive-exec guard must not fire; find falls through to the normal
+/// "cannot open" diagnostic instead.  This exercises the metadata-error branch
+/// of the stdin-identity check.
+#[cfg(target_os = "linux")]
+#[test]
+fn files0_from_missing_file_with_ok_reports_open_error() {
+    let temp_dir = Builder::new()
+        .prefix("find_files0_missing_")
+        .tempdir()
+        .unwrap();
+    let missing = temp_dir.path().join("does_not_exist.list");
+
+    ucmd()
+        .args(&[
+            "-files0-from",
+            &missing.display().to_string(),
+            "-ok",
+            "echo",
+            "{}",
+            ";",
+        ])
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_contains("cannot open '")
+        .stderr_contains("for reading");
+}
+
 /// Reading the starting points from a file leaves stdin free for the prompts,
 /// so the combination is allowed.
 #[test]

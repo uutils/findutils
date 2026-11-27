@@ -263,6 +263,36 @@ const DEBUG_FLAGS: &[(&str, &str)] = &[
     ("help", "Explain the various -D options"),
 ];
 
+/// Whether the file named by `-files0-from` is the same file as standard input.
+///
+/// GNU find rejects `-files0-from <file>` together with `-ok`/`-okdir` whenever
+/// `<file>` refers to the same file as standard input, however it is spelled
+/// (`/dev/stdin`, `/dev/fd/0`, `/proc/self/fd/0`, or the list file itself when
+/// it is also redirected onto stdin).  It decides this by comparing the file
+/// with standard input by identity, which we mirror by comparing the device and
+/// inode numbers of `name` with those of file descriptor 0.
+#[cfg(unix)]
+fn refers_to_stdin(name: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    // `/dev/stdin` is a symlink to `/proc/self/fd/0`, and `metadata()` follows
+    // symlinks, so statting it resolves to the actual file (or pipe/tty) that
+    // file descriptor 0 refers to.  Comparing by device/inode therefore catches
+    // a redirected regular file (`find ... < list`) as well as every `/dev/stdin`,
+    // `/dev/fd/0`, `/proc/self/fd/0` alias.  If either name cannot be stat'd
+    // (e.g. the `-files0-from` file is missing) it is not standard input.
+    let (Ok(file), Ok(stdin)) = (std::fs::metadata(name), std::fs::metadata("/dev/stdin")) else {
+        return false;
+    };
+    file.dev() == stdin.dev() && file.ino() == stdin.ino()
+}
+
+/// Non-Unix fallback: only the literal `-` is recognised as standard input.
+#[cfg(not(unix))]
+fn refers_to_stdin(_name: &str) -> bool {
+    false
+}
+
 /// Function to generate a `ParsedInfo` from the strings supplied on the command-line.
 fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     let mut paths = vec![];
@@ -355,11 +385,24 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         // Both would read stdin, so the starting points and the answers to
         // the prompts would compete for the same bytes.  GNU find rejects
         // the combination rather than producing arbitrary results.
-        if name == "-" && config.interactive_exec {
-            return Err(From::from(
-                "option -files0-from reading from standard input cannot be combined \
-                 with -ok, -okdir",
-            ));
+        if config.interactive_exec {
+            if name == "-" {
+                return Err(From::from(
+                    "option -files0-from reading from standard input cannot be combined \
+                     with -ok, -okdir",
+                ));
+            }
+            // `-files0-from` can name standard input without using the literal
+            // `-`: `/dev/stdin`, `/dev/fd/0`, `/proc/self/fd/0`, or the list
+            // file itself when it is also redirected onto stdin (`< list`).  GNU
+            // find compares the file with standard input by identity and rejects
+            // every such spelling, so match that by comparing device/inode.
+            if refers_to_stdin(name) {
+                return Err(From::from(format!(
+                    "option -files0-from: standard input must not refer to the same \
+                     file when combined with -ok, -okdir: '{name}'",
+                )));
+            }
         }
         files0_paths = Some(Files0Paths::open(name)?);
         paths.clear();
@@ -701,6 +744,28 @@ mod tests {
     /// Do nothing equivalent of the above for non-windows systems.
     pub fn fix_up_slashes(path: &str) -> String {
         path.to_string()
+    }
+
+    /// Unit coverage for the stdin-identity helper that backs the
+    /// `-files0-from <stdin>` + `-ok`/`-okdir` rejection.  Exercises the
+    /// matching branch (a name that resolves to the same file as fd 0), the
+    /// non-matching branch (an unrelated regular file), and the metadata-error
+    /// branch (a name that does not exist).
+    #[cfg(unix)]
+    #[test]
+    fn refers_to_stdin_matches_by_identity() {
+        // A missing file cannot be standard input -> metadata-error branch.
+        assert!(!super::refers_to_stdin("/nonexistent/jarvis-no-such-file"));
+
+        // An ordinary existing file is not standard input -> non-matching branch.
+        let dir = Builder::new().prefix("refers_stdin_").tempdir().unwrap();
+        let regular = dir.path().join("regular.list");
+        fs::write(&regular, b"x\0").unwrap();
+        assert!(!super::refers_to_stdin(&regular.display().to_string()));
+
+        // `/dev/stdin` (a symlink to fd 0) resolves to the same file as fd 0 ->
+        // matching branch.  This is exactly what the interactive-exec guard uses.
+        assert!(super::refers_to_stdin("/dev/stdin"));
     }
 
     /// A struct that implements Dependencies, but uses faked implementations,
