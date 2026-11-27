@@ -168,6 +168,18 @@ fn xargs_max_lines() {
 }
 
 #[test]
+fn xargs_max_lines_l_value_must_be_attached() {
+    // `-l` only takes an attached value, so `echo` is the command here.
+    ucmd()
+        .args(&["-l", "echo"])
+        .pipe_in("ab cd\nef\n")
+        .succeeds()
+        .stdout_only("ab cd\nef\n");
+    // `-l=2` passes "=2" as the value, which is not a number.
+    ucmd().arg("-l=2").pipe_in("ab\n").fails();
+}
+
+#[test]
 fn xargs_max_args_lines_conflict() {
     // -n2 is last, so it should be given priority.
     ucmd()
@@ -766,14 +778,21 @@ fn xargs_zero_lines() {
 
 #[test]
 fn xargs_replace() {
+    // Like GNU, an attached `=` is part of the replace string.
     ucmd()
         .args(&["-i={}", "echo", "{} bar"])
         .pipe_in("foo")
         .succeeds()
-        .stdout_contains("foo bar");
+        .stdout_only("{} bar\n");
 
     ucmd()
-        .args(&["-i=_", "echo", "_ bar"])
+        .args(&["-i={}", "echo", "={} bar"])
+        .pipe_in("foo")
+        .succeeds()
+        .stdout_only("foo bar\n");
+
+    ucmd()
+        .args(&["-i_", "echo", "_ bar"])
         .pipe_in("foo")
         .succeeds()
         .stdout_contains("foo bar");
@@ -785,7 +804,7 @@ fn xargs_replace() {
         .stdout_contains("foo foo bar");
 
     ucmd()
-        .args(&["-i=_", "echo", "_ _ bar"])
+        .args(&["-i_", "echo", "_ _ bar"])
         .pipe_in("foo")
         .succeeds()
         .stdout_contains("foo foo bar");
