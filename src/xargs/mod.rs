@@ -613,6 +613,9 @@ impl CommandBuilder<'_> {
 
 trait ArgumentReader {
     fn next(&mut self) -> io::Result<Option<Argument>>;
+    fn buffered_bytes(&self) -> usize {
+        0
+    }
 }
 
 /// Buffer chunk size for reading input arguments (8 KiB accommodates `/dev/kmsg` max record length and matches `BufReader`'s default).
@@ -709,6 +712,11 @@ impl<R> ArgumentReader for WhitespaceDelimitedArgumentReader<R>
 where
     R: Read,
 {
+    #[cfg(unix)]
+    fn buffered_bytes(&self) -> usize {
+        self.pending.len()
+    }
+
     fn next(&mut self) -> io::Result<Option<Argument>> {
         enum Escape {
             Slash,
@@ -829,6 +837,11 @@ impl<R> ArgumentReader for ByteDelimitedArgumentReader<R>
 where
     R: Read,
 {
+    #[cfg(unix)]
+    fn buffered_bytes(&self) -> usize {
+        self.rd.buffer().len()
+    }
+
     fn next(&mut self) -> io::Result<Option<Argument>> {
         Ok(loop {
             let mut buf = vec![];
@@ -873,6 +886,11 @@ impl EofArgumentReader {
 }
 
 impl ArgumentReader for EofArgumentReader {
+    #[cfg(unix)]
+    fn buffered_bytes(&self) -> usize {
+        self.reader.buffered_bytes()
+    }
+
     fn next(&mut self) -> io::Result<Option<Argument>> {
         Ok(if self.eof_found {
             None
@@ -959,7 +977,7 @@ impl InputProcessOptions {
 
 fn process_input(
     builder_options: &CommandBuilderOptions,
-    mut args: Box<dyn ArgumentReader>,
+    args: &mut dyn ArgumentReader,
     options: &InputProcessOptions,
 ) -> Result<CommandResult, XargsError> {
     let mut current_builder = CommandBuilder::new(builder_options)?;
@@ -1515,7 +1533,7 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
 
     let result = process_input(
         &builder_options,
-        args,
+        &mut *args,
         &InputProcessOptions::new(
             options.exit_if_pass_char_limit,
             options.max_args,
@@ -1523,6 +1541,16 @@ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
             options.no_run_if_empty || options.replace.is_some(),
         ),
     )?;
+
+    #[cfg(unix)]
+    if options.arg_file.is_none() {
+        let pending = args.buffered_bytes();
+        if pending > 0 {
+            use nix::unistd::{lseek, Whence};
+            let _ = lseek(io::stdin(), -(pending as i64), Whence::SeekCur);
+        }
+    }
+
     Ok(result)
 }
 
