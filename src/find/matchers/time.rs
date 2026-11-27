@@ -22,11 +22,13 @@ fn get_time(matcher_io: &mut MatcherIO, today_start: bool) -> SystemTime {
         jiff::Timestamp::try_from(now)
             .ok()
             .and_then(|ts| {
-                ts.to_zoned(jiff::tz::TimeZone::system())
+                ts.to_zoned_datetime(jiff::tz::TimeZone::system())
                     .start_of_day()
                     .ok()
             })
-            .map_or(now, |midnight| SystemTime::from(midnight.timestamp()))
+            .map_or(now, |midnight| {
+                SystemTime::try_from(midnight.timestamp()).unwrap_or(now)
+            })
     } else {
         now
     }
@@ -686,7 +688,7 @@ mod tests {
 
         let midnight = jiff::Timestamp::try_from(midnight)
             .unwrap()
-            .to_zoned(jiff::tz::TimeZone::system());
+            .to_zoned_datetime(jiff::tz::TimeZone::system());
         assert_eq!(midnight.time(), jiff::civil::time(0, 0, 0, 0));
     }
 

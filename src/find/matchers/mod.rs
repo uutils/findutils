@@ -2184,7 +2184,7 @@ mod tests {
         let local = |y, m, d, h, min, sec| {
             jiff::civil::date(y, m, d)
                 .at(h, min, sec, 0)
-                .to_zoned(jiff::tz::TimeZone::system())
+                .to_zoned_datetime(jiff::tz::TimeZone::system())
                 .unwrap()
                 .timestamp()
                 .as_millisecond()
@@ -2200,10 +2200,10 @@ mod tests {
         );
 
         // An empty string is the start of today.
-        let today = jiff::Zoned::now().date();
+        let today = jiff::ZonedDateTime::now().date();
         let expected = today
             .at(0, 0, 0, 0)
-            .to_zoned(jiff::tz::TimeZone::system())
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
             .unwrap()
             .timestamp()
             .as_millisecond();
