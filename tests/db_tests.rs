@@ -67,13 +67,99 @@ fn test_locate_non_existing() {
         .failure();
 }
 
-#[test]
-fn test_locate_statistics() {
-    Command::cargo_bin("locate")
+#[rstest]
+#[case::plain(&[])]
+#[case::regex(&["--regex"])]
+#[case::limit_is_ignored(&["--limit=1"])]
+fn test_locate_statistics_without_pattern(#[case] extra: &[&str]) {
+    let mut args = vec!["--statistics", DB_FLAG];
+    args.extend(extra);
+    let output = Command::cargo_bin("locate")
         .expect("couldn't find locate binary")
-        .args(["", "--statistics", DB_FLAG])
-        .assert()
-        .success();
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("All Filenames: "), "{stdout}");
+    assert!(!stdout.contains("Matching Filenames"), "{stdout}");
+    let count: usize = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("All Filenames: "))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(count > 1, "{stdout}");
+}
+
+#[rstest]
+#[case::existing("--existing")]
+#[case::non_existing("--non-existing")]
+fn test_locate_statistics_without_pattern_existence(#[case] flag: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("db");
+    let present = dir.path().display().to_string();
+    let missing = dir.path().join("missing").display().to_string();
+    let mut contents = b"\0LOCATE02\0\0".to_vec();
+    for path in [&present, &missing] {
+        contents.extend_from_slice(path.as_bytes());
+        contents.extend_from_slice(b"\0\0");
+    }
+    contents.pop();
+    std::fs::write(&db, contents).unwrap();
+    let output = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args([
+            "--statistics",
+            flag,
+            &format!("--database={}", db.display()),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Matching Filenames: 1\n"), "{stdout}");
+    assert!(!stdout.contains("All Filenames"), "{stdout}");
+}
+
+#[test]
+fn test_locate_statistics_with_pattern_reports_matches() {
+    let output = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["abbbc", "--statistics", DB_FLAG])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Matching Filenames: "), "{stdout}");
+    assert!(!stdout.contains("All Filenames"), "{stdout}");
+}
+
+#[test]
+fn test_locate_statistics_without_pattern_prints_no_entries() {
+    let output = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["--statistics", "--print", DB_FLAG])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("abbbc"), "{stdout}");
+}
+
+#[test]
+fn test_locate_statistics_without_pattern_counts_glob_metachars() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("db");
+    std::fs::write(&db, b"\0LOCATE02\0\0/a*b\0\0/foo\0").unwrap();
+    let output = Command::cargo_bin("locate")
+        .expect("couldn't find locate binary")
+        .args(["--statistics", &format!("--database={}", db.display())])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("All Filenames: 2\n"), "{stdout}");
 }
 
 #[rstest]
