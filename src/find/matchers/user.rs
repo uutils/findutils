@@ -104,7 +104,9 @@ mod tests {
         );
 
         // Testing a non-existent group name
-        let time_string = jiff::Zoned::now().strftime("%Y%m%d%H%M%S").to_string();
+        let time_string = jiff::ZonedDateTime::now()
+            .strftime("%Y%m%d%H%M%S")
+            .to_string();
         let matcher = UserMatcher::from_user_name(time_string.as_str());
         assert!(
             matcher.is_none(),

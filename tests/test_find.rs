@@ -2586,7 +2586,7 @@ fn find_ls_uses_local_time() {
     // POSIX TZ "UTC-5" is five hours east of UTC.
     let expected = jiff::Timestamp::from_second(secs)
         .unwrap()
-        .to_zoned(jiff::tz::TimeZone::fixed(jiff::tz::offset(5)))
+        .to_zoned_datetime(jiff::tz::TimeZone::fixed(jiff::tz::offset(5)))
         .strftime("%b %e %H:%M")
         .to_string();
     let result = ucmd()

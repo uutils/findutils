@@ -60,7 +60,8 @@ impl TimeFormat {
                 format!("{seconds}.{fraction:09}0")
             }
             Self::Strftime(format) => {
-                let zoned = jiff::Timestamp::try_from(time)?.to_zoned(jiff::tz::TimeZone::system());
+                let zoned = jiff::Timestamp::try_from(time)?
+                    .to_zoned_datetime(jiff::tz::TimeZone::system());
                 let config = jiff::fmt::strtime::Config::new()
                     .custom(jiff::fmt::strtime::PosixCustom::new());
                 jiff::fmt::strtime::BrokenDownTime::from(&zoned)
@@ -271,7 +272,7 @@ impl FormatStringParser<'_> {
             'T' | 'X' => Ok(TimeFormat::Strftime("%H:%M:%S.%9f0".to_string())),
             c => {
                 let format = format!("%{c}");
-                let dummy = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
+                let dummy = jiff::Timestamp::UNIX_EPOCH.to_zoned_datetime(jiff::tz::TimeZone::UTC);
                 if jiff::fmt::strtime::format(&format, &dummy).is_err() {
                     return Err(format!("Invalid time specifier: %{first}{c}").into());
                 }
@@ -1679,7 +1680,7 @@ mod tests {
 
         let mtime = jiff::civil::date(2000, 1, 15)
             .at(9, 30, 21, 2_000_000)
-            .to_zoned(jiff::tz::TimeZone::system())
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
             .unwrap();
         filetime::set_file_mtime(
             &file_path,
@@ -1714,7 +1715,7 @@ mod tests {
 
         let mtime = jiff::civil::date(2000, 1, 2)
             .at(9, 30, 21, 0)
-            .to_zoned(jiff::tz::TimeZone::system())
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
             .unwrap();
         filetime::set_file_mtime(
             &file_path,
@@ -1756,7 +1757,7 @@ mod tests {
         ] {
             let mtime = jiff::civil::date(2000, 1, 15)
                 .at(9, 30, 21, nanos)
-                .to_zoned(jiff::tz::TimeZone::system())
+                .to_zoned_datetime(jiff::tz::TimeZone::system())
                 .unwrap();
             filetime::set_file_mtime(
                 &file_path,

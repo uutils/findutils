@@ -132,7 +132,7 @@ impl Statistics {
         if let Ok(metadata) = fs::metadata(&dbreader.path) {
             if let Ok(time) = metadata.modified() {
                 jiff::Timestamp::try_from(time).ok().map_or(Ok(()), |ts| {
-                    let time = ts.to_zoned(jiff::tz::TimeZone::system());
+                    let time = ts.to_zoned_datetime(jiff::tz::TimeZone::system());
                     writeln!(
                         out,
                         "Database was last modified at {}",
@@ -771,7 +771,7 @@ mod tests {
 
         let mtime = jiff::civil::date(2000, 1, 15)
             .at(9, 30, 21, 2_000_000)
-            .to_zoned(jiff::tz::TimeZone::system())
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
             .unwrap();
         filetime::set_file_mtime(
             &db,

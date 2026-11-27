@@ -48,7 +48,7 @@ impl Ls {
             .ok()
             .and_then(|t| jiff::Timestamp::try_from(t).ok())
             .map(|ts| {
-                ts.to_zoned(jiff::tz::TimeZone::system())
+                ts.to_zoned_datetime(jiff::tz::TimeZone::system())
                     .strftime("%b %e %H:%M")
                     .to_string()
             })
