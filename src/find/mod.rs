@@ -462,8 +462,7 @@ fn process_dir(
     if let Some(dir) = current_dir.take() {
         matcher.finished_dir(dir.as_path(), &mut matcher_io);
     }
-    matcher.finished(&mut matcher_io);
-    // This is implemented for exec +.
+    // This is implemented for -execdir +.
     match matcher_io.exit_code() {
         0 => {}
         code => ret = code,
@@ -500,8 +499,15 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
 
     let mut ret = 0;
     let mut quit = false;
+    let mut path_err = None;
     for path in paths {
-        let path = path?;
+        let path = match path {
+            Ok(path) => path,
+            Err(err) => {
+                path_err = Some(err);
+                break;
+            }
+        };
         let dir_ret = process_dir(
             &path,
             &paths_and_matcher.config,
@@ -518,6 +524,20 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
     }
     if ret == 0 && files0_paths.is_some_and(|files0_paths| files0_paths.skipped_empty) {
         ret = 1;
+    }
+
+    // Like GNU find, -exec ... + collects arguments across all the starting
+    // points, so the pending batch is only run once every path is done (or
+    // find stops early).
+    let mut matcher_io = matchers::MatcherIO::new(deps);
+    paths_and_matcher.matcher.finished(&mut matcher_io);
+    match matcher_io.exit_code() {
+        0 => {}
+        code => ret = code,
+    }
+
+    if let Some(err) = path_err {
+        return Err(err);
     }
 
     Ok(ret)
