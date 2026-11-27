@@ -2569,6 +2569,65 @@ fn find_ls() {
 }
 
 #[test]
+#[cfg(unix)]
+fn find_ls_reports_vanished_file_and_continues() {
+    let temp_dir = Builder::new().prefix("find_ls_vanish_").tempdir().unwrap();
+    File::create(temp_dir.path().join("a")).expect("create test file");
+    File::create(temp_dir.path().join("b")).expect("create test file");
+
+    // -exec removes the files before -ls needs their metadata. The run must
+    // report each error like "find: 'path': No such file or directory", set
+    // exit code 1, and carry on rather than panicking.
+    let result = ucmd()
+        .args(&[
+            temp_dir.path().to_str().unwrap(),
+            "-type",
+            "f",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-ls",
+        ])
+        .fails_with_code(1);
+    let stderr = result.stderr_str();
+    assert!(
+        stderr.contains("'a': No such file or directory"),
+        "{stderr:?}"
+    );
+    assert!(
+        stderr.contains("'b': No such file or directory"),
+        "{stderr:?}"
+    );
+    assert!(!stderr.contains("os error"), "{stderr:?}");
+}
+
+#[test]
+#[cfg(unix)]
+fn find_fls_reports_vanished_file_and_continues() {
+    let temp_dir = Builder::new().prefix("find_fls_vanish_").tempdir().unwrap();
+    File::create(temp_dir.path().join("a")).expect("create test file");
+    let out_path = temp_dir.path().join("out");
+
+    // -fls uses the stderr-reporting path for write errors; the vanished
+    // entry must still be reported without aborting.
+    ucmd()
+        .args(&[
+            temp_dir.path().to_str().unwrap(),
+            "-type",
+            "f",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-fls",
+            out_path.to_str().unwrap(),
+        ])
+        .fails_with_code(1)
+        .stderr_contains("'a': No such file or directory");
+}
+
+#[test]
 #[cfg(unix)] // TZ only reliably selects the local time zone on unix
 fn find_ls_uses_local_time() {
     let temp_dir = Builder::new().prefix("find_ls_time_").tempdir().unwrap();
