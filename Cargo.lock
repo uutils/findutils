@@ -495,7 +495,7 @@ dependencies = [
  "faccess",
  "filetime",
  "itertools 0.15.0",
- "jiff 0.2.41",
+ "jiff 1.0.3",
  "nix 0.32.0",
  "onig",
  "parse_datetime",
