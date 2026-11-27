@@ -6,7 +6,7 @@ use std::{
     cell::RefCell,
     fmt::Display,
     fs::OpenOptions,
-    io::{stderr, BufRead, BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Write, stderr},
     path::PathBuf,
     rc::Rc,
     str::FromStr,
@@ -14,12 +14,13 @@ use std::{
 };
 
 use clap::{
+    Arg, ArgAction, ArgMatches, Command,
     builder::{PossibleValuesParser, TypedValueParser},
-    crate_version, value_parser, Arg, ArgAction, ArgMatches, Command,
+    crate_version, value_parser,
 };
-use uucore::error::{strip_errno, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 
-use crate::find::{find_main, Dependencies};
+use crate::find::{Dependencies, find_main};
 
 pub use crate::locate::DEFAULT_DB_PATH;
 
