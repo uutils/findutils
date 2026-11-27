@@ -6,7 +6,7 @@
 
 use std::{error::Error, fmt, str::FromStr};
 
-use onig::{Regex, RegexOptions, Syntax};
+use onig::{Regex, RegexOptions, Syntax, SyntaxBehavior};
 
 use super::{Matcher, MatcherIO, WalkEntry};
 
@@ -85,22 +85,31 @@ impl RegexMatcher {
         pattern: &str,
         ignore_case: bool,
     ) -> Result<Self, Box<dyn Error>> {
+        // GNU find matches the whole path, including embedded newlines. Onig's
+        // grep syntax excludes newline from negated character classes, so turn
+        // that behavior off while keeping grep's other semantics intact.
+        let mut grep_syntax = Syntax::grep().clone();
+        grep_syntax.disable_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_NOT_NEWLINE_IN_NEGATIVE_CC);
         let syntax = match regex_type {
             RegexType::Emacs => Syntax::emacs(),
-            RegexType::Grep => Syntax::grep(),
+            RegexType::Grep => &grep_syntax,
             RegexType::PosixBasic => Syntax::posix_basic(),
             RegexType::PosixExtended => Syntax::posix_extended(),
         };
 
-        let regex = Regex::with_options(
-            pattern,
-            if ignore_case {
-                RegexOptions::REGEX_OPTION_IGNORECASE
-            } else {
-                RegexOptions::REGEX_OPTION_NONE
-            },
-            syntax,
-        )?;
+        let mut options = if ignore_case {
+            RegexOptions::REGEX_OPTION_IGNORECASE
+        } else {
+            RegexOptions::REGEX_OPTION_NONE
+        };
+        // GNU's "grep" regex type matches newlines in paths. Oniguruma's grep
+        // syntax is line-oriented by default, so let '.' match newline and
+        // clear SINGLELINE (so negated brackets also match newline).
+        if regex_type == RegexType::Grep {
+            options.insert(RegexOptions::REGEX_OPTION_MULTILINE);
+            options.insert(RegexOptions::REGEX_OPTION_NEGATE_SINGLELINE);
+        }
+        let regex = Regex::with_options(pattern, options, syntax)?;
         Ok(Self { regex })
     }
 }
