@@ -497,6 +497,7 @@ dependencies = [
  "nix 0.32.0",
  "onig",
  "parse_datetime",
+ "rayon",
  "regex",
  "rstest",
  "rustix",
