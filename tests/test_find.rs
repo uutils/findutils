@@ -2751,6 +2751,160 @@ fn find_ls_unmapped_owner_renders_numeric_id() {
         .stdout_contains(unmapped.to_string());
 }
 
+// Regression test for uutils/findutils#1044: `-ls` / `-fls` used to panic
+// (abort, exit 134) when an entry could no longer be stat'ed — e.g. it was
+// removed between the directory read and `-ls`. GNU find prints one diagnostic
+// for that entry, sets the exit status to 1 and carries on. We must do the
+// same instead of aborting the whole run.
+#[test]
+#[cfg(unix)]
+fn find_ls_reports_vanished_file_and_continues() {
+    let temp_dir = Builder::new().prefix("find_ls_vanish_").tempdir().unwrap();
+    let dir = temp_dir.path().join("t");
+    fs::create_dir(&dir).unwrap();
+    File::create(dir.join("a")).unwrap();
+    File::create(dir.join("b")).unwrap();
+
+    // -exec rm removes each file before -ls stats it. Both files vanish, so
+    // GNU find emits exactly one diagnostic per file (order is unspecified) and
+    // exits 1. Assert the exact set of lines, not merely that stderr is
+    // non-empty.
+    let result = ucmd()
+        .arg(&dir)
+        .args(&["-type", "f", "-exec", "rm", "{}", ";", "-ls"])
+        .fails_with_code(1);
+    result.no_stdout();
+
+    let mut lines: Vec<String> = result
+        .stderr_str()
+        .lines()
+        .map(std::string::ToString::to_string)
+        .collect();
+    lines.sort();
+    let mut expected = vec![
+        format!(
+            "find: '{}': No such file or directory",
+            dir.join("a").display()
+        ),
+        format!(
+            "find: '{}': No such file or directory",
+            dir.join("b").display()
+        ),
+    ];
+    expected.sort();
+    assert_eq!(lines, expected);
+}
+
+// With -ignore_readdir_race a file that vanished after its name was read from
+// the directory is not an error, so -ls must stay silent and still exit 0.
+#[test]
+#[cfg(unix)]
+fn find_ls_vanished_file_silent_with_ignore_readdir_race() {
+    let temp_dir = Builder::new()
+        .prefix("find_ls_vanish_race_")
+        .tempdir()
+        .unwrap();
+    let dir = temp_dir.path().join("t");
+    fs::create_dir(&dir).unwrap();
+    File::create(dir.join("a")).unwrap();
+
+    ucmd()
+        .arg(&dir)
+        .args(&[
+            "-ignore_readdir_race",
+            "-type",
+            "f",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-ls",
+        ])
+        .succeeds()
+        .no_output();
+}
+
+// Regression test for uutils/findutils#1044 on the -fls path: a file that
+// vanishes before -fls stats it must produce one `find: '...'` diagnostic per
+// file (not a panic) and exit 1, while still creating the output file.
+#[test]
+#[cfg(unix)]
+fn find_fls_reports_vanished_file_and_continues() {
+    let temp_dir = Builder::new().prefix("find_fls_vanish_").tempdir().unwrap();
+    let dir = temp_dir.path().join("t");
+    fs::create_dir(&dir).unwrap();
+    File::create(dir.join("a")).unwrap();
+    File::create(dir.join("b")).unwrap();
+    let out_path = temp_dir.path().join("out.txt");
+
+    // -exec rm removes each file before -fls stats it. Both files vanish, so
+    // GNU find emits exactly one diagnostic per file (order is unspecified) and
+    // exits 1. Assert the exact set of lines, not merely that stderr is
+    // non-empty.
+    let result = ucmd()
+        .arg(&dir)
+        .args(&["-type", "f", "-exec", "rm", "{}", ";", "-fls"])
+        .arg(&out_path)
+        .fails_with_code(1);
+    result.no_stdout();
+
+    let mut lines: Vec<String> = result
+        .stderr_str()
+        .lines()
+        .map(std::string::ToString::to_string)
+        .collect();
+    lines.sort();
+    let mut expected = vec![
+        format!(
+            "find: '{}': No such file or directory",
+            dir.join("a").display()
+        ),
+        format!(
+            "find: '{}': No such file or directory",
+            dir.join("b").display()
+        ),
+    ];
+    expected.sort();
+    assert_eq!(lines, expected);
+
+    // The -fls output file is still created (empty, since both entries failed).
+    assert!(
+        out_path.exists(),
+        "the -fls output file should still be created"
+    );
+}
+
+// With -ignore_readdir_race a file that vanished after its name was read from
+// the directory is not an error, so -fls must stay silent and still exit 0.
+#[test]
+#[cfg(unix)]
+fn find_fls_vanished_file_silent_with_ignore_readdir_race() {
+    let temp_dir = Builder::new()
+        .prefix("find_fls_vanish_race_")
+        .tempdir()
+        .unwrap();
+    let dir = temp_dir.path().join("t");
+    fs::create_dir(&dir).unwrap();
+    File::create(dir.join("a")).unwrap();
+    let out_path = temp_dir.path().join("out.txt");
+
+    ucmd()
+        .arg(&dir)
+        .args(&[
+            "-ignore_readdir_race",
+            "-type",
+            "f",
+            "-exec",
+            "rm",
+            "{}",
+            ";",
+            "-fls",
+        ])
+        .arg(&out_path)
+        .succeeds()
+        .no_output();
+}
+
 #[test]
 #[cfg(unix)]
 fn find_slashes() {

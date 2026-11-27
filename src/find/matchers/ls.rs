@@ -77,7 +77,16 @@ impl Ls {
     ) {
         use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
-        let metadata = file_info.metadata().unwrap();
+        let metadata = match file_info.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                // The entry could not be stat'ed (e.g. it was removed between
+                // the directory read and now). Report it like GNU find and
+                // carry on instead of aborting the whole run.
+                super::report_stat_failure(&e, file_info.path(), matcher_io);
+                return;
+            }
+        };
 
         let inode_number = metadata.ino();
         // st_blocks counts 512-byte units; -ls shows 1 KiB ones
@@ -148,7 +157,16 @@ impl Ls {
     ) {
         // Non-Unix targets (Windows, wasm, ...) don't expose inode, owner,
         // group or Unix permission bits, so those columns are left blank.
-        let metadata = file_info.metadata().unwrap();
+        let metadata = match file_info.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                // The entry could not be stat'ed (e.g. it was removed between
+                // the directory read and now). Report it like GNU find and
+                // carry on instead of aborting the whole run.
+                super::report_stat_failure(&e, file_info.path(), matcher_io);
+                return;
+            }
+        };
 
         let inode_number = 0;
         let size = metadata.len();
