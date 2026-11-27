@@ -188,24 +188,13 @@ struct Files0Paths {
 }
 
 impl Files0Paths {
-    /// Open the source named by `-files0-from`; `-` means standard input.
-    fn open(name: &str) -> Result<Self, Box<dyn Error>> {
-        let (reader, source): (Box<dyn BufRead>, _) = if name == "-" {
-            (
-                Box::new(BufReader::new(io::stdin())),
-                "(standard input)".to_string(),
-            )
-        } else {
-            let file = std::fs::File::open(name)
-                .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
-            (Box::new(BufReader::new(file)), name.to_string())
-        };
-        Ok(Self {
+    fn new(reader: Box<dyn BufRead>, source: String) -> Self {
+        Self {
             reader,
             source,
             position: 0,
             skipped_empty: false,
-        })
+        }
     }
 }
 
@@ -352,16 +341,42 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                 program_name()
             )));
         }
-        // Both would read stdin, so the starting points and the answers to
-        // the prompts would compete for the same bytes.  GNU find rejects
-        // the combination rather than producing arbitrary results.
-        if name == "-" && config.interactive_exec {
-            return Err(From::from(
-                "option -files0-from reading from standard input cannot be combined \
-                 with -ok, -okdir",
-            ));
-        }
-        files0_paths = Some(Files0Paths::open(name)?);
+        let (reader, source): (Box<dyn BufRead>, String) = if name == "-" {
+            // Both would read stdin, so the starting points and the answers to
+            // the prompts would compete for the same bytes.  GNU find rejects
+            // the combination rather than producing arbitrary results.
+            if config.interactive_exec {
+                return Err(From::from(
+                    "option -files0-from reading from standard input cannot be combined \
+             with -ok, -okdir",
+                ));
+            }
+
+            (
+                Box::new(BufReader::new(io::stdin())),
+                "(standard input)".to_string(),
+            )
+        } else {
+            let file = std::fs::File::open(name)
+                .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
+
+            #[cfg(unix)]
+            if config.interactive_exec && is_file_stdin(&file)? {
+                return Err(format!(
+                    "when -ok or -okdir is in use, the option \
+             -files0-from cannot also read from standard input, but the \
+             file ('{}') used for -files0-from appears to refer to the same \
+             file as the standard input",
+                    name
+                )
+                .into());
+            }
+
+            (Box::new(BufReader::new(file)), name.clone())
+        };
+
+        files0_paths = Some(Files0Paths::new(reader, source));
+
         paths.clear();
     }
     Ok(ParsedInfo {
@@ -370,6 +385,17 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
         files0_paths,
         config,
     })
+}
+
+#[cfg(unix)]
+fn is_file_stdin(file: &std::fs::File) -> std::io::Result<bool> {
+    let file_metadata = nix::sys::stat::fstat(file)?;
+    let Ok(stdin_metadata) = nix::sys::stat::fstat(io::stdin()) else {
+        return Ok(false);
+    };
+
+    Ok(file_metadata.st_dev == stdin_metadata.st_dev
+        && file_metadata.st_ino == stdin_metadata.st_ino)
 }
 
 fn process_dir(
