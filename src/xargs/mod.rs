@@ -1198,8 +1198,8 @@ fn value_required(arg: &Arg) -> Option<bool> {
     (range.max_values() > 0).then(|| range.min_values() > 0)
 }
 
-/// Rewrite `-eVALUE` to `-e=VALUE` for clap's `require_equals`.
-/// Stops at the command, like GNU getopt.
+/// Rewrite `-eVALUE` to `-e=VALUE`, and `-lVALUE` to `-l=VALUE`, for clap's
+/// `require_equals`. Stops at the command, like GNU getopt.
 fn attach_eof_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
     let mut rest = args.iter();
@@ -1230,7 +1230,9 @@ fn attach_eof_short_equals(command: &clap::Command, args: &[&str]) -> Vec<String
                     None => continue,
                     Some(true) => next_is_value = value.is_empty(),
                     Some(false) => {
-                        if option.get_id() == options::EOF_E && !value.is_empty() {
+                        let attached_only = option.get_id() == options::EOF_E
+                            || option.get_id() == options::MAX_LINES_L;
+                        if attached_only && !value.is_empty() {
                             rewritten = Some((&cluster[..i], c, value));
                         }
                     }
@@ -1320,6 +1322,9 @@ fn xargs_command() -> clap::Command {
             Arg::new(options::MAX_LINES_L)
                 .short('l')
                 .num_args(0..=1)
+                // Like GNU getopt, only an attached value (`-l2`) is the
+                // option's: in `xargs -l echo`, echo is the command.
+                .require_equals(true)
                 // Without a value the option still needs an index to be ordered
                 // against -L, -n and -I.
                 .default_missing_value("1")
@@ -1573,6 +1578,20 @@ mod tests {
             ["xargs", "--arg-file", "-e-file"]
         );
         assert_eq!(rewrite(&["xargs", "--", "-ecd"]), ["xargs", "--", "-ecd"]);
+    }
+
+    #[test]
+    fn attach_eof_short_equals_rewrites_attached_max_lines() {
+        assert_eq!(
+            rewrite(&["xargs", "-l2", "echo"]),
+            ["xargs", "-l=2", "echo"]
+        );
+        assert_eq!(rewrite(&["xargs", "-tl2"]), ["xargs", "-t", "-l=2"]);
+        assert_eq!(rewrite(&["xargs", "-0l2"]), ["xargs", "-0", "-l=2"]);
+        assert_eq!(rewrite(&["xargs", "-l", "echo"]), ["xargs", "-l", "echo"]);
+        assert_eq!(rewrite(&["xargs", "-lt"]), ["xargs", "-l=t"]);
+        assert_eq!(rewrite(&["xargs", "-n", "-l2"]), ["xargs", "-n", "-l2"]);
+        assert_eq!(rewrite(&["xargs", "echo", "-l2"]), ["xargs", "echo", "-l2"]);
     }
 
     #[test]

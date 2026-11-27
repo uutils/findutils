@@ -1139,3 +1139,21 @@ fn xargs_replace_unterminated_quote() {
         .stderr_contains("unmatched single quote")
         .no_stdout();
 }
+
+#[test]
+fn xargs_max_lines_l_takes_only_an_attached_value() {
+    // Like GNU xargs, `-l` only takes an attached value, so the next argument
+    // is the command, and it works inside a cluster of short options.
+    for (args, stdout) in [
+        (&["-l", "echo"][..], "a b\nc\nd\n"),
+        (&["-l2", "echo"][..], "a b c\nd\n"),
+        (&["-l", "-r", "echo"][..], "a b\nc\nd\n"),
+        (&["-rl2", "echo"][..], "a b c\nd\n"),
+    ] {
+        ucmd()
+            .args(args)
+            .pipe_in("a b\nc\nd\n")
+            .succeeds()
+            .stdout_only(stdout);
+    }
+}
