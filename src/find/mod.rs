@@ -372,6 +372,75 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
     })
 }
 
+/// Whether two device ids refer to the same file system.
+#[cfg(unix)]
+#[inline]
+pub fn same_device(a: u64, b: u64) -> bool {
+    a == b
+}
+
+/// Decide whether a `-prune`d directory should be skipped (popped via
+/// `skip_current_dir`). Never under `-depth`; under `-xdev` only when the
+/// entry was actually pushed (on the root device) — else we'd drop siblings (#1045).
+#[cfg(unix)]
+#[inline]
+pub fn should_skip_pruned_entry(
+    marked: bool,
+    depth_first: bool,
+    same_file_system: bool,
+    entry_dev: u64,
+    root_dev: u64,
+) -> bool {
+    if !marked || depth_first {
+        return false;
+    }
+    !same_file_system || same_device(entry_dev, root_dev)
+}
+
+/// Resolve a device id from an optional stat result, falling back to `fallback`
+/// when the stat failed (preserves the previous "skip" behaviour on error).
+#[cfg(unix)]
+#[inline]
+fn resolve_dev(dev: Option<u64>, fallback: u64) -> u64 {
+    dev.unwrap_or(fallback)
+}
+
+#[cfg(unix)]
+fn should_skip_current_dir(
+    marked: bool,
+    entry: &WalkEntry,
+    config: &Config,
+    root_dev: u64,
+) -> bool {
+    // On stat failure fall back to the root device (preserves old "skip" behaviour).
+    let entry_dev = resolve_dev(
+        entry
+            .metadata()
+            .ok()
+            .map(std::os::unix::fs::MetadataExt::dev),
+        root_dev,
+    );
+    should_skip_pruned_entry(
+        marked,
+        config.depth_first,
+        config.same_file_system,
+        entry_dev,
+        root_dev,
+    )
+}
+
+/// Non-unix fallback: no device concept, so keep the previous behaviour of
+/// skipping any marked directory that is not under `-depth`.
+#[cfg(not(unix))]
+fn should_skip_current_dir(
+    marked: bool,
+    _entry: &WalkEntry,
+    config: &Config,
+    _root_dev: u64,
+) -> bool {
+    marked && !config.depth_first
+}
+
 fn process_dir(
     dir: &str,
     config: &Config,
@@ -398,6 +467,17 @@ fn process_dir(
     }
 
     let mut ret = 0;
+
+    // Under -xdev, fetch the root device once so we can tell whether a pruned
+    // directory was actually pushed onto walkdir's stack (see below). On
+    // non-unix there is no device concept, so use 0 (unused there).
+    #[cfg(unix)]
+    let root_dev = {
+        use std::os::unix::fs::MetadataExt;
+        resolve_dev(std::fs::metadata(dir).ok().map(|m| m.dev()), 0)
+    };
+    #[cfg(not(unix))]
+    let root_dev = 0u64;
 
     // Slightly yucky loop handling here :-(. See docs for
     // WalkDirIterator::skip_current_dir for explanation.
@@ -448,10 +528,15 @@ fn process_dir(
                     *quit = true;
                     break;
                 }
-                // -prune does nothing under -depth: the directory's contents
-                // have already been visited, and skipping now would skip the
-                // rest of its parent instead.
-                if matcher_io.should_skip_current_dir() && !config.depth_first {
+                // -prune is a no-op under -depth; under -xdev walkdir never
+                // pushes a mount-point dir, so skip_current_dir() would pop the
+                // parent and drop later siblings (#1045) — only skip pushed entries.
+                if should_skip_current_dir(
+                    matcher_io.should_skip_current_dir(),
+                    &entry,
+                    config,
+                    root_dev,
+                ) {
                     it.skip_current_dir();
                 }
             }
@@ -779,6 +864,50 @@ mod tests {
                 e
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn same_device_compares_device_ids() {
+        // Same device id => same file system.
+        assert!(super::same_device(42, 42));
+        // A different device id (e.g. a mount point on another fs) must NOT be
+        // treated as the same file system; this is the check that -xdev pruning
+        // relies on, and it fails if the comparison is ever dropped.
+        assert!(!super::same_device(42, 43));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_dev_falls_back_on_stat_failure() {
+        // Successful stat: use the reported device id.
+        assert_eq!(super::resolve_dev(Some(7), 99), 7);
+        // Failed stat (None): fall back to the root device so a pruned entry is
+        // still skipped (preserves the pre-fix "skip on error" behaviour). This
+        // is the branch -xdev pruning takes when metadata() errors out.
+        assert_eq!(super::resolve_dev(None, 99), 99);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn should_skip_pruned_entry_covers_all_branches() {
+        // Branch 1: `!same_file_system` short-circuits to `true` (the entry is
+        // on a different file system, so it is always skipped). This is the
+        // `-xdev` "different device" path that the integration test never hits
+        // directly, and it is the branch codecov flags as partial.
+        assert!(super::should_skip_pruned_entry(true, false, false, 1, 2));
+        // Even when the device ids happen to match, a different file system
+        // still skips (the `||` short-circuits before `same_device`).
+        assert!(super::should_skip_pruned_entry(true, false, false, 7, 7));
+
+        // Branch 2: same file system + same device id => the pruned dir was
+        // pushed onto walkdir's stack, so it must be skipped (pop the entry).
+        assert!(super::should_skip_pruned_entry(true, false, true, 5, 5));
+
+        // Branch 3: same file system + different device id => this is a mount
+        // point that walkdir never pushed; skipping it would pop the parent and
+        // drop later siblings (#1045), so it must NOT be skipped.
+        assert!(!super::should_skip_pruned_entry(true, false, true, 5, 6));
     }
 
     #[test]

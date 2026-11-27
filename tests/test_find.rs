@@ -826,6 +826,60 @@ fn find_depth_prune_still_visits_siblings() {
 }
 
 #[test]
+fn find_xdev_prune_mount_point_keeps_siblings() {
+    // Regression test for #1045: pruning a mount-point dir under -xdev used to
+    // drop the parent and later siblings. A real mount needs privileges, so
+    // every child here is on the root fs; siblings must still be visited.
+    let temp_dir = Builder::new().prefix("find_xdev_prune_").tempdir().unwrap();
+    let pruned = "p3";
+    let siblings = ["p1", "p2", "p4", "p5"];
+    fs::create_dir(temp_dir.path().join(pruned)).unwrap();
+    File::create(temp_dir.path().join(pruned).join("f")).unwrap();
+    for name in siblings {
+        fs::create_dir(temp_dir.path().join(name)).unwrap();
+        File::create(temp_dir.path().join(name).join("f")).unwrap();
+    }
+
+    let result = ucmd()
+        .arg(temp_dir.path())
+        .args(&[
+            "-xdev", "-name", pruned, "-prune", "-o", "-type", "f", "-print",
+        ])
+        .succeeds();
+
+    let mut printed: Vec<&str> = result.stdout_str().lines().collect();
+    printed.sort_unstable();
+    let expected: Vec<String> = siblings
+        .iter()
+        .map(|name| temp_dir.path().join(name).join("f").display().to_string())
+        .collect();
+    assert_eq!(
+        printed, expected,
+        "siblings after a pruned directory must still be visited under -xdev"
+    );
+}
+
+// Unit test for the extracted prune decision (issue #1045). The integration
+// test above can't put a child on another file system, so exercise the pure
+// `should_skip_pruned_entry` decision directly with a *different* dev: a
+// mount-point entry (dev != root) must NOT be skipped, or its parent and
+// later siblings are dropped. This fails against the pre-fix logic, which
+// skipped every pruned entry under -xdev.
+#[cfg(unix)]
+#[test]
+fn should_skip_pruned_entry_keeps_mount_point_siblings() {
+    use findutils::find::should_skip_pruned_entry;
+    // Not under -xdev: always skip the pruned entry (unchanged behaviour).
+    assert!(should_skip_pruned_entry(true, false, false, 7, 7));
+    assert!(should_skip_pruned_entry(true, false, false, 7, 8));
+    // Under -xdev, entry on the root device: it was pushed, so skip it.
+    assert!(should_skip_pruned_entry(true, false, true, 7, 7));
+    // Under -xdev, entry on a *different* device (mount point): do NOT skip,
+    // otherwise skip_current_dir() pops the parent and drops later siblings.
+    assert!(!should_skip_pruned_entry(true, false, true, 8, 7));
+}
+
+#[test]
 fn regex_types() {
     let temp_dir = Builder::new().prefix("find_cmd_").tempdir().unwrap();
 
