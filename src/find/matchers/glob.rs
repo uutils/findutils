@@ -4,19 +4,15 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::sync::LazyLock;
+use std::{
+    error::Error,
+    io::{stderr, Write},
+};
 
-use onig::{Regex, RegexOptions, Syntax, SyntaxBehavior};
+use fancy_regex::Regex;
 
-/// Compile a glob's BRE with backslash escapes enabled inside bracket expressions.
-fn parse_bre(expr: &str, options: RegexOptions) -> Result<Regex, onig::Error> {
-    static SYNTAX: LazyLock<Syntax> = LazyLock::new(|| {
-        let mut syntax = *Syntax::posix_basic();
-        syntax.enable_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_BACKSLASH_ESCAPE_IN_CC);
-        syntax
-    });
-    Regex::with_options(expr, SYNTAX.options() | options, &SYNTAX)
-}
+use super::{regex::RegexType, regex_transpile, MatcherIO};
+use crate::find::program_name;
 
 /// Push a literal character outside a bracket expression, escaping it if necessary.
 fn regex_push_literal(regex: &mut String, ch: char) {
@@ -119,7 +115,7 @@ fn extract_bracket_expr(mut pattern: &str) -> Option<(String, &str)> {
         }
     }
 
-    if parse_bre(&expr, RegexOptions::REGEX_OPTION_NONE).is_ok() {
+    if regex_transpile::compile(&expr, RegexType::PosixBasic, false, false).is_ok() {
         Some((expr, chars.as_str()))
     } else {
         None
@@ -170,27 +166,38 @@ pub struct Pattern {
 
 impl Pattern {
     /// Parse an fnmatch()-style glob.
-    pub fn new(pattern: &str, caseless: bool) -> Self {
-        let options = if caseless {
-            RegexOptions::REGEX_OPTION_IGNORECASE
-        } else {
-            RegexOptions::REGEX_OPTION_NONE
+    pub fn new(pattern: &str, caseless: bool) -> Result<Self, Box<dyn Error>> {
+        let regex = match glob_to_regex(pattern) {
+            Some(r) => Some(regex_transpile::compile(
+                &r,
+                RegexType::PosixBasic,
+                caseless,
+                true,
+            )?),
+            None => None,
         };
-
-        // As long as glob_to_regex() is correct, this should never fail
-        let regex = glob_to_regex(pattern).map(|r| parse_bre(&r, options).unwrap());
-        Self { regex }
+        Ok(Self { regex })
     }
 
     /// Test if this pattern matches a string.
-    pub fn matches(&self, string: &str) -> bool {
-        self.regex.as_ref().is_some_and(|r| r.is_match(string))
+    pub fn matches(&self, string: &str, matcher_io: &mut MatcherIO) -> bool {
+        self.regex
+            .as_ref()
+            .is_some_and(|r| match r.is_match(string) {
+                Ok(matched) => matched,
+                Err(e) => {
+                    let _ = writeln!(&mut stderr(), "{}: {e}", program_name());
+                    matcher_io.set_exit_code(1);
+                    false
+                }
+            })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::find::tests::FakeDependencies;
     use rstest::rstest;
 
     #[track_caller]
@@ -232,10 +239,11 @@ mod tests {
     #[case(r"[a\]", &["[a]"])]
     #[case(r"[\a]", &["a"])]
     fn escaped_brackets(#[case] glob: &str, #[case] expected: &[&str]) {
-        let pattern = Pattern::new(glob, false);
+        let deps = FakeDependencies::new();
+        let pattern = Pattern::new(glob, false).unwrap();
         let matches: Vec<_> = ["a", "]", "a]", "[", r"\", r"\]", "[a]"]
             .into_iter()
-            .filter(|name| pattern.matches(name))
+            .filter(|name| pattern.matches(name, &mut deps.new_matcher_io()))
             .collect();
         assert_eq!(matches, expected);
     }
@@ -260,8 +268,19 @@ mod tests {
     #[case("\u{ff17}", false)] // FULLWIDTH DIGIT SEVEN
     #[case("\u{0667}", false)] // ARABIC-INDIC DIGIT SEVEN
     fn digit_class_is_ascii_only(#[case] name: &str, #[case] expected: bool) {
-        assert_eq!(Pattern::new("[[:digit:]]", false).matches(name), expected);
-        assert_eq!(Pattern::new("[![:digit:]]", false).matches(name), !expected);
+        let deps = FakeDependencies::new();
+        assert_eq!(
+            Pattern::new("[[:digit:]]", false)
+                .unwrap()
+                .matches(name, &mut deps.new_matcher_io()),
+            expected
+        );
+        assert_eq!(
+            Pattern::new("[![:digit:]]", false)
+                .unwrap()
+                .matches(name, &mut deps.new_matcher_io()),
+            !expected
+        );
     }
 
     #[test]
@@ -286,20 +305,33 @@ mod tests {
 
     #[test]
     fn pattern_matches() {
-        assert!(Pattern::new(r"foo*bar", false).matches("foo--bar"));
+        let deps = FakeDependencies::new();
+        assert!(Pattern::new(r"foo*bar", false)
+            .unwrap()
+            .matches("foo--bar", &mut deps.new_matcher_io()));
 
-        assert!(!Pattern::new(r"foo*bar", false).matches("bar--foo"));
+        assert!(!Pattern::new(r"foo*bar", false)
+            .unwrap()
+            .matches("bar--foo", &mut deps.new_matcher_io()));
     }
 
     #[test]
     fn caseless_matches() {
-        assert!(Pattern::new(r"foo*BAR", true).matches("FOO--bar"));
+        let deps = FakeDependencies::new();
+        assert!(Pattern::new(r"foo*BAR", true)
+            .unwrap()
+            .matches("FOO--bar", &mut deps.new_matcher_io()));
 
-        assert!(!Pattern::new(r"foo*BAR", true).matches("BAR--foo"));
+        assert!(!Pattern::new(r"foo*BAR", true)
+            .unwrap()
+            .matches("BAR--foo", &mut deps.new_matcher_io()));
     }
 
     #[test]
     fn incomplete_escape_matches() {
-        assert!(!Pattern::new(r"foo\", false).matches("\n"));
+        let deps = FakeDependencies::new();
+        assert!(!Pattern::new(r"foo\", false)
+            .unwrap()
+            .matches("\n", &mut deps.new_matcher_io()));
     }
 }
