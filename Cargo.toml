@@ -40,7 +40,9 @@ rustix = { version = "1.1.4", default-features = false, features = ["std"] }
 criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
 assert_cmd = "2"
 ctor = "1.0"
-filetime = "0.2"
+# TODO(MSRV>=1.99): the dependency should no longer be necessary as its functionality is
+# available in the std
+filetime = "=0.2.29"
 nix = { version = "0.32", features = ["fs"] }
 rstest = "0.29.0"
 tempfile = "3"
