@@ -341,17 +341,21 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
                 program_name()
             )));
         }
-        // Both would read stdin, so the starting points and the answers to
-        // the prompts would compete for the same bytes.  GNU find rejects
-        // the combination rather than producing arbitrary results.
-        if name == "-" && config.interactive_exec {
-            return Err(From::from(
-                "option -files0-from reading from standard input cannot be combined \
-                 with -ok, -okdir",
-            ));
-        }
-        let reader: Box<dyn BufRead> = if name == "-" {
-            Box::new(BufReader::new(io::stdin()))
+        let (reader, source): (Box<dyn BufRead>, String) = if name == "-" {
+            // Both would read stdin, so the starting points and the answers to
+            // the prompts would compete for the same bytes.  GNU find rejects
+            // the combination rather than producing arbitrary results.
+            if config.interactive_exec {
+                return Err(From::from(
+                    "option -files0-from reading from standard input cannot be combined \
+             with -ok, -okdir",
+                ));
+            }
+
+            (
+                Box::new(BufReader::new(io::stdin())),
+                "(standard input)".to_string(),
+            )
         } else {
             let file = std::fs::File::open(name)
                 .map_err(|e| format!("cannot open '{}' for reading: {}", name, e))?;
@@ -360,24 +364,19 @@ fn parse_args(args: &[&str]) -> Result<ParsedInfo, Box<dyn Error>> {
             if config.interactive_exec && is_file_stdin(&file)? {
                 return Err(format!(
                     "when -ok or -okdir is in use, the option \
-            -files0-from cannot also read from standard input, but the \
-            file ('{}') used for -files0-from appears to refer to the same \
-            file as the standard input",
+             -files0-from cannot also read from standard input, but the \
+             file ('{}') used for -files0-from appears to refer to the same \
+             file as the standard input",
                     name
                 )
                 .into());
             }
 
-            Box::new(BufReader::new(file))
-        };
-
-        let source = if name == "-" {
-            "(standard input)".to_string()
-        } else {
-            name.clone()
+            (Box::new(BufReader::new(file)), name.clone())
         };
 
         files0_paths = Some(Files0Paths::new(reader, source));
+
         paths.clear();
     }
     Ok(ParsedInfo {
