@@ -2695,6 +2695,44 @@ fn find_ls_shows_allocated_blocks_and_link_target() {
         .stdout_contains(" -> sparse\n");
 }
 
+// APFS rejects non-UTF-8 filenames.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn find_ls_escapes_unusual_characters() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let temp_dir = Builder::new().prefix("find_ls_escape").tempdir().unwrap();
+    let names: &[(&[u8], &str)] = &[
+        (b"sp ace", r"sp\ ace"),
+        (b"tab\tnl\ncr\rbs\x08ff\x0c", r"tab\tnl\ncr\rbs\bff\f"),
+        (b"q\"b\\", r#"q\"b\\"#),
+        (b"bel\x07vt\x0bdel\x7f", r"bel\007vt\013del\177"),
+        (b"bad\xff", r"bad\377"),
+        ("caf\u{e9}".as_bytes(), r"caf\303\251"),
+        (b"plain'$*~", "plain'$*~"),
+    ];
+    for (name, _) in names {
+        File::create(temp_dir.path().join(OsStr::from_bytes(name))).unwrap();
+    }
+    symlink("sp ace", temp_dir.path().join("link")).unwrap();
+
+    let result = ucmd()
+        .current_dir(temp_dir.path())
+        .args(&[".", "-ls", "-fls", "out"])
+        .succeeds();
+    result.no_stderr();
+    let fls = fs::read_to_string(temp_dir.path().join("out")).unwrap();
+    for expected in names
+        .iter()
+        .map(|(_, escaped)| format!(" ./{escaped}\n"))
+        .chain([r" ./link -> sp\ ace".to_owned() + "\n"])
+    {
+        assert!(result.stdout_str().contains(&expected), "-ls: {expected:?}");
+        assert!(fls.contains(&expected), "-fls: {expected:?}");
+    }
+}
+
 #[test]
 #[cfg(unix)]
 fn find_ls_shows_device_numbers() {

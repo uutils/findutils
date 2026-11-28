@@ -36,6 +36,32 @@ fn format_permissions(file_attributes: u32) -> String {
     attributes.join(", ")
 }
 
+/// Appends a file name the way GNU find's `-ls` and `-fls` spell it: white
+/// space, backslash and double quote get a C-style escape, any other byte
+/// outside printable ASCII becomes a three-digit octal escape, and the rest is
+/// copied as is.
+#[cfg(unix)]
+fn push_escaped_name(out: &mut Vec<u8>, name: &[u8]) {
+    for &byte in name {
+        match byte {
+            b' ' => out.extend_from_slice(b"\\ "),
+            b'\t' => out.extend_from_slice(b"\\t"),
+            b'\n' => out.extend_from_slice(b"\\n"),
+            b'\r' => out.extend_from_slice(b"\\r"),
+            0x08 => out.extend_from_slice(b"\\b"),
+            0x0c => out.extend_from_slice(b"\\f"),
+            b'\\' | b'"' => out.extend_from_slice(&[b'\\', byte]),
+            b'!'..=b'~' => out.push(byte),
+            _ => out.extend_from_slice(&[
+                b'\\',
+                b'0' + (byte >> 6),
+                b'0' + ((byte >> 3) & 7),
+                b'0' + (byte & 7),
+            ]),
+        }
+    }
+}
+
 pub struct Ls {
     output_file: Option<File>,
     stdout_errors: StdoutErrors,
@@ -75,6 +101,7 @@ impl Ls {
         mut out: impl Write,
         print_error_message: bool,
     ) {
+        use std::os::unix::ffi::OsStrExt;
         use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
         let metadata = file_info.metadata().unwrap();
@@ -99,17 +126,8 @@ impl Ls {
             metadata.size().to_string()
         };
         let last_modified = Self::format_last_modified(metadata);
-        let mut path = file_info.path().to_string_lossy().into_owned();
-        if file_info.file_type().is_symlink() {
-            if let Ok(target) = std::fs::read_link(file_info.path()) {
-                path.push_str(" -> ");
-                path.push_str(&target.to_string_lossy());
-            }
-        }
-
-        match writeln!(
-            out,
-            " {:<4} {:>6} {:<10} {:>3} {:<8} {:<8} {:>8} {} {}",
+        let mut line = format!(
+            " {:<4} {:>6} {:<10} {:>3} {:<8} {:<8} {:>8} {} ",
             inode_number,
             number_of_blocks,
             permission,
@@ -118,8 +136,18 @@ impl Ls {
             group,
             size,
             last_modified,
-            path,
-        ) {
+        )
+        .into_bytes();
+        push_escaped_name(&mut line, file_info.path().as_os_str().as_bytes());
+        if file_info.file_type().is_symlink() {
+            if let Ok(target) = std::fs::read_link(file_info.path()) {
+                line.extend_from_slice(b" -> ");
+                push_escaped_name(&mut line, target.as_os_str().as_bytes());
+            }
+        }
+        line.push(b'\n');
+
+        match out.write_all(&line) {
             Ok(_) => {}
             Err(e) => {
                 if print_error_message {
@@ -227,5 +255,16 @@ impl Matcher for Ls {
 
     fn has_side_effects(&self) -> bool {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[cfg(unix)]
+    fn push_escaped_name_escapes_unusual_bytes() {
+        let mut out = Vec::new();
+        super::push_escaped_name(&mut out, b"!a~ \t\n\r\x08\x0c\\\"\x00\x07\x1b\x7f\xff");
+        assert_eq!(out, br#"!a~\ \t\n\r\b\f\\\"\000\007\033\177\377"#);
     }
 }
